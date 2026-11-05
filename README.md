@@ -21,12 +21,13 @@ This is a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero
 
 ## Installation
 
-Download the `.vsix` for your platform from the [latest release](https://github.com/patrick-lindemann/agent-terminal/releases/latest) and install it:
+Install or update to the latest release with one command:
 
 ```bash
-gh release download --repo patrick-lindemann/agent-terminal --pattern '*darwin-arm64.vsix' --dir /tmp/agent-terminal --clobber
-code --install-extension /tmp/agent-terminal/agent-terminal-darwin-arm64-*.vsix
+curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-terminal/main/install.sh | sh
 ```
+
+Run it in a VS Code terminal. On a Remote-SSH connection, run it in the remote window's terminal so it installs the Linux build into the remote VS Code server. The script picks the `.vsix` for the current OS and architecture from the [latest release](https://github.com/patrick-lindemann/agent-terminal/releases/latest). Set `CODE=cursor` (or another CLI) to install into a different editor.
 
 Then reload the window, open the **Agent Terminal** view in the secondary sidebar and, if needed, set `agentTerminal.command` (for example to the absolute path of `pi`).
 
