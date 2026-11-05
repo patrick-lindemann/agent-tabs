@@ -1,28 +1,28 @@
 {
-  "name": "claude-terminal-panel",
-  "displayName": "Claude Terminal Panel",
-  "description": "A dedicated terminal in the secondary panel for running Claude Code",
-  "version": "1.0.10",
-  "publisher": "0ly",
+  "name": "agent-terminal",
+  "displayName": "Agent Terminal",
+  "description": "A dedicated terminal in the secondary sidebar for running CLI coding agents such as pi",
+  "version": "1.1.0",
+  "publisher": "patrick-lindemann",
   "license": "MIT",
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nolikzero/claude-terminal-panel"
+    "url": "https://github.com/patrick-lindemann/agent-terminal"
   },
   "bugs": {
-    "url": "https://github.com/nolikzero/claude-terminal-panel/issues"
+    "url": "https://github.com/patrick-lindemann/agent-terminal/issues"
   },
-  "homepage": "https://github.com/nolikzero/claude-terminal-panel#readme",
+  "homepage": "https://github.com/patrick-lindemann/agent-terminal#readme",
   "engines": {
     "vscode": "^1.106.0"
   },
   "keywords": [
-    "claude",
+    "pi",
     "ai",
     "terminal",
     "sidebar",
-    "claude-code",
+    "agent",
     "gemini",
     "aider",
     "cli",
@@ -39,17 +39,17 @@
     "viewsContainers": {
       "secondarySidebar": [
         {
-          "id": "claudeTerminalContainer",
-          "title": "Claude Terminal",
+          "id": "agentTerminalContainer",
+          "title": "Agent Terminal",
           "icon": "$(terminal)"
         }
       ]
     },
     "views": {
-      "claudeTerminalContainer": [
+      "agentTerminalContainer": [
         {
           "type": "webview",
-          "id": "claudeTerminal.terminalView",
+          "id": "agentTerminal.terminalView",
           "name": "Terminal",
           "visibility": "visible"
         }
@@ -57,83 +57,83 @@
     },
     "commands": [
       {
-        "command": "claudeTerminal.restart",
+        "command": "agentTerminal.restart",
         "title": "Restart Terminal",
-        "category": "Claude Terminal",
+        "category": "Agent Terminal",
         "icon": "$(debug-restart)"
       },
       {
-        "command": "claudeTerminal.newTab",
+        "command": "agentTerminal.newTab",
         "title": "New Terminal Tab",
-        "category": "Claude Terminal",
+        "category": "Agent Terminal",
         "icon": "$(add)"
       },
       {
-        "command": "claudeTerminal.closeTab",
+        "command": "agentTerminal.closeTab",
         "title": "Close Terminal Tab",
-        "category": "Claude Terminal",
+        "category": "Agent Terminal",
         "icon": "$(close)"
       },
       {
-        "command": "claudeTerminal.nextTab",
+        "command": "agentTerminal.nextTab",
         "title": "Next Terminal Tab",
-        "category": "Claude Terminal"
+        "category": "Agent Terminal"
       },
       {
-        "command": "claudeTerminal.previousTab",
+        "command": "agentTerminal.previousTab",
         "title": "Previous Terminal Tab",
-        "category": "Claude Terminal"
+        "category": "Agent Terminal"
       }
     ],
     "keybindings": [
       {
-        "command": "claudeTerminal.newTab",
+        "command": "agentTerminal.newTab",
         "key": "ctrl+shift+`",
         "mac": "cmd+shift+`",
-        "when": "focusedView == 'claudeTerminal.terminalView'"
+        "when": "focusedView == 'agentTerminal.terminalView'"
       },
       {
-        "command": "claudeTerminal.nextTab",
+        "command": "agentTerminal.nextTab",
         "key": "ctrl+pagedown",
         "mac": "cmd+alt+right",
-        "when": "focusedView == 'claudeTerminal.terminalView'"
+        "when": "focusedView == 'agentTerminal.terminalView'"
       },
       {
-        "command": "claudeTerminal.previousTab",
+        "command": "agentTerminal.previousTab",
         "key": "ctrl+pageup",
         "mac": "cmd+alt+left",
-        "when": "focusedView == 'claudeTerminal.terminalView'"
+        "when": "focusedView == 'agentTerminal.terminalView'"
       },
       {
-        "command": "claudeTerminal.closeTab",
+        "command": "agentTerminal.closeTab",
         "key": "ctrl+w",
         "mac": "cmd+w",
-        "when": "focusedView == 'claudeTerminal.terminalView'"
+        "when": "focusedView == 'agentTerminal.terminalView'"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "claudeTerminal.newTab",
-          "when": "view == claudeTerminal.terminalView",
+          "command": "agentTerminal.newTab",
+          "when": "view == agentTerminal.terminalView",
           "group": "navigation@1"
         },
         {
-          "command": "claudeTerminal.restart",
-          "when": "view == claudeTerminal.terminalView",
+          "command": "agentTerminal.restart",
+          "when": "view == agentTerminal.terminalView",
           "group": "navigation@2"
         }
       ]
     },
     "configuration": {
-      "title": "Claude Terminal",
+      "title": "Agent Terminal",
       "properties": {
-        "claudeTerminal.command": {
+        "agentTerminal.command": {
           "type": "string",
-          "default": "claude",
+          "default": "pi",
           "description": "Command to run on terminal start"
         },
-        "claudeTerminal.args": {
+        "agentTerminal.args": {
           "type": "array",
           "items": {
             "type": "string"
@@ -141,39 +141,39 @@
           "default": [],
           "description": "Arguments to pass to the command"
         },
-        "claudeTerminal.autoRun": {
+        "agentTerminal.autoRun": {
           "type": "boolean",
           "default": true,
           "description": "Whether to auto-run command on start"
         },
-        "claudeTerminal.shell": {
+        "agentTerminal.shell": {
           "type": "string",
           "default": "",
           "description": "Custom shell path (empty = system default)"
         },
-        "claudeTerminal.env": {
+        "agentTerminal.env": {
           "type": "object",
           "default": {},
           "description": "Additional environment variables"
         },
-        "claudeTerminal.directMode": {
+        "agentTerminal.directMode": {
           "type": "boolean",
           "default": true,
           "description": "Run command directly without shell wrapper (cleaner output, but no shell features)"
         },
-        "claudeTerminal.promptNotification": {
+        "agentTerminal.promptNotification": {
           "type": "boolean",
           "default": true,
           "description": "Show notification indicator on tab when terminal is waiting for user input"
         },
-        "claudeTerminal.promptNotificationDelay": {
+        "agentTerminal.promptNotificationDelay": {
           "type": "number",
           "default": 300,
           "minimum": 100,
           "maximum": 2000,
           "description": "Delay in milliseconds before showing the notification after output stops"
         },
-        "claudeTerminal.promptPatterns": {
+        "agentTerminal.promptPatterns": {
           "type": "array",
           "items": {
             "type": "string"
@@ -191,7 +191,7 @@
     "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser",
     "copy:xterm-css": "node -e \"require('fs').copyFileSync('node_modules/@xterm/xterm/css/xterm.css', 'media/xterm.css')\"",
     "watch": "npm run compile:extension -- --watch",
-    "rebuild": "npx @electron/rebuild --version 39.2.3",
+    "rebuild": "npx @electron/rebuild --version 43.8.3",
     "postinstall": "npm run rebuild",
     "package": "vsce package",
     "lint": "eslint .",

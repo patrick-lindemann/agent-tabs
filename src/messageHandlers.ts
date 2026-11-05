@@ -2,7 +2,7 @@ import type { WebviewMessage } from './types';
 
 /**
  * Context interface that message handlers use to perform actions.
- * Implemented by ClaudeTerminalViewProvider.
+ * Implemented by AgentTerminalViewProvider.
  */
 export interface MessageHandlerContext {
   handleReady(cols: number, rows: number): void;

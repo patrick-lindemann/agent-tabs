@@ -8,7 +8,7 @@ import { WORKSPACE_ACCENT_COLORS } from './types';
 import { CommandInputPicker } from './commandInputPicker';
 import { PromptDetector, type PromptDetectorConfig } from './promptDetector';
 
-export class ClaudeTerminalViewProvider
+export class AgentTerminalViewProvider
   implements vscode.WebviewViewProvider, MessageHandlerContext
 {
   private view?: vscode.WebviewView;
@@ -41,6 +41,7 @@ export class ClaudeTerminalViewProvider
     const config = this.configManager.getConfig();
     this.commandPicker.preloadCommands([
       config.command,
+      'pi',
       'claude',
       'gemini',
       'aider',
@@ -141,7 +142,7 @@ export class ClaudeTerminalViewProvider
       }
     } catch (error) {
       // Log error for debugging but don't show disruptive notifications
-      console.warn(`[Claude Terminal] Failed to open file: ${filePath}`, error);
+      console.warn(`[Agent Terminal] Failed to open file: ${filePath}`, error);
     }
   }
 
@@ -383,7 +384,7 @@ export class ClaudeTerminalViewProvider
   // --- Private Helpers ---
 
   private getPromptDetectorConfig(): PromptDetectorConfig {
-    const vsConfig = vscode.workspace.getConfiguration('claudeTerminal');
+    const vsConfig = vscode.workspace.getConfiguration('agentTerminal');
     return {
       enabled: vsConfig.get<boolean>('promptNotification', true),
       showDelay: vsConfig.get<number>('promptNotificationDelay', 300),

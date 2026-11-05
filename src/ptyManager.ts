@@ -22,7 +22,7 @@ export interface WorkingDirectorySelection {
 
 /**
  * Manages PTY process lifecycle.
- * Extracted from ClaudeTerminalViewProvider._startTerminalForInstance().
+ * Extracted from AgentTerminalViewProvider._startTerminalForInstance().
  */
 export class PtyManager {
   private nodePty: INodePty | undefined;
@@ -83,7 +83,7 @@ export class PtyManager {
     }));
 
     const selected = await vscode.window.showQuickPick(items, {
-      placeHolder: 'Select workspace folder for Claude',
+      placeHolder: 'Select workspace folder for the terminal',
       title: 'Choose Working Directory'
     });
 
@@ -148,7 +148,7 @@ export class PtyManager {
       FORCE_COLOR: '1'
     });
 
-    // Remove CI flag so Claude doesn't think it's in CI
+    // Remove CI flag so CLI agents don't think it's in CI
     delete env.CI;
 
     return env;

@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
-import { ClaudeTerminalViewProvider } from './ClaudeTerminalViewProvider';
+import { AgentTerminalViewProvider } from './AgentTerminalViewProvider';
 
-let terminalProvider: ClaudeTerminalViewProvider | undefined;
+let terminalProvider: AgentTerminalViewProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-  terminalProvider = new ClaudeTerminalViewProvider(context.extensionUri);
+  terminalProvider = new AgentTerminalViewProvider(context.extensionUri);
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('claudeTerminal.terminalView', terminalProvider, {
+    vscode.window.registerWebviewViewProvider('agentTerminal.terminalView', terminalProvider, {
       webviewOptions: {
         retainContextWhenHidden: true
       }
@@ -15,39 +15,39 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeTerminal.restart', () => {
+    vscode.commands.registerCommand('agentTerminal.restart', () => {
       terminalProvider?.restart();
     })
   );
 
   // Multi-tab commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeTerminal.newTab', () => {
+    vscode.commands.registerCommand('agentTerminal.newTab', () => {
       void terminalProvider?.createTerminal();
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeTerminal.closeTab', () => {
+    vscode.commands.registerCommand('agentTerminal.closeTab', () => {
       terminalProvider?.closeActiveTerminal();
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeTerminal.nextTab', () => {
+    vscode.commands.registerCommand('agentTerminal.nextTab', () => {
       terminalProvider?.switchToNextTerminal();
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeTerminal.previousTab', () => {
+    vscode.commands.registerCommand('agentTerminal.previousTab', () => {
       terminalProvider?.switchToPreviousTerminal();
     })
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('claudeTerminal')) {
+      if (e.affectsConfiguration('agentTerminal')) {
         terminalProvider?.updateConfig();
       }
     })

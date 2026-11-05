@@ -22,7 +22,7 @@ export class TerminalStateManager {
    */
   generateName(): string {
     this.terminalCounter++;
-    return `Claude ${String(this.terminalCounter)}`;
+    return `Terminal ${String(this.terminalCounter)}`;
   }
 
   /**

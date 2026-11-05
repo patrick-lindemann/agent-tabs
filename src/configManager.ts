@@ -13,7 +13,7 @@ export class ConfigManager {
     // Listen for configuration changes and invalidate cache
     this.disposables.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('claudeTerminal')) {
+        if (e.affectsConfiguration('agentTerminal')) {
           this.invalidateCache();
         }
       })
@@ -28,9 +28,9 @@ export class ConfigManager {
       return this.cachedConfig;
     }
 
-    const config = vscode.workspace.getConfiguration('claudeTerminal');
+    const config = vscode.workspace.getConfiguration('agentTerminal');
     this.cachedConfig = {
-      command: config.get<string>('command', 'claude'),
+      command: config.get<string>('command', 'pi'),
       args: config.get<string[]>('args', []),
       autoRun: config.get<boolean>('autoRun', true),
       shell: config.get<string>('shell', ''),
