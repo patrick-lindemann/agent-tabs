@@ -2,7 +2,7 @@
   "name": "agent-terminal",
   "displayName": "Agent Terminal",
   "description": "A dedicated terminal in the secondary sidebar for running CLI coding agents such as pi",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "publisher": "patrick-lindemann",
   "license": "MIT",
   "icon": "media/icon.png",
