@@ -510,6 +510,8 @@ class WebviewContext {
       lastScrollTop: 0
     };
 
+    terminal.attachCustomKeyEventHandler((event) => this.handleKeyEvent(terminal, id, event));
+
     terminal.onData((data) => {
       entry.isAtBottom = true;
       this.postMessage({ type: 'input', id, data });
@@ -519,6 +521,67 @@ class WebviewContext {
     this.state.set(id, entry);
 
     return entry;
+  }
+
+  /**
+   * Handles keys that xterm.js cannot encode for CLI agents or that VS Code's
+   * webview host intercepts before they reach the terminal.
+   *
+   * - Shift+Enter sends the CSI-u sequence `ESC [13;2u`, so agents such as pi
+   *   can tell it apart from Enter (xterm.js sends `\r` for both).
+   * - Option+Enter sends `ESC \r` (Alt+Enter).
+   * - Cmd+C / Cmd+V use the clipboard directly. The VS Code webview host
+   *   cancels the native copy/paste events on desktop, so without this they
+   *   silently do nothing in the terminal.
+   *
+   * Handled events stop propagating so VS Code does not run a second action
+   * for the same keystroke.
+   */
+  private handleKeyEvent(terminal: Terminal, id: string, event: KeyboardEvent): boolean {
+    const sequence = this.getKeySequence(event);
+    const isClipboardKey =
+      event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      (event.code === 'KeyC' || event.code === 'KeyV');
+
+    if (sequence === undefined && !isClipboardKey) {
+      return true;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.type !== 'keydown') {
+      return false;
+    }
+
+    if (sequence !== undefined) {
+      this.postMessage({ type: 'input', id, data: sequence });
+    } else if (event.code === 'KeyC') {
+      if (terminal.hasSelection()) {
+        void navigator.clipboard.writeText(terminal.getSelection());
+      }
+    } else {
+      void navigator.clipboard.readText().then((text) => {
+        if (text) {
+          terminal.paste(text);
+        }
+      });
+    }
+    return false;
+  }
+
+  private getKeySequence(event: KeyboardEvent): string | undefined {
+    if (event.key !== 'Enter' || event.ctrlKey || event.metaKey) {
+      return undefined;
+    }
+    if (event.shiftKey && !event.altKey) {
+      return '\x1b[13;2u';
+    }
+    if (event.altKey && !event.shiftKey) {
+      return '\x1b\r';
+    }
+    return undefined;
   }
 
   switchToTerminal(id: string): void {
