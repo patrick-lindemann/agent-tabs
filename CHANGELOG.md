@@ -5,6 +5,12 @@ All notable changes to the "Agent Terminal" extension (fork of "Claude Terminal 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-11-05
+
+### Fixed
+
+- Windows x64 release build restored (built on `windows-2022`)
+
 ## [1.1.0] - 2026-11-05
 
 ### Added
@@ -17,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the extension to "Agent Terminal" (`patrick-lindemann.agent-terminal`); command, view and setting IDs moved from `claudeTerminal.*` to `agentTerminal.*`
 - Default command is `pi`; new tabs are named `Terminal N`
 - Native modules are rebuilt for Electron 43.8.3 (VS Code 1.144)
-- Releases are published as GitHub release assets only (macOS arm64/x64, Linux x64)
+- Releases are published as GitHub release assets only
 
 ## [1.0.10] - 2026-01-14
 
