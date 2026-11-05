@@ -1,32 +1,45 @@
-# Claude Terminal Panel
+# Agent Terminal
 
-[![Install in VS Code](https://img.shields.io/badge/Install%20in%20VS%20Code-Open-blue?style=for-the-badge&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=0ly.claude-terminal-panel)
-[![Download VSIX](https://img.shields.io/github/v/release/nolikzero/claude-terminal-panel?style=for-the-badge&label=VSIX&color=green)](https://github.com/nolikzero/claude-terminal-panel/releases/latest)
+A dedicated terminal in VS Code's secondary sidebar for running CLI coding agents such as [pi](https://github.com/earendil-works/pi), Claude Code, Codex, Gemini CLI or Aider.
 
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.106%2B-blue?logo=visualstudiocode)](https://code.visualstudio.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/release/nolikzero/claude-terminal-panel?label=version&color=green)](https://github.com/nolikzero/claude-terminal-panel/releases/latest)
+This is a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero/claude-terminal-panel) (MIT). See [Differences from upstream](#differences-from-upstream).
 
-> A dedicated terminal in the secondary sidebar for running AI coding assistants
+![Agent Terminal Screenshot](media/screenshot.png)
 
-Run **Claude Code**, **Gemini CLI**, **OpenAI Codex**, **Aider**, **OpenCode** and any other AI CLI tool directly from your VS Code sidebar.
+## Differences from upstream
 
-![Claude Terminal Panel Screenshot](media/screenshot.png)
+- **Renamed** to _Agent Terminal_ (`patrick-lindemann.agent-terminal`). All command, view and setting IDs moved from `claudeTerminal.*` to `agentTerminal.*`, so it installs side by side with the original. Settings are not migrated: copy `claudeTerminal.*` entries to `agentTerminal.*`.
+- **Default command** is `pi` instead of `claude`. New tabs are named `Terminal N`.
+- **Modified keys reach the agent.** The terminal is an xterm.js instance inside a webview, not a VS Code integrated terminal, so `workbench.action.terminal.sendSequence` keybindings do not apply to it. The webview now handles these keys itself:
+  | Key | Sent to the program |
+  | --- | --- |
+  | `Shift+Enter` | `ESC [13;2u` (CSI-u), distinguishable from `Enter` |
+  | `Option/Alt+Enter` | `ESC CR` |
+  | `Cmd+C` | Copies the terminal selection to the clipboard |
+  | `Cmd+V` | Pastes the clipboard (bracketed paste when the program enables it) |
+- **Releases are built for VS Code's current Electron** (43.8.3, VS Code 1.144) and published as GitHub release assets, not to the Marketplace.
 
-## Features
+## Installation
 
-- **Dedicated Sidebar Terminal** - Run any AI CLI tool directly from VS Code's secondary sidebar, always accessible while you code
-- **Multi-Tab Support** - Run multiple terminal instances simultaneously with keyboard shortcuts for quick navigation
-- **Prompt Notifications** - Visual indicator (pulsing red dot) when the terminal is waiting for your input
-- **Custom Commands** - Create new terminals with custom commands, intelligent flag suggestions from `--help`
-- **Working Directory Selection** - Choose which workspace folder to use when creating new terminals
-- **Tab Accent Colors** - Color-coded tabs per workspace folder for easy identification in multi-root workspaces
-- **Works with Any AI Tool** - Claude Code, Gemini CLI, OpenAI Codex, Aider, and more
-- **VS Code Theme Integration** - Full 256-color support with automatic theme synchronization
-- **Dual Execution Modes** - Choose between direct mode (cleaner output) or shell mode (full shell features)
-- **Auto-run on Startup** - Optionally start your AI assistant automatically when VS Code opens
-- **Fully Configurable** - Customize the command, arguments, shell, and environment variables
-- **Quick Actions** - Restart the terminal with a single click
+Download the `.vsix` for your platform from the [latest release](https://github.com/patrick-lindemann/agent-terminal/releases/latest) and install it:
+
+```bash
+gh release download --repo patrick-lindemann/agent-terminal --pattern '*darwin-arm64.vsix' --dir /tmp/agent-terminal --clobber
+code --install-extension /tmp/agent-terminal/agent-terminal-darwin-arm64-*.vsix
+```
+
+Then reload the window, open the **Agent Terminal** view in the secondary sidebar and, if needed, set `agentTerminal.command` (for example to the absolute path of `pi`).
+
+### Publishing a release
+
+Push a `v*` tag; the _Build and Release_ workflow builds one `.vsix` per platform and attaches it to a GitHub release:
+
+```bash
+npm version minor   # updates package.json and creates the tag
+git push --follow-tags
+```
+
+If the terminal stops starting after a VS Code update, update `ELECTRON_VERSION` in `.github/workflows/release.yml` and the `rebuild` script in `package.json` to the Electron version shown in _Help > About_, then release again.
 
 ## Requirements
 
@@ -49,54 +62,21 @@ This extension works with any command-line AI assistant. Here are some popular o
 | [OpenCode](https://github.com/opencode-ai/opencode)                     | `opencode`    | `brew install opencode-ai/tap/opencode`    |
 | Any CLI tool                                                            | Custom        | Configure via settings                     |
 
-## Installation
-
-### From VS Code Marketplace
-
-1. Open VS Code
-2. Go to Extensions (`Cmd+Shift+X` / `Ctrl+Shift+X`)
-3. Search for "Claude Terminal Panel"
-4. Click Install
-
-### From VSIX File
-
-1. Download the `.vsix` file from the [Releases](../../releases) page
-2. Open VS Code
-3. Run `Extensions: Install from VSIX...` from the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
-4. Select the downloaded `.vsix` file
-
-### Build from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/nolikzero/claude-terminal-panel.git
-cd claude-terminal-panel
-
-# Install dependencies
-npm install
-
-# Build the extension
-npm run compile
-
-# Package the extension
-npm run package
-```
-
 ## Usage
 
-1. **Open the Sidebar** - Click the Claude icon in the activity bar (secondary sidebar)
+1. **Open the Sidebar** - Click the terminal icon in the activity bar (secondary sidebar)
 2. **Interact with your AI** - Type your prompts and interact with your AI assistant directly in the terminal
 3. **Use Quick Actions** - Click the restart icon in the view title bar, or use the + button to add new tabs
 
 ### Commands
 
-| Command                         | Description                    |
-| ------------------------------- | ------------------------------ |
-| `Claude Terminal: Restart`      | Restart the terminal session   |
-| `Claude Terminal: New Tab`      | Create a new terminal tab      |
-| `Claude Terminal: Close Tab`    | Close the current terminal tab |
-| `Claude Terminal: Next Tab`     | Switch to the next tab         |
-| `Claude Terminal: Previous Tab` | Switch to the previous tab     |
+| Command                        | Description                    |
+| ------------------------------ | ------------------------------ |
+| `Agent Terminal: Restart`      | Restart the terminal session   |
+| `Agent Terminal: New Tab`      | Create a new terminal tab      |
+| `Agent Terminal: Close Tab`    | Close the current terminal tab |
+| `Agent Terminal: Next Tab`     | Switch to the next tab         |
+| `Agent Terminal: Previous Tab` | Switch to the previous tab     |
 
 Access commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) or the view title bar icons.
 
@@ -113,26 +93,26 @@ Access commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) or the 
 
 Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
-| Setting                                  | Type    | Default    | Description                                               |
-| ---------------------------------------- | ------- | ---------- | --------------------------------------------------------- |
-| `claudeTerminal.command`                 | string  | `"claude"` | The command to run in the terminal                        |
-| `claudeTerminal.args`                    | array   | `[]`       | Arguments to pass to the command                          |
-| `claudeTerminal.autoRun`                 | boolean | `true`     | Automatically run the command when the terminal opens     |
-| `claudeTerminal.shell`                   | string  | `""`       | Custom shell to use (empty for system default)            |
-| `claudeTerminal.env`                     | object  | `{}`       | Additional environment variables                          |
-| `claudeTerminal.directMode`              | boolean | `true`     | Run command directly without shell wrapper                |
-| `claudeTerminal.promptNotification`      | boolean | `true`     | Show notification indicator when terminal awaits input    |
-| `claudeTerminal.promptNotificationDelay` | number  | `300`      | Delay (ms) before showing notification after output stops |
-| `claudeTerminal.promptPatterns`          | array   | `[]`       | Additional regex patterns to detect input prompts         |
+| Setting                                 | Type    | Default | Description                                               |
+| --------------------------------------- | ------- | ------- | --------------------------------------------------------- |
+| `agentTerminal.command`                 | string  | `"pi"`  | The command to run in the terminal                        |
+| `agentTerminal.args`                    | array   | `[]`    | Arguments to pass to the command                          |
+| `agentTerminal.autoRun`                 | boolean | `true`  | Automatically run the command when the terminal opens     |
+| `agentTerminal.shell`                   | string  | `""`    | Custom shell to use (empty for system default)            |
+| `agentTerminal.env`                     | object  | `{}`    | Additional environment variables                          |
+| `agentTerminal.directMode`              | boolean | `true`  | Run command directly without shell wrapper                |
+| `agentTerminal.promptNotification`      | boolean | `true`  | Show notification indicator when terminal awaits input    |
+| `agentTerminal.promptNotificationDelay` | number  | `300`   | Delay (ms) before showing notification after output stops |
+| `agentTerminal.promptPatterns`          | array   | `[]`    | Additional regex patterns to detect input prompts         |
 
 ### Configuration Examples
 
-**Claude Code (default):**
+**pi (default):**
 
 ```json
 {
-  "claudeTerminal.command": "claude",
-  "claudeTerminal.args": []
+  "agentTerminal.command": "pi",
+  "agentTerminal.args": []
 }
 ```
 
@@ -140,8 +120,8 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
 ```json
 {
-  "claudeTerminal.command": "gemini",
-  "claudeTerminal.args": []
+  "agentTerminal.command": "gemini",
+  "agentTerminal.args": []
 }
 ```
 
@@ -149,8 +129,8 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
 ```json
 {
-  "claudeTerminal.command": "aider",
-  "claudeTerminal.args": ["--model", "gpt-4"]
+  "agentTerminal.command": "aider",
+  "agentTerminal.args": ["--model", "gpt-4"]
 }
 ```
 
@@ -158,8 +138,8 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
 ```json
 {
-  "claudeTerminal.command": "codex",
-  "claudeTerminal.args": []
+  "agentTerminal.command": "codex",
+  "agentTerminal.args": []
 }
 ```
 
@@ -167,8 +147,8 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
 ```json
 {
-  "claudeTerminal.command": "gh",
-  "claudeTerminal.args": ["copilot"]
+  "agentTerminal.command": "gh",
+  "agentTerminal.args": ["copilot"]
 }
 ```
 
@@ -176,8 +156,8 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
 ```json
 {
-  "claudeTerminal.directMode": false,
-  "claudeTerminal.shell": "/bin/zsh"
+  "agentTerminal.directMode": false,
+  "agentTerminal.shell": "/bin/zsh"
 }
 ```
 
@@ -185,7 +165,7 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
 ```json
 {
-  "claudeTerminal.env": {
+  "agentTerminal.env": {
     "ANTHROPIC_API_KEY": "your-api-key",
     "OPENAI_API_KEY": "your-openai-key"
   }
@@ -213,7 +193,7 @@ If your AI tool uses custom prompts not detected by default, you can add your ow
 
 ```json
 {
-  "claudeTerminal.promptPatterns": ["^mybot> $", "\\[waiting\\]", "^Input: $"]
+  "agentTerminal.promptPatterns": ["^mybot> $", "\\[waiting\\]", "^Input: $"]
 }
 ```
 
@@ -223,7 +203,7 @@ To disable prompt notifications entirely:
 
 ```json
 {
-  "claudeTerminal.promptNotification": false
+  "agentTerminal.promptNotification": false
 }
 ```
 

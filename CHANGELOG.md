@@ -1,9 +1,23 @@
 # Changelog
 
-All notable changes to the "Claude Terminal Panel" extension will be documented in this file.
+All notable changes to the "Agent Terminal" extension (fork of "Claude Terminal Panel") will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.0] - 2026-11-05
+
+### Added
+
+- `Shift+Enter` sends `ESC [13;2u` and `Option+Enter` sends `ESC CR`, so agents such as pi can distinguish them from `Enter`
+- `Cmd+C` copies the terminal selection and `Cmd+V` pastes, which the VS Code webview host otherwise blocks
+
+### Changed
+
+- Renamed the extension to "Agent Terminal" (`patrick-lindemann.agent-terminal`); command, view and setting IDs moved from `claudeTerminal.*` to `agentTerminal.*`
+- Default command is `pi`; new tabs are named `Terminal N`
+- Native modules are rebuilt for Electron 43.8.3 (VS Code 1.144)
+- Releases are published as GitHub release assets only
 
 ## [1.0.10] - 2026-01-14
 
