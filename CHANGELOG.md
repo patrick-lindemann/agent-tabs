@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the extension to "Agent Terminal" (`patrick-lindemann.agent-terminal`); command, view and setting IDs moved from `claudeTerminal.*` to `agentTerminal.*`
 - Default command is `pi`; new tabs are named `Terminal N`
 - Native modules are rebuilt for Electron 43.8.3 (VS Code 1.144)
-- Releases are published as GitHub release assets only
+- Releases are published as GitHub release assets only (macOS arm64/x64, Linux x64)
 
 ## [1.0.10] - 2026-01-14
 

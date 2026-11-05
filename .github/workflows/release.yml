@@ -13,6 +13,7 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -24,9 +25,6 @@ jobs:
           - os: macos-latest
             target: darwin-arm64
             arch: arm64
-          - os: windows-latest
-            target: win32-x64
-            arch: x64
 
     runs-on: ${{ matrix.os }}
 
