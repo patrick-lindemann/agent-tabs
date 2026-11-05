@@ -16,9 +16,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Build in an older Debian so pty.node only needs glibc 2.31,
+          # not the runner's much newer glibc
           - os: ubuntu-latest
             target: linux-x64
             arch: x64
+            container: node:22-bullseye
           - os: macos-latest
             target: darwin-x64
             arch: x64
@@ -31,6 +34,7 @@ jobs:
             arch: x64
 
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
 
     steps:
       - name: Checkout
