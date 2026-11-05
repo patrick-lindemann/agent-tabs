@@ -17,6 +17,7 @@ This is a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero
   | `Option/Alt+Enter` | `ESC CR` |
   | `Cmd+C` | Copies the terminal selection to the clipboard |
   | `Cmd+V` | Pastes the clipboard (bracketed paste when the program enables it) |
+- **Exited processes no longer leave a dead tab.** After `/exit` the tab closes (the last tab is replaced by a fresh one). After an error, the output stays and `Enter` restarts the command, `Esc` closes the tab. See `agentTerminal.onExit`.
 - **Releases are built for VS Code's current Electron** (43.8.3, VS Code 1.144) and published as GitHub release assets, not to the Marketplace.
 
 ## Installation
@@ -31,14 +32,20 @@ Run it in a VS Code terminal. On a Remote-SSH connection, run it in the remote w
 
 Then reload the window, open the **Agent Terminal** view in the secondary sidebar and, if needed, set `agentTerminal.command` (for example to the absolute path of `pi`).
 
-### Publishing a release
+### Branches and releases
 
-Push a `v*` tag; the _Build and Release_ workflow builds one `.vsix` per platform and attaches it to a GitHub release:
+- `develop` is the working branch. All changes are committed there.
+- `main` only contains released versions. A release is a pull request from `develop` to `main`.
+- Pull requests run the _CI_ workflow (lint, formatting, type check, build and `npm test` if a test script exists).
+- Every push to `main` runs _Build and Release_: it reads the version from `package.json`, builds one `.vsix` per platform and publishes them as release `v<version>`. If that release already exists, the build is skipped.
 
-```bash
-npm version minor   # updates package.json and creates the tag
-git push --follow-tags
-```
+To release:
+
+1. On `develop`, bump the version without tagging and add a `CHANGELOG.md` entry:
+   ```bash
+   npm version minor --no-git-tag-version
+   ```
+2. Open a pull request from `develop` to `main` and merge it with a merge commit (not squash or rebase), so `develop` and `main` keep the same history.
 
 If the terminal stops starting after a VS Code update, update `ELECTRON_VERSION` in `.github/workflows/release.yml` and the `rebuild` script in `package.json` to the Electron version shown in _Help > About_, then release again.
 
@@ -94,17 +101,31 @@ Access commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) or the 
 
 Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
-| Setting                                 | Type    | Default | Description                                               |
-| --------------------------------------- | ------- | ------- | --------------------------------------------------------- |
-| `agentTerminal.command`                 | string  | `"pi"`  | The command to run in the terminal                        |
-| `agentTerminal.args`                    | array   | `[]`    | Arguments to pass to the command                          |
-| `agentTerminal.autoRun`                 | boolean | `true`  | Automatically run the command when the terminal opens     |
-| `agentTerminal.shell`                   | string  | `""`    | Custom shell to use (empty for system default)            |
-| `agentTerminal.env`                     | object  | `{}`    | Additional environment variables                          |
-| `agentTerminal.directMode`              | boolean | `true`  | Run command directly without shell wrapper                |
-| `agentTerminal.promptNotification`      | boolean | `true`  | Show notification indicator when terminal awaits input    |
-| `agentTerminal.promptNotificationDelay` | number  | `300`   | Delay (ms) before showing notification after output stops |
-| `agentTerminal.promptPatterns`          | array   | `[]`    | Additional regex patterns to detect input prompts         |
+| Setting                                 | Type    | Default  | Description                                               |
+| --------------------------------------- | ------- | -------- | --------------------------------------------------------- |
+| `agentTerminal.command`                 | string  | `"pi"`   | The command to run in the terminal                        |
+| `agentTerminal.args`                    | array   | `[]`     | Arguments to pass to the command                          |
+| `agentTerminal.autoRun`                 | boolean | `true`   | Automatically run the command when the terminal opens     |
+| `agentTerminal.shell`                   | string  | `""`     | Custom shell to use (empty for system default)            |
+| `agentTerminal.env`                     | object  | `{}`     | Additional environment variables                          |
+| `agentTerminal.directMode`              | boolean | `true`   | Run command directly without shell wrapper                |
+| `agentTerminal.onExit`                  | string  | `"auto"` | What happens when the process exits (see below)           |
+| `agentTerminal.promptNotification`      | boolean | `true`   | Show notification indicator when terminal awaits input    |
+| `agentTerminal.promptNotificationDelay` | number  | `300`    | Delay (ms) before showing notification after output stops |
+| `agentTerminal.promptPatterns`          | array   | `[]`     | Additional regex patterns to detect input prompts         |
+
+### When the process exits
+
+`agentTerminal.onExit` controls what happens when the command ends, for example after `/exit` in pi:
+
+| Value            | Behavior                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `auto` (default) | Exit code 0 closes the tab. Any other code keeps the output and waits for `Enter` (restart) or `Esc` (close). |
+| `close`          | Always close the tab.                                                                                         |
+| `restart`        | Restart the command in the same tab. If it exits within 3 seconds of starting, waits like `keep` instead.     |
+| `keep`           | Keep the output and wait for `Enter` (restart) or `Esc` (close).                                              |
+
+Closing the last tab opens a new one, so `/exit` in the only tab starts a fresh session.
 
 ### Configuration Examples
 
