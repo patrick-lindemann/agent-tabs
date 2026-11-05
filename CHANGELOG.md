@@ -5,6 +5,19 @@ All notable changes to the "Agent Terminal" extension (fork of "Claude Terminal 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-05
+
+### Added
+
+- `agentTerminal.onExit` setting (`auto`, `close`, `restart`, `keep`)
+
+### Changed
+
+- A clean exit (e.g. `/exit`) closes the tab instead of leaving a dead terminal; closing the last tab opens a new one
+- After a non-zero exit the output stays and `Enter` restarts the command, `Esc` closes the tab
+- Restarting a custom-command tab reuses its command and working directory
+- Releases are published on every push to `main` from the version in `package.json`; pull requests run the CI workflow
+
 ## [1.1.2] - 2026-11-05
 
 ### Fixed
