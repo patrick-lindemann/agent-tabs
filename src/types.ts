@@ -34,6 +34,8 @@ export interface INodePty {
 }
 
 // Configuration
+export type OnExitAction = 'auto' | 'close' | 'restart' | 'keep';
+
 export interface TerminalConfig {
   command: string;
   args: string[];
@@ -41,6 +43,7 @@ export interface TerminalConfig {
   shell: string;
   env: Record<string, string>;
   directMode: boolean;
+  onExit: OnExitAction;
 }
 
 // Terminal instance for multi-tab support
@@ -52,6 +55,11 @@ export interface TerminalInstance {
   workspaceFolderIndex?: number;
   isWaitingForInput?: boolean;
   cwd?: string;
+  /** Command and arguments of a custom-command tab, reused on restart */
+  command?: string;
+  args?: string[];
+  /** The process ended and the tab waits for Enter (restart) or Esc (close) */
+  exited?: boolean;
 }
 
 // Tab information for UI

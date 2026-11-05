@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { TerminalConfig } from './types';
+import type { OnExitAction, TerminalConfig } from './types';
 
 /**
  * Manages terminal configuration with caching.
@@ -35,7 +35,8 @@ export class ConfigManager {
       autoRun: config.get<boolean>('autoRun', true),
       shell: config.get<string>('shell', ''),
       env: config.get<Record<string, string>>('env', {}),
-      directMode: config.get<boolean>('directMode', true)
+      directMode: config.get<boolean>('directMode', true),
+      onExit: config.get<OnExitAction>('onExit', 'auto')
     };
 
     return this.cachedConfig;

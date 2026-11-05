@@ -13,7 +13,6 @@ export class AgentTerminalViewProvider
 {
   private view?: vscode.WebviewView;
   private disposed = false;
-  private isRestarting = false;
   private lastCols = 80;
   private lastRows = 24;
 
@@ -61,6 +60,14 @@ export class AgentTerminalViewProvider
   }
 
   handleInput(id: string, data: string): void {
+    if (this.stateManager.get(id)?.exited) {
+      if (data === '\r') {
+        this.restartTerminal(id);
+      } else if (data === '\x1b') {
+        this.closeTerminal(id);
+      }
+      return;
+    }
     this.ptyManager.write(id, data);
     this.promptDetector.onUserInput(id);
   }
@@ -155,14 +162,32 @@ export class AgentTerminalViewProvider
     }
   }
 
-  private handlePtyExit(terminalId: string, exitCode: number): void {
-    if (!this.disposed && this.view && !this.isRestarting) {
-      this.postMessage({
-        type: 'output',
-        id: terminalId,
-        data: `\r\n[Process exited with code ${String(exitCode)}]\r\n`
-      });
+  /**
+   * `onExit: auto` closes the tab after a clean exit (e.g. `/exit`) and keeps
+   * failed runs open so their output stays readable. `restart` falls back to
+   * the prompt when the process dies right after starting, to avoid a loop.
+   */
+  private handlePtyExit(terminalId: string, exitCode: number, runtimeMs: number): void {
+    const instance = this.stateManager.get(terminalId);
+    if (this.disposed || !this.view || !instance) return;
+
+    const { onExit } = this.configManager.getConfig();
+    if (onExit === 'close' || (onExit === 'auto' && exitCode === 0)) {
+      this.closeTerminal(terminalId);
+      return;
     }
+    if (onExit === 'restart' && runtimeMs >= 3000) {
+      this.restartTerminal(terminalId);
+      return;
+    }
+
+    instance.exited = true;
+    this.promptDetector.removeTerminal(terminalId);
+    this.postMessage({
+      type: 'output',
+      id: terminalId,
+      data: `\r\n\x1b[2m[Process exited with code ${String(exitCode)}. Press Enter to restart or Esc to close.]\x1b[0m\r\n`
+    });
   }
 
   private handlePtyError(terminalId: string, error: string): void {
@@ -270,6 +295,8 @@ export class AgentTerminalViewProvider
     this.sendTabsUpdate();
 
     // Use provided command/args instead of config
+    instance.command = command;
+    instance.args = args;
     const config = this.configManager.getConfig();
     const customConfig = { ...config, command, args };
     this.ptyManager.spawn(id, customConfig, this.lastCols, this.lastRows, cwd);
@@ -346,19 +373,26 @@ export class AgentTerminalViewProvider
 
   public restart(): void {
     const activeId = this.stateManager.getActiveId();
-    if (!activeId) return;
+    if (activeId) {
+      this.restartTerminal(activeId);
+    }
+  }
 
-    this.isRestarting = true;
-    this.clear();
-    this.ptyManager.kill(activeId);
+  /**
+   * Restarts a tab with its own command and working directory.
+   */
+  private restartTerminal(terminalId: string): void {
+    const instance = this.stateManager.get(terminalId);
+    if (!instance) return;
 
-    // Delay to let old PTY exit event fire before resetting flag
-    setTimeout(() => {
-      this.isRestarting = false;
-    }, 100);
+    instance.exited = false;
+    this.postMessage({ type: 'clear', id: terminalId });
 
     const config = this.configManager.getConfig();
-    this.ptyManager.spawn(activeId, config, this.lastCols, this.lastRows);
+    const spawnConfig = instance.command
+      ? { ...config, command: instance.command, args: instance.args ?? [] }
+      : config;
+    this.ptyManager.spawn(terminalId, spawnConfig, this.lastCols, this.lastRows, instance.cwd);
   }
 
   public clear(): void {

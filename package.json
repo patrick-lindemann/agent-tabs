@@ -161,6 +161,23 @@
           "default": true,
           "description": "Run command directly without shell wrapper (cleaner output, but no shell features)"
         },
+        "agentTerminal.onExit": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "close",
+            "restart",
+            "keep"
+          ],
+          "enumDescriptions": [
+            "Close the tab after a clean exit (code 0); keep it open after an error. Closing the last tab opens a new one.",
+            "Always close the tab when the process exits.",
+            "Restart the command in the same tab. Falls back to 'keep' if the process exits within 3 seconds of starting.",
+            "Keep the tab open; press Enter to restart or Esc to close."
+          ],
+          "default": "auto",
+          "description": "What happens when the terminal's process exits (e.g. after /exit)"
+        },
         "agentTerminal.promptNotification": {
           "type": "boolean",
           "default": true,

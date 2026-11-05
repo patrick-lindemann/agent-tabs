@@ -8,7 +8,8 @@ import type { IPty, INodePty, TerminalConfig } from './types';
  */
 export interface PtyEventCallbacks {
   onData: (terminalId: string, data: string) => void;
-  onExit: (terminalId: string, exitCode: number) => void;
+  /** Called only when the process ends on its own, not after `kill()` */
+  onExit: (terminalId: string, exitCode: number, runtimeMs: number) => void;
   onError: (terminalId: string, error: string) => void;
 }
 
@@ -185,8 +186,14 @@ export class PtyManager {
       this.callbacks.onData(terminalId, data);
     });
 
+    const startedAt = Date.now();
     pty.onExit(({ exitCode }) => {
-      this.callbacks.onExit(terminalId, exitCode);
+      // A killed or replaced PTY was already removed from the map
+      if (this.ptys.get(terminalId) !== pty) {
+        return;
+      }
+      this.ptys.delete(terminalId);
+      this.callbacks.onExit(terminalId, exitCode, Date.now() - startedAt);
     });
   }
 
