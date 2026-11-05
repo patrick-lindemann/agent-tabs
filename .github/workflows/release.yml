@@ -5,10 +5,10 @@ on:
     tags:
       - "v*"
 
-# Electron version used by VS Code (update when VS Code updates Electron)
-# VS Code 1.96+ uses Electron 32, VS Code 1.100+ uses Electron 34, VS Code 1.107+ uses Electron 39
+# Electron version used by VS Code (Help > About). node-pty uses N-API, so the
+# build normally keeps working across Electron updates; bump this when it doesn't.
 env:
-  ELECTRON_VERSION: "39.2.3"
+  ELECTRON_VERSION: "43.8.3"
 
 jobs:
   build:
@@ -37,7 +37,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies (skip rebuild)
@@ -68,7 +68,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Download all artifacts
@@ -81,15 +81,6 @@ jobs:
       - name: List artifacts
         run: ls -la vsix-artifacts/
 
-      - name: Publish to VS Code Marketplace
-        if: ${{ vars.PUBLISH_TO_MARKETPLACE == 'true' }}
-        run: |
-          npm ci --ignore-scripts
-          for vsix in vsix-artifacts/*.vsix; do
-            echo "Publishing $vsix"
-            npx @vscode/vsce publish --packagePath "$vsix" -p ${{ secrets.VSCE_PAT }} || true
-          done
-        continue-on-error: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
