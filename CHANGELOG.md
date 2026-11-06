@@ -5,6 +5,32 @@ All notable changes to the "Agent Terminal" extension (fork of "Claude Terminal 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-06
+
+### Added
+
+- `agentTerminal.onExit` setting (`auto`, `close`, `restart`, `keep`)
+- `agentTerminal.profiles`: an ordered list of profiles for new tabs, with built-in pi, Claude Code and Codex and custom CLIs; the first one is the default and the `…` button next to `+` lists them all
+- Agent status on tabs from OSC 7501 reports, the terminal bell and Codex notifications, shown as an icon readable by shape (working, needs input, done, failed) with optional status colors (`agentTerminal.statusColors`); it clears after a second in view and is announced to screen readers; a badge on the sidebar icon counts tabs that need attention (`agentTerminal.programStatus`)
+- Tabs are named with a short key from the agent's terminal title, e.g. `refactor-api-client` from Claude Code's conversation summary or a named pi session (`agentTerminal.autoTabTitles`, `agentTerminal.tabTitleWords`); words are split per language and filler words removed for about 60 languages; the tooltip shows the full title
+- Closing a tab whose agent is working or waiting for input asks first, with Don't Ask Again (`agentTerminal.confirmClose`)
+- Tabs keep their width and the strip scrolls sideways, with arrow buttons while tabs overflow; a tooltip shows labels that do not fit
+- Browser-style tab shortcuts while Agent Terminal has focus: `Cmd+T`, `Cmd+W`, `Cmd+Alt+←/→`, `Cmd+1…9` and `Ctrl+Tab` for Switch Tab… (`Ctrl+Shift+T/W`, `Ctrl+PageUp/PageDown`, `Alt+1…9` on Windows and Linux)
+- Tab context menu with Close and Close Others; middle-click closes a tab
+- The terminal sends the same sequences as VS Code's terminal for editing keys, e.g. `Cmd+←/→` to the start/end of the line, `Cmd+Backspace` to delete the line and `Option+Backspace` to delete a word
+
+### Changed
+
+- `agentTerminal.command` and `agentTerminal.args` are replaced by `agentTerminal.profiles`
+- Tabs moved to a browser-style strip above the terminal; tabs share its width and scroll sideways below their minimum width
+- Tab strip uses VS Code's UI font; the `+` and custom-command buttons moved from the tab strip to the view title bar
+- The restart button and command are removed; an exited process still restarts with `Enter`
+- Close Tab is `Ctrl+Shift+W` on Windows and Linux, so `Ctrl+W` reaches the terminal
+- A clean exit (e.g. `/exit`) closes the tab instead of leaving a dead terminal; closing the last tab opens a new one
+- After a non-zero exit the output stays and `Enter` restarts the command, `Esc` closes the tab
+- Restarting a custom-command tab reuses its command and working directory
+- Releases are published on every push to `main` from the version in `package.json`; pull requests run the CI workflow
+
 ## [1.1.2] - 2026-11-05
 
 ### Fixed

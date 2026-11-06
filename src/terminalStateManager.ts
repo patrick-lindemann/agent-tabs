@@ -1,5 +1,13 @@
-import type { TerminalInstance, TabInfo } from './types';
+import type { TerminalInstance, TabInfo, TabStatus } from './types';
 import { WORKSPACE_ACCENT_COLORS } from './types';
+import { tabKey } from './profiles';
+
+const STATUS_LABELS: Record<TabStatus, string> = {
+  working: 'Working',
+  blocked: 'Needs input',
+  done: 'Done',
+  error: 'Failed'
+};
 
 /**
  * Manages terminal instance state including active terminal tracking.
@@ -8,21 +16,12 @@ import { WORKSPACE_ACCENT_COLORS } from './types';
 export class TerminalStateManager {
   private readonly terminals = new Map<string, TerminalInstance>();
   private activeTerminalId: string | undefined;
-  private terminalCounter = 0;
 
   /**
    * Generates a unique terminal ID.
    */
   generateId(): string {
     return `terminal-${String(Date.now())}-${Math.random().toString(36).substring(2, 9)}`;
-  }
-
-  /**
-   * Generates the next terminal name.
-   */
-  generateName(): string {
-    this.terminalCounter++;
-    return `Terminal ${String(this.terminalCounter)}`;
   }
 
   /**
@@ -120,14 +119,86 @@ export class TerminalStateManager {
   /**
    * Gets tab information for all terminals.
    */
-  getTabsInfo(): TabInfo[] {
+  getTabsInfo(autoTitles: boolean, titleWords: number): TabInfo[] {
     return this.getAll().map((t) => ({
       id: t.id,
-      name: t.name,
+      label: this.getLabel(t, autoTitles, titleWords),
+      description: this.getFullLabel(t, true),
       isActive: t.isActive,
       accentColor: this.getAccentColor(t.workspaceFolderIndex),
-      isWaitingForInput: t.isWaitingForInput
+      status: this.getStatus(t),
+      statusText: this.describeStatus(t)
     }));
+  }
+
+  /**
+   * With automatic titles, a key from the terminal title, e.g.
+   * `refactor-api-client` from Claude Code's conversation summary or a named
+   * pi session, and the agent's key (`claude-code`) until the program sets
+   * one. Otherwise the agent's name.
+   */
+  getLabel(instance: TerminalInstance, autoTitles: boolean, titleWords: number): string {
+    if (!autoTitles) return instance.launch.label;
+    return (
+      tabKey(instance.titleLabel ?? instance.launch.label, titleWords) ?? instance.launch.label
+    );
+  }
+
+  /** `pi / Refactor the API client`: agent and full title, e.g. for the tab picker */
+  getFullLabel(instance: TerminalInstance, autoTitles: boolean): string {
+    const title = autoTitles ? instance.titleLabel : undefined;
+    return title ? `${instance.launch.label} / ${title}` : instance.launch.label;
+  }
+
+  /** `Needs input: approve Bash`, or undefined when idle */
+  describeStatus(instance: TerminalInstance): string | undefined {
+    const status = this.getStatus(instance);
+    if (!status) return undefined;
+    const message = instance.statusMessage;
+    return message ? `${STATUS_LABELS[status]}: ${message}` : STATUS_LABELS[status];
+  }
+
+  /**
+   * Whether the agent is working or waiting for an answer, so closing the tab
+   * would interrupt it. Unlike the status, this ignores the prompt detector's
+   * guess for programs that do not report their state.
+   */
+  isBusy(instance: TerminalInstance): boolean {
+    return (
+      !instance.exited &&
+      (instance.needsInput ||
+        instance.programState === 'working' ||
+        instance.programState === 'blocked')
+    );
+  }
+
+  /**
+   * Whether a tab needs the user: blocked on input or finished while unseen.
+   */
+  needsAttention(instance: TerminalInstance): boolean {
+    const status = this.getStatus(instance);
+    return status === 'blocked' || status === 'done' || status === 'error';
+  }
+
+  /**
+   * A question the agent did not report (bell) and reported states win over
+   * the unseen marker. Without OSC 7501 reports, the pattern-based prompt
+   * detector marks inactive tabs as blocked.
+   */
+  getStatus(instance: TerminalInstance): TabStatus | undefined {
+    if (instance.needsInput) {
+      return 'blocked';
+    }
+    if (instance.programState === 'working' || instance.programState === 'blocked') {
+      return instance.programState;
+    }
+    if (instance.unseen) {
+      return instance.unseen;
+    }
+    if (!instance.reportsStatus && instance.isWaitingForInput && !instance.isActive) {
+      return 'blocked';
+    }
+    return undefined;
   }
 
   /**

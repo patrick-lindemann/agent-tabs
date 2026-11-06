@@ -3,17 +3,32 @@ import { PtyManager, type PtyEventCallbacks } from './ptyManager';
 import { ConfigManager } from './configManager';
 import { TerminalStateManager } from './terminalStateManager';
 import { dispatchMessage, type MessageHandlerContext } from './messageHandlers';
-import type { WebviewMessage, TerminalInstance, ExtensionMessage } from './types';
-import { WORKSPACE_ACCENT_COLORS } from './types';
+import type {
+  WebviewMessage,
+  TerminalInstance,
+  ExtensionMessage,
+  LaunchSpec,
+  Profile
+} from './types';
 import { CommandInputPicker } from './commandInputPicker';
 import { PromptDetector, type PromptDetectorConfig } from './promptDetector';
+import {
+  PROGRAM_STATUS_REPLY,
+  TerminalSignalParser,
+  isTerminalReport,
+  type ProgramStatusReport,
+  type TerminalSignals
+} from './terminalSignals';
+import { labelFromTitle, launchForCommand } from './profiles';
+
+/** How long a tab must stay in view before its result counts as seen */
+const SEEN_DELAY_MS = 1000;
 
 export class AgentTerminalViewProvider
   implements vscode.WebviewViewProvider, MessageHandlerContext
 {
   private view?: vscode.WebviewView;
   private disposed = false;
-  private isRestarting = false;
   private lastCols = 80;
   private lastRows = 24;
 
@@ -22,6 +37,8 @@ export class AgentTerminalViewProvider
   private readonly ptyManager: PtyManager;
   private readonly commandPicker = new CommandInputPicker();
   private readonly promptDetector: PromptDetector;
+  private readonly signalParsers = new Map<string, TerminalSignalParser>();
+  private seenTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly extensionUri: vscode.Uri) {
     const callbacks: PtyEventCallbacks = {
@@ -37,18 +54,10 @@ export class AgentTerminalViewProvider
       this.handleNotificationChange.bind(this)
     );
 
-    // Pre-load help for CLI agents from README (missing commands are handled gracefully)
-    const config = this.configManager.getConfig();
+    // Pre-load help for the custom command picker (missing commands are handled gracefully)
+    const profileCommands = this.configManager.getConfig().profiles.map((p) => p.command);
     this.commandPicker.preloadCommands([
-      config.command,
-      'pi',
-      'claude',
-      'gemini',
-      'aider',
-      'codex',
-      'gh',
-      'interpreter',
-      'opencode'
+      ...new Set([...profileCommands, 'gemini', 'aider', 'gh', 'interpreter', 'opencode'])
     ]);
   }
 
@@ -61,8 +70,37 @@ export class AgentTerminalViewProvider
   }
 
   handleInput(id: string, data: string): void {
+    if (this.stateManager.get(id)?.exited) {
+      if (data === '\r') {
+        this.restartTerminal(id);
+      } else if (data === '\x1b') {
+        this.closeTerminal(id);
+      }
+      return;
+    }
     this.ptyManager.write(id, data);
+    // Focus and mouse reports from clicking into the terminal are not answers
+    if (isTerminalReport(data)) return;
+
     this.promptDetector.onUserInput(id);
+    // A question is answered with Enter or dismissed with Esc; arrow keys and
+    // typing only move within it
+    const instance = this.stateManager.get(id);
+    if (instance?.needsInput && (data.includes('\r') || data === '\x1b')) {
+      instance.needsInput = false;
+      this.sendTabsUpdate();
+    }
+    this.markSeen(id);
+  }
+
+  /**
+   * VS Code renders a webview view as an overlay outside the view's element,
+   * so `focusedView` is not set while the terminal has focus. The webview
+   * reports focus itself and the `agentTerminal.focused` context key scopes
+   * the tab keybindings, e.g. so Cmd+W closes a tab instead of the editor.
+   */
+  handleFocus(focused: boolean): void {
+    void vscode.commands.executeCommand('setContext', 'agentTerminal.focused', focused);
   }
 
   handleResize(id: string, cols: number, rows: number): void {
@@ -80,7 +118,7 @@ export class AgentTerminalViewProvider
   }
 
   handleCloseTab(id: string): void {
-    this.closeTerminal(id);
+    void this.requestClose([id]);
   }
 
   handleSwitchTab(id: string): void {
@@ -149,20 +187,179 @@ export class AgentTerminalViewProvider
   // --- PTY Event Handlers ---
 
   private handlePtyData(terminalId: string, data: string): void {
+    this.trackSignals(terminalId, data);
     if (!this.disposed && this.view) {
       this.postMessage({ type: 'output', id: terminalId, data });
       this.promptDetector.onData(terminalId, data);
     }
   }
 
-  private handlePtyExit(terminalId: string, exitCode: number): void {
-    if (!this.disposed && this.view && !this.isRestarting) {
-      this.postMessage({
-        type: 'output',
-        id: terminalId,
-        data: `\r\n[Process exited with code ${String(exitCode)}]\r\n`
-      });
+  /**
+   * `onExit: auto` closes the tab after a clean exit (e.g. `/exit`) and keeps
+   * failed runs open so their output stays readable. `restart` falls back to
+   * the prompt when the process dies right after starting, to avoid a loop.
+   */
+  private handlePtyExit(terminalId: string, exitCode: number, runtimeMs: number): void {
+    const instance = this.stateManager.get(terminalId);
+    if (this.disposed || !this.view || !instance) return;
+
+    const { onExit } = this.configManager.getConfig();
+    if (onExit === 'close' || (onExit === 'auto' && exitCode === 0)) {
+      this.closeTerminal(terminalId);
+      return;
     }
+    if (onExit === 'restart' && runtimeMs >= 3000) {
+      this.restartTerminal(terminalId);
+      return;
+    }
+
+    instance.exited = true;
+    instance.programState = undefined;
+    instance.needsInput = false;
+    if (exitCode !== 0 && !this.isInView(instance)) {
+      instance.unseen = 'error';
+    }
+    this.promptDetector.removeTerminal(terminalId);
+    this.sendTabsUpdate();
+    this.postMessage({
+      type: 'output',
+      id: terminalId,
+      data: `\r\n\x1b[2m[Process exited with code ${String(exitCode)}. Press Enter to restart or Esc to close.]\x1b[0m\r\n`
+    });
+  }
+
+  /**
+   * Reads status reports, titles, notifications and the bell from the
+   * program's output and answers OSC 7501 support queries.
+   */
+  private trackSignals(terminalId: string, data: string): void {
+    const instance = this.stateManager.get(terminalId);
+    if (!instance) return;
+
+    let parser = this.signalParsers.get(terminalId);
+    if (!parser) {
+      parser = new TerminalSignalParser();
+      this.signalParsers.set(terminalId, parser);
+    }
+    const signals = parser.scan(data);
+
+    let changed = false;
+    if (signals.title !== undefined) {
+      const label = labelFromTitle(signals.title, instance.launch);
+      if (label !== instance.titleLabel) {
+        instance.titleLabel = label;
+        changed = true;
+      }
+    }
+    if (this.configManager.getConfig().programStatus) {
+      changed = this.applyStatusSignals(instance, signals) || changed;
+    }
+    if (changed) {
+      this.sendTabsUpdate();
+    }
+  }
+
+  /**
+   * - OSC 7501 reports set the tab status. A finished run in a tab that is
+   *   not in view stays marked until the tab is shown.
+   * - A bell while working means a dialog asks something the agent did not
+   *   report, e.g. pi's ask_user_question tool. It counts as blocked until
+   *   the user types or the agent reports again.
+   * - Codex reports `working` then `idle` instead of `done`. With the
+   *   profile's options it writes an OSC 9 notification first when the turn
+   *   completed, so idle after a notification is done, a bare idle is a
+   *   cancel. A plan prompt notification asks for input instead.
+   */
+  private applyStatusSignals(instance: TerminalInstance, signals: TerminalSignals): boolean {
+    for (let i = 0; i < signals.queries; i++) {
+      this.ptyManager.write(instance.id, PROGRAM_STATUS_REPLY);
+    }
+
+    let changed = false;
+    if (signals.notifications.length > 0) {
+      instance.lastNotification = signals.notifications[signals.notifications.length - 1];
+    }
+    for (const report of signals.reports) {
+      this.applyProgramStatus(instance, report);
+      changed = true;
+    }
+    if (signals.bell && instance.programState === 'working' && !instance.needsInput) {
+      instance.needsInput = true;
+      changed = true;
+    }
+    return changed;
+  }
+
+  private applyProgramStatus(instance: TerminalInstance, report: ProgramStatusReport): void {
+    const previous = instance.programState;
+    const notification = instance.lastNotification;
+    instance.reportsStatus = true;
+    instance.needsInput = false;
+
+    if (report.state === 'clear') {
+      instance.programState = undefined;
+      instance.statusMessage = undefined;
+      return;
+    }
+
+    instance.programState = report.state;
+    instance.statusMessage = report.message;
+
+    if (report.state === 'working') {
+      instance.unseen = undefined;
+      instance.lastNotification = undefined;
+      return;
+    }
+    if (report.state === 'blocked' && !report.message && notification) {
+      instance.statusMessage = notification;
+    }
+    if (report.state === 'idle' && previous === 'working') {
+      instance.lastNotification = undefined;
+      if (notification?.startsWith('Plan mode prompt')) {
+        instance.needsInput = true;
+        instance.statusMessage = notification;
+        return;
+      }
+      const finished = instance.launch.agent !== 'codex' || notification !== undefined;
+      if (finished && !this.isInView(instance)) {
+        instance.unseen = 'done';
+      }
+      return;
+    }
+    if ((report.state === 'done' || report.state === 'error') && !this.isInView(instance)) {
+      instance.unseen = report.state;
+    }
+  }
+
+  private isInView(instance: TerminalInstance): boolean {
+    return instance.isActive && this.view?.visible === true;
+  }
+
+  /** Typing into a tab counts as having seen its result */
+  private markSeen(terminalId: string): void {
+    const instance = this.stateManager.get(terminalId);
+    if (instance?.unseen && this.isInView(instance)) {
+      instance.unseen = undefined;
+      this.sendTabsUpdate();
+    }
+  }
+
+  /**
+   * A finished or failed run counts as seen once its tab has been in view for
+   * a second, so flicking through tabs does not clear it.
+   */
+  private scheduleSeen(): void {
+    clearTimeout(this.seenTimer);
+    const activeId = this.stateManager.getActiveId();
+    const instance = activeId ? this.stateManager.get(activeId) : undefined;
+    if (!instance?.unseen || !this.isInView(instance)) return;
+
+    this.seenTimer = setTimeout(() => {
+      if (instance.unseen && this.isInView(instance)) {
+        instance.unseen = undefined;
+        this.sendTabsUpdate();
+      }
+    }, SEEN_DELAY_MS);
   }
 
   private handlePtyError(terminalId: string, error: string): void {
@@ -193,41 +390,48 @@ export class AgentTerminalViewProvider
       dispatchMessage(message, this);
     });
 
+    webviewView.onDidChangeVisibility(() => {
+      if (!webviewView.visible) {
+        this.handleFocus(false);
+      }
+      this.scheduleSeen();
+    });
+
     webviewView.onDidDispose(() => {
+      this.handleFocus(false);
       this.ptyManager.killAll();
     });
   }
 
   // --- Terminal Management (Public API) ---
 
-  public async createTerminal(): Promise<string> {
+  /**
+   * Opens a tab. Without a launch it runs the first profile.
+   */
+  public async createTerminal(launch?: LaunchSpec): Promise<string> {
+    const config = this.configManager.getConfig();
     const id = this.stateManager.generateId();
-    const name = this.stateManager.generateName();
 
     // Select working directory first to get folder index
     const { path: cwd, folderIndex } = await this.ptyManager.selectWorkingDirectory();
 
     const instance: TerminalInstance = {
       id,
-      name,
       pty: undefined,
       isActive: false,
       workspaceFolderIndex: folderIndex,
-      cwd
+      cwd,
+      launch: launch ?? config.profiles[0]
     };
 
     // Add instance first, then activate (so setActive can find it)
     this.stateManager.set(id, instance);
     this.stateManager.setActive(id);
 
-    // Notify webview with accent color
-    const accentColor = this.getAccentColor(folderIndex);
-    this.postMessage({ type: 'createTab', id, name, accentColor });
+    this.postMessage({ type: 'createTab', id });
     this.sendTabsUpdate();
 
-    // Start the terminal process
-    const config = this.configManager.getConfig();
-    this.ptyManager.spawn(id, config, this.lastCols, this.lastRows, cwd);
+    this.ptyManager.spawn(id, config, instance.launch, this.lastCols, this.lastRows, cwd);
 
     // Switch to the new tab
     this.postMessage({ type: 'switchTab', id });
@@ -235,48 +439,119 @@ export class AgentTerminalViewProvider
     return id;
   }
 
-  private async promptAndCreateTerminal(): Promise<void> {
-    const config = this.configManager.getConfig();
-    const defaultCommand = [config.command, ...config.args].join(' ');
+  /**
+   * Quick pick over the profiles in their configured order, followed by
+   * Custom Command…. VS Code's native view menus cannot follow a setting's
+   * order or list user-defined profiles.
+   */
+  public async pickProfileAndCreateTerminal(): Promise<void> {
+    const { profiles } = this.configManager.getConfig();
+    type Item = vscode.QuickPickItem & { profile?: Profile };
+    const items: Item[] = [
+      ...profiles.map((profile, index) => ({
+        label: profile.label,
+        description: index === 0 ? `${profile.command} · default` : profile.command,
+        profile
+      })),
+      { label: '', kind: vscode.QuickPickItemKind.Separator },
+      { label: 'Custom Command…' }
+    ];
 
-    const result = await this.commandPicker.promptForCommand(defaultCommand);
-
-    if (!result.cancelled && result.command) {
-      await this.createTerminalWithCommand(result.command, result.args);
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Open a new tab with'
+    });
+    if (picked?.profile) {
+      await this.createTerminal(picked.profile);
+    } else if (picked) {
+      await this.promptAndCreateTerminal();
     }
   }
 
-  public async createTerminalWithCommand(command: string, args: string[]): Promise<string> {
-    const id = this.stateManager.generateId();
-    const name = this.stateManager.generateName();
-
-    // Select working directory first to get folder index
-    const { path: cwd, folderIndex } = await this.ptyManager.selectWorkingDirectory();
-
-    const instance: TerminalInstance = {
-      id,
-      name,
-      pty: undefined,
-      isActive: false,
-      workspaceFolderIndex: folderIndex,
-      cwd
-    };
-
-    this.stateManager.set(id, instance);
-    this.stateManager.setActive(id);
-
-    const accentColor = this.getAccentColor(folderIndex);
-    this.postMessage({ type: 'createTab', id, name, accentColor });
-    this.sendTabsUpdate();
-
-    // Use provided command/args instead of config
+  public async promptAndCreateTerminal(): Promise<void> {
     const config = this.configManager.getConfig();
-    const customConfig = { ...config, command, args };
-    this.ptyManager.spawn(id, customConfig, this.lastCols, this.lastRows, cwd);
+    const result = await this.commandPicker.promptForCommand(config.profiles[0].command);
 
-    this.postMessage({ type: 'switchTab', id });
+    if (!result.cancelled && result.command) {
+      await this.createTerminal(
+        launchForCommand(result.command, result.args, config.programStatus)
+      );
+    }
+  }
 
-    return id;
+  /**
+   * Quick pick over the open tabs with their status, for switching without
+   * the tab strip.
+   */
+  public async pickTerminal(): Promise<void> {
+    const { autoTabTitles } = this.configManager.getConfig();
+    const items = this.stateManager.getAll().map((instance) => ({
+      label: this.stateManager.getFullLabel(instance, autoTabTitles),
+      description: instance.isActive ? 'active' : undefined,
+      detail: this.stateManager.describeStatus(instance),
+      id: instance.id
+    }));
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Switch to terminal tab'
+    });
+    if (picked) {
+      this.switchToTerminal(picked.id);
+      await vscode.commands.executeCommand('agentTerminal.terminalView.focus');
+    }
+  }
+
+  /**
+   * Closes tabs the user asked to close. Closing ends the agent's process, so
+   * tabs whose agent is working or waiting for an answer ask first, unless
+   * `agentTerminal.confirmClose` is off.
+   */
+  public async requestClose(terminalIds: string[]): Promise<boolean> {
+    const busy = terminalIds
+      .map((id) => this.stateManager.get(id))
+      .filter((instance) => instance && this.stateManager.isBusy(instance));
+    const { confirmClose, autoTabTitles, tabTitleWords } = this.configManager.getConfig();
+
+    if (busy.length > 0 && confirmClose) {
+      const [first] = busy;
+      const message =
+        busy.length === 1 && first
+          ? `Close "${this.stateManager.getLabel(first, autoTabTitles, tabTitleWords)}"?`
+          : `Close ${String(busy.length)} tabs with running agents?`;
+      const detail =
+        busy.length === 1 && first
+          ? `${first.launch.label} is ${this.stateManager.getStatus(first) === 'working' ? 'still working' : 'waiting for your input'}. Closing the tab ends its session.`
+          : 'Their agents are working or waiting for input. Closing the tabs ends their sessions.';
+      const close = busy.length === 1 ? 'Close' : 'Close All';
+      const dontAsk = "Close and Don't Ask Again";
+
+      const choice = await vscode.window.showWarningMessage(
+        message,
+        { modal: true, detail },
+        close,
+        dontAsk
+      );
+      if (!choice) {
+        void this.focusView();
+        return false;
+      }
+      if (choice === dontAsk) {
+        await vscode.workspace
+          .getConfiguration('agentTerminal')
+          .update('confirmClose', false, vscode.ConfigurationTarget.Global);
+      }
+    }
+
+    for (const id of terminalIds) {
+      this.closeTerminal(id);
+    }
+    if (busy.length > 0 && confirmClose) {
+      void this.focusView();
+    }
+    return true;
+  }
+
+  /** Returns focus to the terminal after a dialog; the webview focuses the active tab */
+  private async focusView(): Promise<void> {
+    await vscode.commands.executeCommand('agentTerminal.terminalView.focus');
   }
 
   public closeTerminal(terminalId: string): void {
@@ -285,6 +560,7 @@ export class AgentTerminalViewProvider
 
     this.ptyManager.kill(terminalId);
     this.promptDetector.removeTerminal(terminalId);
+    this.signalParsers.delete(terminalId);
     this.stateManager.delete(terminalId);
     this.postMessage({ type: 'removeTab', id: terminalId });
 
@@ -310,10 +586,17 @@ export class AgentTerminalViewProvider
     this.sendTabsUpdate();
   }
 
+  public async closeOtherTerminals(terminalId: string): Promise<void> {
+    const others = [...this.stateManager.getAllIds()].filter((id) => id !== terminalId);
+    if (await this.requestClose(others)) {
+      this.switchToTerminal(terminalId);
+    }
+  }
+
   public closeActiveTerminal(): void {
     const activeId = this.stateManager.getActiveId();
     if (activeId) {
-      this.closeTerminal(activeId);
+      void this.requestClose([activeId]);
     }
   }
 
@@ -322,8 +605,18 @@ export class AgentTerminalViewProvider
     if (!instance) return;
 
     this.stateManager.setActive(terminalId);
+    this.scheduleSeen();
     this.postMessage({ type: 'switchTab', id: terminalId });
     this.sendTabsUpdate();
+  }
+
+  /** Switches to the tab at a 1-based position; 9 is always the last tab */
+  public switchToTerminalAt(position: number): void {
+    const ids = this.stateManager.getAllIds();
+    const id = position >= 9 ? ids[ids.length - 1] : ids[position - 1];
+    if (id) {
+      this.switchToTerminal(id);
+    }
   }
 
   public switchToNextTerminal(): void {
@@ -344,21 +637,35 @@ export class AgentTerminalViewProvider
     this.switchToTerminal(ids[prevIndex]);
   }
 
-  public restart(): void {
-    const activeId = this.stateManager.getActiveId();
-    if (!activeId) return;
+  /**
+   * Restarts a tab with its own command and working directory, after its
+   * process exited (Enter, or `agentTerminal.onExit: restart`).
+   */
+  private restartTerminal(terminalId: string): void {
+    const instance = this.stateManager.get(terminalId);
+    if (!instance) return;
 
-    this.isRestarting = true;
-    this.clear();
-    this.ptyManager.kill(activeId);
-
-    // Delay to let old PTY exit event fire before resetting flag
-    setTimeout(() => {
-      this.isRestarting = false;
-    }, 100);
+    instance.exited = false;
+    instance.reportsStatus = false;
+    instance.programState = undefined;
+    instance.statusMessage = undefined;
+    instance.needsInput = false;
+    instance.lastNotification = undefined;
+    instance.titleLabel = undefined;
+    instance.unseen = undefined;
+    this.signalParsers.delete(terminalId);
+    this.sendTabsUpdate();
+    this.postMessage({ type: 'clear', id: terminalId });
 
     const config = this.configManager.getConfig();
-    this.ptyManager.spawn(activeId, config, this.lastCols, this.lastRows);
+    this.ptyManager.spawn(
+      terminalId,
+      config,
+      instance.launch,
+      this.lastCols,
+      this.lastRows,
+      instance.cwd
+    );
   }
 
   public clear(): void {
@@ -371,10 +678,12 @@ export class AgentTerminalViewProvider
   public updateConfig(): void {
     this.configManager.invalidateCache();
     this.promptDetector.updateConfig(this.getPromptDetectorConfig());
+    this.sendTabsUpdate();
   }
 
   public dispose(): void {
     this.disposed = true;
+    clearTimeout(this.seenTimer);
     this.ptyManager.killAll();
     this.promptDetector.dispose();
     this.configManager.dispose();
@@ -394,23 +703,37 @@ export class AgentTerminalViewProvider
 
   private handleNotificationChange(terminalId: string, isWaiting: boolean): void {
     this.stateManager.setWaitingForInput(terminalId, isWaiting);
-    this.postMessage({ type: 'setNotification', id: terminalId, show: isWaiting });
-  }
-
-  private getAccentColor(folderIndex: number | undefined): string | undefined {
-    if (folderIndex === undefined) {
-      return undefined;
-    }
-    return WORKSPACE_ACCENT_COLORS[folderIndex % WORKSPACE_ACCENT_COLORS.length];
+    this.sendTabsUpdate();
   }
 
   private postMessage(message: ExtensionMessage): void {
     this.view?.webview.postMessage(message);
   }
 
+  /**
+   * Sends the tab list to the webview. The badge on the view's icon counts
+   * tabs that need the user.
+   */
   private sendTabsUpdate(): void {
-    const tabs = this.stateManager.getTabsInfo();
-    this.postMessage({ type: 'tabsUpdate', tabs });
+    const { autoTabTitles, tabTitleWords, statusColors } = this.configManager.getConfig();
+    const tabs = this.stateManager.getTabsInfo(autoTabTitles, tabTitleWords);
+    this.postMessage({ type: 'tabsUpdate', tabs, statusColors });
+
+    if (this.view) {
+      const count = this.stateManager
+        .getAll()
+        .filter((t) => this.stateManager.needsAttention(t)).length;
+      this.view.badge =
+        count > 0
+          ? {
+              value: count,
+              tooltip:
+                count === 1
+                  ? '1 terminal needs attention'
+                  : `${String(count)} terminals need attention`
+            }
+          : undefined;
+    }
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
@@ -436,8 +759,16 @@ export class AgentTerminalViewProvider
     <link href="${stylesUri.toString()}" rel="stylesheet">
 </head>
 <body>
+    <div id="tab-bar">
+        <button id="tab-scroll-left" class="tab-scroll" title="Scroll Left" aria-label="Scroll Left">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.928 7.976l4.357 4.357-.618.62L5 8.284v-.618L9.667 3l.618.619-4.357 4.357z"/></svg>
+        </button>
+        <div id="tab-list" role="tablist" aria-label="Terminal tabs"></div>
+        <button id="tab-scroll-right" class="tab-scroll" title="Scroll Right" aria-label="Scroll Right">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M10.072 8.024L5.715 3.667l.618-.62L11 7.716v.618L6.333 13l-.618-.619 4.357-4.357z"/></svg>
+        </button>
+    </div>
     <div id="terminals-container"></div>
-    <div id="tab-bar"></div>
     <script nonce="${nonce}" src="${scriptUri.toString()}"></script>
 </body>
 </html>`;
