@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `agentTerminal.onExit` setting (`auto`, `close`, `restart`, `keep`)
 - `agentTerminal.profiles`: an ordered list of profiles for new tabs, with built-in pi, Claude Code and Codex and custom CLIs; the first one is the default and the `…` button next to `+` lists them all
 - Agent status on tabs from OSC 7501 reports, the terminal bell and Codex notifications, shown as an icon readable by shape (working, needs input, done, failed) with optional status colors (`agentTerminal.statusColors`); it clears after a second in view and is announced to screen readers; a badge on the sidebar icon counts tabs that need attention (`agentTerminal.programStatus`)
-- Tabs show the agent's logo and are labelled with its terminal title, e.g. Claude Code's conversation summary or a named pi session (`agentTerminal.autoTabTitles`); `agentTerminal.monochromeIcons` draws the logos in the text color
+- Tabs are named with a short key from the agent's terminal title, e.g. `refactor-api-client` from Claude Code's conversation summary or a named pi session (`agentTerminal.autoTabTitles`, `agentTerminal.tabTitleWords`); words are split per language and filler words removed for about 60 languages; the tooltip shows the full title
+- Closing a tab whose agent is working or waiting for input asks first, with Don't Ask Again (`agentTerminal.confirmClose`)
 - Tabs keep their width and the strip scrolls sideways, with arrow buttons while tabs overflow; a tooltip shows labels that do not fit
 - Browser-style tab shortcuts while Agent Terminal has focus: `Cmd+T`, `Cmd+W`, `Cmd+Alt+←/→`, `Cmd+1…9` and `Ctrl+Tab` for Switch Tab… (`Ctrl+Shift+T/W`, `Ctrl+PageUp/PageDown`, `Alt+1…9` on Windows and Linux)
 - Tab context menu with Close and Close Others; middle-click closes a tab

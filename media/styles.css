@@ -113,23 +113,6 @@ body {
   color: var(--vscode-tab-activeForeground, #ffffff);
 }
 
-.tab-icon {
-  display: flex;
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-}
-
-.tab-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* agentTerminal.monochromeIcons: logos in the tab's text color */
-.monochrome-icons .tab-icon path {
-  fill: currentColor;
-}
-
 .tab-label {
   flex: 1;
   min-width: 0;
@@ -138,24 +121,16 @@ body {
 }
 
 /*
- * Status icon and close button share a slot, like the unsaved dot on editor
- * tabs: the status shows until the tab is hovered. Without a status, the
- * close button shows on the active tab and on hover.
+ * The status icon leads the tab and keeps its space while idle, so labels do
+ * not shift. The close button shows on the active tab and on hover.
  */
-.tab-slot {
-  position: relative;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-}
-
-.tab-status,
-.tab-close {
-  position: absolute;
-  inset: 0;
+.tab-status {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  width: 14px;
+  height: 14px;
 }
 
 .tab-status svg {
@@ -163,11 +138,17 @@ body {
   height: 14px;
 }
 
-.tab:hover .tab-status {
-  visibility: hidden;
+.tab:not([data-status]) .tab-status {
+  opacity: 0.6;
 }
 
 .tab-close {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
   border-radius: 3px;
@@ -182,7 +163,7 @@ body {
   height: 16px;
 }
 
-.tab.active:not([data-status]) .tab-close,
+.tab.active .tab-close,
 .tab:hover .tab-close {
   visibility: visible;
 }

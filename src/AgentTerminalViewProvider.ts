@@ -118,7 +118,7 @@ export class AgentTerminalViewProvider
   }
 
   handleCloseTab(id: string): void {
-    this.closeTerminal(id);
+    void this.requestClose([id]);
   }
 
   handleSwitchTab(id: string): void {
@@ -451,11 +451,10 @@ export class AgentTerminalViewProvider
       ...profiles.map((profile, index) => ({
         label: profile.label,
         description: index === 0 ? `${profile.command} · default` : profile.command,
-        iconPath: this.getProfileIcon(profile),
         profile
       })),
       { label: '', kind: vscode.QuickPickItemKind.Separator },
-      { label: 'Custom Command…', iconPath: new vscode.ThemeIcon('edit') }
+      { label: 'Custom Command…' }
     ];
 
     const picked = await vscode.window.showQuickPick(items, {
@@ -465,20 +464,6 @@ export class AgentTerminalViewProvider
       await this.createTerminal(picked.profile);
     } else if (picked) {
       await this.promptAndCreateTerminal();
-    }
-  }
-
-  /** Brand logo for built-in agents; Codex has no color, so it follows the theme */
-  private getProfileIcon(profile: Profile): vscode.IconPath {
-    const icon = (name: string) =>
-      vscode.Uri.joinPath(this.extensionUri, 'media', 'icons', `${name}.svg`);
-    switch (profile.agent) {
-      case 'codex':
-        return { light: icon('codex-light'), dark: icon('codex-dark') };
-      case undefined:
-        return new vscode.ThemeIcon('terminal');
-      default:
-        return icon(profile.agent);
     }
   }
 
@@ -514,6 +499,61 @@ export class AgentTerminalViewProvider
     }
   }
 
+  /**
+   * Closes tabs the user asked to close. Closing ends the agent's process, so
+   * tabs whose agent is working or waiting for an answer ask first, unless
+   * `agentTerminal.confirmClose` is off.
+   */
+  public async requestClose(terminalIds: string[]): Promise<boolean> {
+    const busy = terminalIds
+      .map((id) => this.stateManager.get(id))
+      .filter((instance) => instance && this.stateManager.isBusy(instance));
+    const { confirmClose, autoTabTitles, tabTitleWords } = this.configManager.getConfig();
+
+    if (busy.length > 0 && confirmClose) {
+      const [first] = busy;
+      const message =
+        busy.length === 1 && first
+          ? `Close "${this.stateManager.getLabel(first, autoTabTitles, tabTitleWords)}"?`
+          : `Close ${String(busy.length)} tabs with running agents?`;
+      const detail =
+        busy.length === 1 && first
+          ? `${first.launch.label} is ${this.stateManager.getStatus(first) === 'working' ? 'still working' : 'waiting for your input'}. Closing the tab ends its session.`
+          : 'Their agents are working or waiting for input. Closing the tabs ends their sessions.';
+      const close = busy.length === 1 ? 'Close' : 'Close All';
+      const dontAsk = "Close and Don't Ask Again";
+
+      const choice = await vscode.window.showWarningMessage(
+        message,
+        { modal: true, detail },
+        close,
+        dontAsk
+      );
+      if (!choice) {
+        void this.focusView();
+        return false;
+      }
+      if (choice === dontAsk) {
+        await vscode.workspace
+          .getConfiguration('agentTerminal')
+          .update('confirmClose', false, vscode.ConfigurationTarget.Global);
+      }
+    }
+
+    for (const id of terminalIds) {
+      this.closeTerminal(id);
+    }
+    if (busy.length > 0 && confirmClose) {
+      void this.focusView();
+    }
+    return true;
+  }
+
+  /** Returns focus to the terminal after a dialog; the webview focuses the active tab */
+  private async focusView(): Promise<void> {
+    await vscode.commands.executeCommand('agentTerminal.terminalView.focus');
+  }
+
   public closeTerminal(terminalId: string): void {
     const instance = this.stateManager.get(terminalId);
     if (!instance) return;
@@ -546,19 +586,17 @@ export class AgentTerminalViewProvider
     this.sendTabsUpdate();
   }
 
-  public closeOtherTerminals(terminalId: string): void {
-    for (const id of this.stateManager.getAllIds()) {
-      if (id !== terminalId) {
-        this.closeTerminal(id);
-      }
+  public async closeOtherTerminals(terminalId: string): Promise<void> {
+    const others = [...this.stateManager.getAllIds()].filter((id) => id !== terminalId);
+    if (await this.requestClose(others)) {
+      this.switchToTerminal(terminalId);
     }
-    this.switchToTerminal(terminalId);
   }
 
   public closeActiveTerminal(): void {
     const activeId = this.stateManager.getActiveId();
     if (activeId) {
-      this.closeTerminal(activeId);
+      void this.requestClose([activeId]);
     }
   }
 
@@ -677,9 +715,9 @@ export class AgentTerminalViewProvider
    * tabs that need the user.
    */
   private sendTabsUpdate(): void {
-    const { autoTabTitles, monochromeIcons, statusColors } = this.configManager.getConfig();
-    const tabs = this.stateManager.getTabsInfo(autoTabTitles);
-    this.postMessage({ type: 'tabsUpdate', tabs, monochromeIcons, statusColors });
+    const { autoTabTitles, tabTitleWords, statusColors } = this.configManager.getConfig();
+    const tabs = this.stateManager.getTabsInfo(autoTabTitles, tabTitleWords);
+    this.postMessage({ type: 'tabsUpdate', tabs, statusColors });
 
     if (this.view) {
       const count = this.stateManager

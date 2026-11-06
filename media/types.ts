@@ -17,7 +17,7 @@ declare global {
 export interface TabInfo {
   id: string;
   label: string;
-  agent?: 'pi' | 'claude' | 'codex';
+  description: string;
   isActive: boolean;
   accentColor?: string;
   status?: 'working' | 'blocked' | 'done' | 'error';
@@ -28,7 +28,7 @@ export interface TabInfo {
 export type WebviewIncomingMessage =
   | { type: 'output'; id: string; data: string }
   | { type: 'clear'; id: string }
-  | { type: 'tabsUpdate'; tabs: TabInfo[]; monochromeIcons: boolean; statusColors: boolean }
+  | { type: 'tabsUpdate'; tabs: TabInfo[]; statusColors: boolean }
   | { type: 'createTab'; id: string }
   | { type: 'switchTab'; id: string }
   | { type: 'removeTab'; id: string };

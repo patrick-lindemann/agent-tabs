@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as stopword from 'stopword';
 import type { AgentId, LaunchSpec, Profile, ProfileConfig } from './types';
 
 interface AgentDefinition {
@@ -137,6 +138,41 @@ export function launchForCommand(
     env: {},
     agent
   };
+}
+
+type StopwordLanguage = Exclude<keyof typeof stopword, 'removeStopwords'>;
+
+const STOPWORD_LISTS = Object.entries(stopword)
+  .filter((entry): entry is [StopwordLanguage, string[]] => Array.isArray(entry[1]))
+  .map(([, words]) => new Set(words));
+
+const wordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+
+/**
+ * Turns a title into a short key for a tab: `Refactor the API client` becomes
+ * `refactor-api-client`. Words are split per language (`Intl.Segmenter`, also
+ * for scripts without spaces). Filler words are removed with the stopword
+ * list that matches most of the title's words; languages without a list keep
+ * all their words.
+ */
+export function tabKey(text: string, maxWords: number): string | undefined {
+  const words = [...wordSegmenter.segment(text.toLowerCase())]
+    .filter((segment) => segment.isWordLike)
+    .map((segment) => segment.segment);
+
+  let fillers: Set<string> | undefined;
+  let bestMatches = 0;
+  for (const list of STOPWORD_LISTS) {
+    const matches = words.filter((word) => list.has(word)).length;
+    if (matches > bestMatches) {
+      bestMatches = matches;
+      fillers = list;
+    }
+  }
+
+  const meaningful = fillers ? words.filter((word) => !fillers.has(word)) : words;
+  const key = (meaningful.length > 0 ? meaningful : words).slice(0, maxWords).join('-');
+  return key || undefined;
 }
 
 /**

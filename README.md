@@ -12,7 +12,7 @@ This is a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero
 - **Default command** is `pi` instead of `claude`.
 - **Agent profiles** replace `agentTerminal.command` and `agentTerminal.args`: an ordered list with built-in support for pi, Claude Code and Codex and any custom CLI. See [Agent profiles](#agent-profiles).
 - **Agent status on tabs** (working, needs input, done, failed), read from what the agents report. See [Agent status](#agent-status).
-- **Browser-style tabs** above the terminal, labelled with the conversation summary or session name.
+- **Browser-style tabs** above the terminal, labelled with a short key from the conversation summary or session name, e.g. `refactor-api-client`.
 - **Modified keys reach the agent.** The terminal is an xterm.js instance inside a webview, not a VS Code integrated terminal, so `workbench.action.terminal.sendSequence` keybindings do not apply to it. The webview now handles these keys itself:
   | Key | Sent to the program |
   | --- | --- |
@@ -81,10 +81,10 @@ This extension works with any command-line AI assistant. Here are some popular o
 
 ### Tabs
 
-- A tab strip sits above the terminal. Each tab shows the agent's logo and the agent's title: Claude Code's conversation summary, a pi session's name (`/name`), otherwise the agent's name. Set `agentTerminal.autoTabTitles` to `false` to always show the agent's name.
-- A tooltip shows the full title when it does not fit, and the status.
-- An icon at the end of a tab shows its [status](#agent-status). Hovering the tab shows `×` instead. In multi-root workspaces, the left border shows the folder's color.
-- `×` closes a tab; it shows on hover and on the active tab while it has no status. Middle-click also closes a tab; right-click opens Close and Close Others.
+- A tab strip sits above the terminal. Each tab is named with a short key from the agent's title, e.g. `refactor-api-client` from Claude Code's conversation summary or a pi session's name (`/name`), otherwise the agent's name (`claude-code`). `agentTerminal.tabTitleWords` sets the maximum number of words (default 4). Words are split per language, also in scripts without spaces such as Japanese or Chinese, and filler words such as `the` or `die` are left out for [about 60 languages](https://github.com/fergiemcdowall/stopword#language-code); other languages keep all their words. Set `agentTerminal.autoTabTitles` to `false` to always show the agent's name.
+- The tooltip shows the agent, the full title and the status.
+- An icon at the start of a tab shows its [status](#agent-status). In multi-root workspaces, the left border shows the folder's color.
+- `×` closes a tab; it shows on the active tab and on hover. Middle-click also closes a tab; right-click opens Close and Close Others. Closing a tab whose agent is working or waiting for input asks first, since it ends the session. Choose **Close and Don't Ask Again** or set `agentTerminal.confirmClose` to `false` to turn this off.
 - Tabs share the strip's width. Below their minimum width, scroll the strip sideways with the mouse wheel or trackpad, or use the arrow buttons at its edges.
 - `Agent Terminal: Switch Tab…` lists all tabs with their status.
 
@@ -119,21 +119,22 @@ These work while Agent Terminal has focus and follow the browser's tab shortcuts
 
 Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
-| Setting                                 | Type    | Default                | Description                                                |
-| --------------------------------------- | ------- | ---------------------- | ---------------------------------------------------------- |
-| `agentTerminal.profiles`                | array   | pi, Claude Code, Codex | Profiles for new tabs, in menu order (see below)           |
-| `agentTerminal.autoRun`                 | boolean | `true`                 | Automatically run the command when the terminal opens      |
-| `agentTerminal.shell`                   | string  | `""`                   | Custom shell to use (empty for system default)             |
-| `agentTerminal.env`                     | object  | `{}`                   | Additional environment variables                           |
-| `agentTerminal.directMode`              | boolean | `true`                 | Run command directly without shell wrapper                 |
-| `agentTerminal.onExit`                  | string  | `"auto"`               | What happens when the process exits (see below)            |
-| `agentTerminal.programStatus`           | boolean | `true`                 | Show agent status on tabs (see below)                      |
-| `agentTerminal.autoTabTitles`           | boolean | `true`                 | Name tabs after the agent's title, e.g. the conversation   |
-| `agentTerminal.monochromeIcons`         | boolean | `false`                | Show agent logos in the text color instead of brand colors |
-| `agentTerminal.statusColors`            | boolean | `true`                 | Color the status icons on tabs                             |
-| `agentTerminal.promptNotification`      | boolean | `true`                 | Show notification indicator when terminal awaits input     |
-| `agentTerminal.promptNotificationDelay` | number  | `300`                  | Delay (ms) before showing notification after output stops  |
-| `agentTerminal.promptPatterns`          | array   | `[]`                   | Additional regex patterns to detect input prompts          |
+| Setting                                 | Type    | Default                | Description                                                             |
+| --------------------------------------- | ------- | ---------------------- | ----------------------------------------------------------------------- |
+| `agentTerminal.profiles`                | array   | pi, Claude Code, Codex | Profiles for new tabs, in menu order (see below)                        |
+| `agentTerminal.autoRun`                 | boolean | `true`                 | Automatically run the command when the terminal opens                   |
+| `agentTerminal.shell`                   | string  | `""`                   | Custom shell to use (empty for system default)                          |
+| `agentTerminal.env`                     | object  | `{}`                   | Additional environment variables                                        |
+| `agentTerminal.directMode`              | boolean | `true`                 | Run command directly without shell wrapper                              |
+| `agentTerminal.onExit`                  | string  | `"auto"`               | What happens when the process exits (see below)                         |
+| `agentTerminal.programStatus`           | boolean | `true`                 | Show agent status on tabs (see below)                                   |
+| `agentTerminal.autoTabTitles`           | boolean | `true`                 | Name tabs with a key from the agent's title, e.g. `refactor-api-client` |
+| `agentTerminal.tabTitleWords`           | number  | `4`                    | Maximum number of words in a tab's key                                  |
+| `agentTerminal.statusColors`            | boolean | `true`                 | Color the status icons on tabs                                          |
+| `agentTerminal.confirmClose`            | boolean | `true`                 | Ask before closing a tab whose agent is working or waiting for input    |
+| `agentTerminal.promptNotification`      | boolean | `true`                 | Show notification indicator when terminal awaits input                  |
+| `agentTerminal.promptNotificationDelay` | number  | `300`                  | Delay (ms) before showing notification after output stops               |
+| `agentTerminal.promptPatterns`          | array   | `[]`                   | Additional regex patterns to detect input prompts                       |
 
 ### Agent profiles
 
@@ -157,7 +158,7 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 | `args`    | Arguments                                                                           |
 | `env`     | Environment variables, added to `agentTerminal.env`                                 |
 
-Built-in agents only need an `id`. They get their logo, their [title as tab label](#tabs) and [status](#agent-status) support:
+Built-in agents only need an `id`. They get their [title as tab label](#tabs) and [status](#agent-status) support:
 
 | Agent       | Command  | Added by the extension                                                                                  |
 | ----------- | -------- | ------------------------------------------------------------------------------------------------------- |
@@ -169,12 +170,13 @@ Custom profiles show a terminal icon and the terminal title as label. A custom c
 
 ### Agent status
 
-An icon at the end of a tab shows what its agent is doing. The icons differ by shape, so they work without color. With `agentTerminal.statusColors` (on by default), the icons also take a theme color.
+An icon at the start of a tab shows what its agent is doing. The icons differ by shape, so they work without color. With `agentTerminal.statusColors` (on by default), the icons also take a theme color.
 
 | Icon                | Meaning                                                                                     |
 | ------------------- | ------------------------------------------------------------------------------------------- |
+| Sparkle, dimmed     | Idle                                                                                        |
 | `⋯`, fading in turn | Working                                                                                     |
-| `!`                 | Needs input: a question, an approval or a login. Stays until you answer.                    |
+| `!` in a triangle   | Needs input: a question, an approval or a login. Stays until you answer.                    |
 | `✓`                 | Done while you were looking elsewhere                                                       |
 | `✕` in a circle     | Failed while you were looking elsewhere: the agent reported an error or the process crashed |
 
@@ -341,6 +343,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [xterm.js](https://xtermjs.org/) - The terminal emulator powering the UI
 - [node-pty](https://github.com/microsoft/node-pty) - Native pseudoterminal support
+- [Codicons](https://github.com/microsoft/vscode-codicons) (CC BY 4.0) - Status icons on tabs
+- [stopword](https://github.com/fergiemcdowall/stopword) - Filler words for tab names
+
+Full licenses and notices are in [ThirdPartyNotices.txt](ThirdPartyNotices.txt).
 
 ---
 

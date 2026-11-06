@@ -1,5 +1,6 @@
 import type { TerminalInstance, TabInfo, TabStatus } from './types';
 import { WORKSPACE_ACCENT_COLORS } from './types';
+import { tabKey } from './profiles';
 
 const STATUS_LABELS: Record<TabStatus, string> = {
   working: 'Working',
@@ -118,11 +119,11 @@ export class TerminalStateManager {
   /**
    * Gets tab information for all terminals.
    */
-  getTabsInfo(autoTitles: boolean): TabInfo[] {
+  getTabsInfo(autoTitles: boolean, titleWords: number): TabInfo[] {
     return this.getAll().map((t) => ({
       id: t.id,
-      label: this.getLabel(t, autoTitles),
-      agent: t.launch.agent,
+      label: this.getLabel(t, autoTitles, titleWords),
+      description: this.getFullLabel(t, true),
       isActive: t.isActive,
       accentColor: this.getAccentColor(t.workspaceFolderIndex),
       status: this.getStatus(t),
@@ -131,18 +132,19 @@ export class TerminalStateManager {
   }
 
   /**
-   * With automatic titles, the terminal title, e.g. Claude Code's
-   * conversation summary or a named pi session; otherwise, or until the
-   * program sets one, the agent's name.
+   * With automatic titles, a key from the terminal title, e.g.
+   * `refactor-api-client` from Claude Code's conversation summary or a named
+   * pi session, and the agent's key (`claude-code`) until the program sets
+   * one. Otherwise the agent's name.
    */
-  getLabel(instance: TerminalInstance, autoTitles: boolean): string {
-    return (autoTitles ? instance.titleLabel : undefined) ?? instance.launch.label;
+  getLabel(instance: TerminalInstance, autoTitles: boolean, titleWords: number): string {
+    if (!autoTitles) return instance.launch.label;
+    return (
+      tabKey(instance.titleLabel ?? instance.launch.label, titleWords) ?? instance.launch.label
+    );
   }
 
-  /**
-   * `pi / Fix login`: agent and title, for places without the logo such as
-   * the view header and the tab picker.
-   */
+  /** `pi / Refactor the API client`: agent and full title, e.g. for the tab picker */
   getFullLabel(instance: TerminalInstance, autoTitles: boolean): string {
     const title = autoTitles ? instance.titleLabel : undefined;
     return title ? `${instance.launch.label} / ${title}` : instance.launch.label;
@@ -154,6 +156,20 @@ export class TerminalStateManager {
     if (!status) return undefined;
     const message = instance.statusMessage;
     return message ? `${STATUS_LABELS[status]}: ${message}` : STATUS_LABELS[status];
+  }
+
+  /**
+   * Whether the agent is working or waiting for an answer, so closing the tab
+   * would interrupt it. Unlike the status, this ignores the prompt detector's
+   * guess for programs that do not report their state.
+   */
+  isBusy(instance: TerminalInstance): boolean {
+    return (
+      !instance.exited &&
+      (instance.needsInput ||
+        instance.programState === 'working' ||
+        instance.programState === 'blocked')
+    );
   }
 
   /**

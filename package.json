@@ -346,17 +346,24 @@
         "agentTerminal.autoTabTitles": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Name tabs after the agent's terminal title, e.g. Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the agent's name (pi, Claude Code, Codex)."
+          "markdownDescription": "Name tabs with a short key from the agent's terminal title, e.g. `refactor-api-client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the agent's name (pi, Claude Code, Codex)."
         },
-        "agentTerminal.monochromeIcons": {
-          "type": "boolean",
-          "default": false,
-          "description": "Show agent logos on tabs in the tab's text color instead of their brand colors."
+        "agentTerminal.tabTitleWords": {
+          "type": "integer",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 12,
+          "markdownDescription": "Maximum number of words in a tab's key with `#agentTerminal.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `refactor-api-client-v2`. Filler words such as `the` or `die` are left out for about 60 languages."
         },
         "agentTerminal.statusColors": {
           "type": "boolean",
           "default": true,
           "description": "Color the status icons on tabs (working, needs input, done, failed). The icons' shapes show the status without color."
+        },
+        "agentTerminal.confirmClose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask before closing a tab whose agent is working or waiting for input, since closing ends its session."
         },
         "agentTerminal.promptNotification": {
           "type": "boolean",
@@ -385,7 +392,7 @@
     "vscode:prepublish": "npm run lint && npm run compile",
     "compile": "npm run compile:extension && npm run copy:xterm-css && npm run compile:media",
     "compile:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:node-pty --format=cjs --platform=node",
-    "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser --loader:.svg=text",
+    "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser",
     "copy:xterm-css": "node -e \"require('fs').copyFileSync('node_modules/@xterm/xterm/css/xterm.css', 'media/xterm.css')\"",
     "watch": "npm run compile:extension -- --watch",
     "rebuild": "npx @electron/rebuild --version 43.8.3",
@@ -417,6 +424,7 @@
     "@electron/rebuild": "^4.0.2",
     "@eslint/js": "^9.39.2",
     "@types/node": "^22.0.0",
+    "@types/stopword": "^2.0.3",
     "@types/vscode": "^1.106.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
@@ -428,6 +436,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.0.0",
     "prettier": "^3.7.4",
+    "stopword": "^3.1.5",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.52.0"
   },

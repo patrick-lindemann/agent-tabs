@@ -1,9 +1,6 @@
 import { Terminal, type ILinkProvider, type ILink } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import piIcon from './icons/pi.svg';
-import claudeIcon from './icons/claude.svg';
-import codexIcon from './icons/codex.svg';
 import type {
   VSCodeAPI,
   WebviewIncomingMessage,
@@ -260,7 +257,7 @@ const messageHandlers: MessageHandlers = {
     }
   },
   tabsUpdate: (message, ctx) => {
-    ctx.renderTabBar(message.tabs, message.monochromeIcons, message.statusColors);
+    ctx.renderTabBar(message.tabs, message.statusColors);
   },
   createTab: (message, ctx) => {
     ctx.createTerminalElement(message.id);
@@ -276,31 +273,27 @@ const messageHandlers: MessageHandlers = {
 const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
 
 /**
- * Agent logos shown before tab labels (media/icons):
- * - pi: https://pi.dev/logo-auto.svg
- * - Claude: Simple Icons (CC0-1.0), in Claude's brand color
- * - Codex: Lobe Icons (MIT), drawn in the tab's text color
+ * Status icons, readable by shape without color or motion. Except for the
+ * working dots, they are VS Code's Codicons (CC BY 4.0,
+ * https://github.com/microsoft/vscode-codicons), so they match the warning
+ * and error icons elsewhere in VS Code.
  */
-const AGENT_ICONS: Record<NonNullable<TabInfo['agent']>, string> = {
-  pi: piIcon,
-  claude: claudeIcon,
-  codex: codexIcon
-};
-
-// Generic terminal icon for commands without a built-in agent profile
-const TERMINAL_ICON =
-  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1.5 2h13l.5.5v11l-.5.5h-13l-.5-.5v-11l.5-.5zM2 13h12V3H2v10zm2.15-7.15L6.29 8 4.15 10.15l.7.7 2.5-2.5v-.7l-2.5-2.5-.7.7zM8 10h4v1H8v-1z"/></svg>';
-
-/** Status icons, readable by shape without color or motion */
 const STATUS_ICONS: Record<NonNullable<TabInfo['status']>, string> = {
   working:
     '<svg viewBox="0 0 16 16" aria-hidden="true"><circle fill="currentColor" cx="3.5" cy="8" r="1.5"/><circle fill="currentColor" cx="8" cy="8" r="1.5"/><circle fill="currentColor" cx="12.5" cy="8" r="1.5"/></svg>',
+  // codicon `warning`
   blocked:
-    '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.1 2.5h1.8l-.3 7.5H7.4l-.3-7.5zM8 11.6a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z"/></svg>',
-  done: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M13.4 3.9l1.1 1.1-8 8L2 8.5l1.1-1.1 3.4 3.4z"/></svg>',
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M14.831 11.965L9.206 1.714C8.965 1.274 8.503 1 8 1C7.497 1 7.035 1.274 6.794 1.714L1.169 11.965C1.059 12.167 1 12.395 1 12.625C1 13.383 1.617 14 2.375 14H13.625C14.383 14 15 13.383 15 12.625C15 12.395 14.941 12.167 14.831 11.965ZM13.625 13H2.375C2.168 13 2 12.832 2 12.625C2 12.561 2.016 12.5 2.046 12.445L7.671 2.195C7.736 2.075 7.863 2 8 2C8.137 2 8.264 2.075 8.329 2.195L13.954 12.445C13.984 12.501 14 12.561 14 12.625C14 12.832 13.832 13 13.625 13ZM8.75 11.25C8.75 11.664 8.414 12 8 12C7.586 12 7.25 11.664 7.25 11.25C7.25 10.836 7.586 10.5 8 10.5C8.414 10.5 8.75 10.836 8.75 11.25ZM7.5 9V5.5C7.5 5.224 7.724 5 8 5C8.276 5 8.5 5.224 8.5 5.5V9C8.5 9.276 8.276 9.5 8 9.5C7.724 9.5 7.5 9.276 7.5 9Z"/></svg>',
+  // codicon `check`
+  done: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M13.6572 3.13573C13.8583 2.9465 14.175 2.95614 14.3643 3.15722C14.5535 3.35831 14.5438 3.675 14.3428 3.86425L5.84277 11.8642C5.64597 12.0494 5.33756 12.0446 5.14648 11.8535L1.64648 8.35351C1.45121 8.15824 1.45121 7.84174 1.64648 7.64647C1.84174 7.45121 2.15825 7.45121 2.35351 7.64647L5.50976 10.8027L13.6572 3.13573Z"/></svg>',
+  // codicon `error`
   error:
-    '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1zm0 1.4a5.6 5.6 0 1 0 0 11.2A5.6 5.6 0 0 0 8 2.4zM5.9 5l2.1 2.1L10.1 5l.9.9L8.9 8l2.1 2.1-.9.9L8 8.9 5.9 11l-.9-.9L7.1 8 5 5.9z"/></svg>'
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1C4.14 1 1 4.14 1 8C1 11.86 4.14 15 8 15C11.86 15 15 11.86 15 8C15 4.14 11.86 1 8 1ZM8 14C4.691 14 2 11.309 2 8C2 4.691 4.691 2 8 2C11.309 2 14 4.691 14 8C14 11.309 11.309 14 8 14ZM10.854 5.854L8.708 8L10.854 10.146C11.049 10.341 11.049 10.658 10.854 10.853C10.756 10.951 10.628 10.999 10.5 10.999C10.372 10.999 10.244 10.95 10.146 10.853L8 8.707L5.854 10.853C5.756 10.951 5.628 10.999 5.5 10.999C5.372 10.999 5.244 10.95 5.146 10.853C4.951 10.658 4.951 10.341 5.146 10.146L7.292 8L5.146 5.854C4.951 5.659 4.951 5.342 5.146 5.147C5.341 4.952 5.658 4.952 5.853 5.147L7.999 7.293L10.145 5.147C10.34 4.952 10.657 4.952 10.852 5.147C11.047 5.342 11.047 5.659 10.852 5.854H10.854Z"/></svg>'
 };
+
+/** Idle: the dimmed codicon `sparkle`, so labels line up with tabs that show a status */
+const IDLE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.46524 9.82962C5.62134 9.94037 5.80806 9.99974 5.99946 9.99948C6.19151 10.0003 6.37897 9.94082 6.53546 9.82948C6.69223 9.71378 6.81095 9.55398 6.87646 9.37048L7.22346 8.30348C7.3077 8.05191 7.44906 7.82327 7.63646 7.63548C7.82305 7.44851 8.05078 7.30776 8.30146 7.22448L9.38746 6.87148C9.56665 6.80759 9.72173 6.68989 9.83146 6.53448C9.94145 6.37908 10.0005 6.19337 10.0005 6.00298C10.0005 5.81259 9.94145 5.62689 9.83146 5.47148C9.71293 5.30613 9.54426 5.18339 9.35046 5.12148L8.28146 4.77548C8.02989 4.69238 7.80123 4.55163 7.61371 4.36447C7.4262 4.1773 7.28503 3.9489 7.20146 3.69748L6.84846 2.61348C6.78519 2.43423 6.66777 2.27908 6.51246 2.16948C6.35557 2.06133 6.16951 2.00342 5.97896 2.00342C5.78841 2.00342 5.60235 2.06133 5.44546 2.16948C5.28572 2.28196 5.16594 2.44237 5.10346 2.62748L4.74846 3.71748C4.66476 3.96155 4.52691 4.18351 4.34524 4.36673C4.16358 4.54996 3.9428 4.6897 3.69946 4.77548L2.61546 5.12648C2.43437 5.19048 2.27775 5.30937 2.16743 5.4666C2.05712 5.62383 1.99859 5.81155 2.00003 6.00361C2.00146 6.19568 2.06277 6.38251 2.17541 6.53808C2.28806 6.69364 2.44643 6.81019 2.62846 6.87148L3.69546 7.21848C3.94767 7.30297 4.17673 7.44506 4.36446 7.63348C4.41519 7.6837 4.46262 7.73715 4.50646 7.79348C4.62481 7.94615 4.71614 8.11797 4.77646 8.30148L5.12846 9.38148C5.19143 9.56222 5.30914 9.71886 5.46524 9.82962ZM4.00746 6.26448L3.15246 5.99948L4.01646 5.71848C4.41071 5.58184 4.76826 5.35637 5.06146 5.05948C5.35281 4.76039 5.57294 4.39943 5.70546 4.00348L5.97046 3.14448L6.25046 4.00648C6.38349 4.40638 6.60809 4.76969 6.90636 5.06744C7.20463 5.36519 7.56833 5.58915 7.96846 5.72148L8.84846 5.99048L7.98746 6.27048C7.58707 6.40272 7.22321 6.62691 6.92505 6.92507C6.62689 7.22324 6.4027 7.58709 6.27046 7.98748L6.00546 8.84448L5.72646 7.98548C5.63026 7.69329 5.48483 7.41968 5.29646 7.17648C5.22699 7.08766 5.15254 7.00286 5.07346 6.92248C4.7738 6.62366 4.4089 6.39842 4.00746 6.26448ZM10.5344 13.8515C10.6703 13.9477 10.8328 13.9994 10.9994 13.9995C11.1642 13.998 11.3245 13.9456 11.4584 13.8495C11.5979 13.751 11.7029 13.611 11.7584 13.4495L12.0064 12.6875C12.0595 12.529 12.1485 12.385 12.2664 12.2665C12.3837 12.148 12.5277 12.0592 12.6864 12.0075L13.4584 11.7555C13.6161 11.701 13.7528 11.5985 13.8494 11.4625C13.9227 11.3595 13.9706 11.2405 13.9891 11.1154C14.0076 10.9903 13.9962 10.8626 13.9558 10.7428C13.9154 10.623 13.8472 10.5144 13.7567 10.4261C13.6662 10.3377 13.5561 10.272 13.4354 10.2345L12.6714 9.98548C12.5132 9.93291 12.3695 9.8443 12.2514 9.72663C12.1334 9.60896 12.0444 9.46547 11.9914 9.30748L11.7394 8.53348C11.685 8.37623 11.5825 8.24011 11.4464 8.14448C11.3443 8.07153 11.2266 8.02359 11.1026 8.00453C10.9787 7.98547 10.8519 7.99582 10.7327 8.03475C10.6135 8.07369 10.5051 8.1401 10.4163 8.22865C10.3274 8.31719 10.2607 8.42538 10.2214 8.54448L9.97435 9.30648C9.92207 9.46413 9.83452 9.60777 9.71835 9.72648C9.60382 9.84272 9.46428 9.9313 9.31035 9.98548L8.53435 10.2385C8.41689 10.2793 8.31057 10.347 8.22382 10.4361C8.13708 10.5252 8.0723 10.6333 8.03464 10.7518C7.99698 10.8704 7.98746 10.996 8.00686 11.1189C8.02625 11.2417 8.07401 11.3583 8.14635 11.4595C8.24456 11.5993 8.38462 11.7044 8.54635 11.7595L9.30935 12.0065C9.46821 12.0599 9.61262 12.1492 9.73135 12.2675C9.84958 12.3857 9.93801 12.5304 9.98935 12.6895L10.2424 13.4635C10.2971 13.6199 10.3992 13.7555 10.5344 13.8515ZM9.62035 11.0585L9.44235 10.9995L9.62635 10.9355C9.92811 10.8305 10.2018 10.6578 10.4264 10.4305C10.6528 10.2015 10.8238 9.92374 10.9264 9.61848L10.9844 9.44048L11.0434 9.62148C11.1453 9.92819 11.3175 10.2069 11.5461 10.4353C11.7748 10.6638 12.0536 10.8357 12.3604 10.9375L12.5554 11.0005L12.3754 11.0595C12.068 11.1617 11.7888 11.3344 11.5601 11.5637C11.3314 11.7931 11.1596 12.0728 11.0584 12.3805L10.9994 12.5615L10.9414 12.3805C10.84 12.0721 10.6676 11.7919 10.4382 11.5623C10.2088 11.3326 9.92863 11.1601 9.62035 11.0585Z"/></svg>';
 
 const CLOSE_ICON =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
@@ -488,9 +481,8 @@ class WebviewContext {
    * Browser-style tab strip above the terminal. Tabs share its width and
    * scroll sideways once they reach their minimum width.
    */
-  renderTabBar(tabsList: TabInfo[], monochromeIcons: boolean, statusColors: boolean): void {
+  renderTabBar(tabsList: TabInfo[], statusColors: boolean): void {
     this.tabList.replaceChildren(...tabsList.map((tab) => this.createTabElement(tab)));
-    this.tabBar.classList.toggle('monochrome-icons', monochromeIcons);
     this.tabBar.classList.toggle('status-colors', statusColors);
 
     const activeId = tabsList.find((tab) => tab.isActive)?.id;
@@ -503,7 +495,7 @@ class WebviewContext {
           .querySelector('.tab.active')
           ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
-      this.updateTabOverflow();
+      this.updateScrollButtons();
     });
   }
 
@@ -517,9 +509,8 @@ class WebviewContext {
       'aria-label',
       tab.statusText ? `${tab.label}, ${tab.statusText}` : tab.label
     );
-    if (tab.statusText) {
-      tabElement.dataset.statusText = tab.statusText;
-    }
+    // The full title and the status, since the label is a short key
+    tabElement.title = [tab.description, tab.statusText].filter(Boolean).join('\n');
     if (tab.status) {
       tabElement.dataset.status = tab.status;
     }
@@ -533,9 +524,9 @@ class WebviewContext {
       preventDefaultContextMenuItems: true
     });
 
-    const icon = document.createElement('span');
-    icon.className = 'tab-icon';
-    icon.innerHTML = tab.agent ? AGENT_ICONS[tab.agent] : TERMINAL_ICON;
+    const status = document.createElement('span');
+    status.className = 'tab-status';
+    status.innerHTML = tab.status ? STATUS_ICONS[tab.status] : IDLE_ICON;
 
     const label = document.createElement('span');
     label.className = 'tab-label';
@@ -570,18 +561,7 @@ class WebviewContext {
       }
     };
 
-    // Status and close share a slot; hovering shows the close button
-    const slot = document.createElement('span');
-    slot.className = 'tab-slot';
-    if (tab.status) {
-      const status = document.createElement('span');
-      status.className = 'tab-status';
-      status.innerHTML = STATUS_ICONS[tab.status];
-      slot.append(status);
-    }
-    slot.append(closeButton);
-
-    tabElement.append(icon, label, slot);
+    tabElement.append(status, label, closeButton);
     return tabElement;
   }
 
@@ -601,7 +581,7 @@ class WebviewContext {
       { passive: false }
     );
     this.tabList.addEventListener('scroll', () => this.updateScrollButtons(), { passive: true });
-    new ResizeObserver(() => this.updateTabOverflow()).observe(this.tabList);
+    new ResizeObserver(() => this.updateScrollButtons()).observe(this.tabList);
 
     const scrollByTab = (direction: number) => {
       const tabWidth = this.tabList.querySelector('.tab')?.clientWidth ?? 100;
@@ -611,28 +591,7 @@ class WebviewContext {
     this.scrollRightButton.onclick = () => scrollByTab(1);
   }
 
-  /**
-   * Shows the scroll buttons while tabs overflow. A tab's tooltip shows its
-   * full label when it is cut off and its status, since hovering replaces
-   * the status icon with the close button.
-   */
-  private updateTabOverflow(): void {
-    for (const label of this.tabList.querySelectorAll<HTMLElement>('.tab-label')) {
-      const tab = label.parentElement;
-      if (!tab) continue;
-      const truncated = label.scrollWidth > label.clientWidth;
-      const tooltip = [truncated ? label.textContent : undefined, tab.dataset.statusText]
-        .filter(Boolean)
-        .join('\n');
-      if (tooltip) {
-        tab.title = tooltip;
-      } else {
-        tab.removeAttribute('title');
-      }
-    }
-    this.updateScrollButtons();
-  }
-
+  /** Shows the scroll buttons while tabs overflow */
   private updateScrollButtons(): void {
     const { scrollLeft, scrollWidth, clientWidth } = this.tabList;
     const overflowing = scrollWidth > clientWidth + 1;

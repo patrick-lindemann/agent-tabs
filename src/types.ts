@@ -77,8 +77,9 @@ export interface TerminalConfig {
   onExit: OnExitAction;
   programStatus: boolean;
   autoTabTitles: boolean;
-  monochromeIcons: boolean;
+  tabTitleWords: number;
   statusColors: boolean;
+  confirmClose: boolean;
   /** Never empty */
   profiles: Profile[];
 }
@@ -112,8 +113,8 @@ export interface TerminalInstance {
 export interface TabInfo {
   id: string;
   label: string;
-  /** Built-in agent, shown as its logo before the label */
-  agent?: AgentId;
+  /** `pi / Refactor the API client`: agent and full title, for the tooltip */
+  description: string;
   isActive: boolean;
   accentColor?: string;
   status?: TabStatus;
@@ -137,7 +138,7 @@ export type WebviewMessage =
 export type ExtensionMessage =
   | { type: 'output'; id: string; data: string }
   | { type: 'clear'; id: string }
-  | { type: 'tabsUpdate'; tabs: TabInfo[]; monochromeIcons: boolean; statusColors: boolean }
+  | { type: 'tabsUpdate'; tabs: TabInfo[]; statusColors: boolean }
   | { type: 'createTab'; id: string }
   | { type: 'switchTab'; id: string }
   | { type: 'removeTab'; id: string };

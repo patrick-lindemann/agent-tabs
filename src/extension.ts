@@ -43,10 +43,10 @@ export function activate(context: vscode.ExtensionContext) {
   // Tab context menu; VS Code passes the tab's data-vscode-context
   context.subscriptions.push(
     vscode.commands.registerCommand('agentTerminal.closeTabFromMenu', (tab: TabContext) => {
-      terminalProvider?.closeTerminal(tab.terminalId);
+      void terminalProvider?.requestClose([tab.terminalId]);
     }),
     vscode.commands.registerCommand('agentTerminal.closeOtherTabs', (tab: TabContext) => {
-      terminalProvider?.closeOtherTerminals(tab.terminalId);
+      void terminalProvider?.closeOtherTerminals(tab.terminalId);
     })
   );
 

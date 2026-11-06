@@ -46,8 +46,9 @@ export class ConfigManager {
       onExit: config.get<OnExitAction>('onExit', 'auto'),
       programStatus,
       autoTabTitles: config.get<boolean>('autoTabTitles', true),
-      monochromeIcons: config.get<boolean>('monochromeIcons', false),
+      tabTitleWords: Math.max(1, Math.floor(config.get<number>('tabTitleWords', 4))),
       statusColors: config.get<boolean>('statusColors', true),
+      confirmClose: config.get<boolean>('confirmClose', true),
       profiles
     };
 
