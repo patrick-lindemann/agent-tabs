@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { OnExitAction, TerminalConfig } from './types';
+import { resolveProfiles } from './profiles';
 
 /**
  * Manages terminal configuration with caching.
@@ -29,14 +30,25 @@ export class ConfigManager {
     }
 
     const config = vscode.workspace.getConfiguration('agentTerminal');
+    const programStatus = config.get<boolean>('programStatus', true);
+    const { profiles, problems } = resolveProfiles(config.get('profiles'), programStatus);
+    if (problems.length > 0) {
+      void vscode.window.showWarningMessage(
+        `Agent Terminal: check agentTerminal.profiles: ${problems.join('; ')}.`
+      );
+    }
+
     this.cachedConfig = {
-      command: config.get<string>('command', 'pi'),
-      args: config.get<string[]>('args', []),
       autoRun: config.get<boolean>('autoRun', true),
       shell: config.get<string>('shell', ''),
       env: config.get<Record<string, string>>('env', {}),
       directMode: config.get<boolean>('directMode', true),
-      onExit: config.get<OnExitAction>('onExit', 'auto')
+      onExit: config.get<OnExitAction>('onExit', 'auto'),
+      programStatus,
+      autoTabTitles: config.get<boolean>('autoTabTitles', true),
+      monochromeIcons: config.get<boolean>('monochromeIcons', false),
+      statusColors: config.get<boolean>('statusColors', true),
+      profiles
     };
 
     return this.cachedConfig;

@@ -1,6 +1,9 @@
 import { Terminal, type ILinkProvider, type ILink } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import piIcon from './icons/pi.svg';
+import claudeIcon from './icons/claude.svg';
+import codexIcon from './icons/codex.svg';
 import type {
   VSCodeAPI,
   WebviewIncomingMessage,
@@ -235,7 +238,6 @@ interface MessageHandlers {
   createTab: MessageHandler<Extract<WebviewIncomingMessage, { type: 'createTab' }>>;
   switchTab: MessageHandler<Extract<WebviewIncomingMessage, { type: 'switchTab' }>>;
   removeTab: MessageHandler<Extract<WebviewIncomingMessage, { type: 'removeTab' }>>;
-  setNotification: MessageHandler<Extract<WebviewIncomingMessage, { type: 'setNotification' }>>;
 }
 
 const messageHandlers: MessageHandlers = {
@@ -258,7 +260,7 @@ const messageHandlers: MessageHandlers = {
     }
   },
   tabsUpdate: (message, ctx) => {
-    ctx.renderTabBar(message.tabs);
+    ctx.renderTabBar(message.tabs, message.monochromeIcons, message.statusColors);
   },
   createTab: (message, ctx) => {
     ctx.createTerminalElement(message.id);
@@ -268,11 +270,66 @@ const messageHandlers: MessageHandlers = {
   },
   removeTab: (message, ctx) => {
     ctx.removeTerminal(message.id);
-  },
-  setNotification: (message, ctx) => {
-    ctx.setTabNotification(message.id, message.show);
   }
 };
+
+const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
+
+/**
+ * Agent logos shown before tab labels (media/icons):
+ * - pi: https://pi.dev/logo-auto.svg
+ * - Claude: Simple Icons (CC0-1.0), in Claude's brand color
+ * - Codex: Lobe Icons (MIT), drawn in the tab's text color
+ */
+const AGENT_ICONS: Record<NonNullable<TabInfo['agent']>, string> = {
+  pi: piIcon,
+  claude: claudeIcon,
+  codex: codexIcon
+};
+
+// Generic terminal icon for commands without a built-in agent profile
+const TERMINAL_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1.5 2h13l.5.5v11l-.5.5h-13l-.5-.5v-11l.5-.5zM2 13h12V3H2v10zm2.15-7.15L6.29 8 4.15 10.15l.7.7 2.5-2.5v-.7l-2.5-2.5-.7.7zM8 10h4v1H8v-1z"/></svg>';
+
+/** Status icons, readable by shape without color or motion */
+const STATUS_ICONS: Record<NonNullable<TabInfo['status']>, string> = {
+  working:
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><circle fill="currentColor" cx="3.5" cy="8" r="1.5"/><circle fill="currentColor" cx="8" cy="8" r="1.5"/><circle fill="currentColor" cx="12.5" cy="8" r="1.5"/></svg>',
+  blocked:
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.1 2.5h1.8l-.3 7.5H7.4l-.3-7.5zM8 11.6a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z"/></svg>',
+  done: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M13.4 3.9l1.1 1.1-8 8L2 8.5l1.1-1.1 3.4 3.4z"/></svg>',
+  error:
+    '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1zm0 1.4a5.6 5.6 0 1 0 0 11.2A5.6 5.6 0 0 0 8 2.4zM5.9 5l2.1 2.1L10.1 5l.9.9L8.9 8l2.1 2.1-.9.9L8 8.9 5.9 11l-.9-.9L7.1 8 5 5.9z"/></svg>'
+};
+
+const CLOSE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
+
+/**
+ * Keys bound to Agent Terminal commands (package.json `keybindings`, scoped to
+ * the focused view). xterm.js ignores them so they only switch, open or close
+ * tabs and are not also typed into the program.
+ */
+function isTabShortcut(event: KeyboardEvent): boolean {
+  const { key, code, ctrlKey, metaKey, altKey, shiftKey } = event;
+  const digit = /^Digit[1-9]$/.test(code);
+  if (ctrlKey && !metaKey && !altKey && key === 'Tab') return true;
+  if (IS_MAC) {
+    return (
+      (metaKey &&
+        !ctrlKey &&
+        !altKey &&
+        !shiftKey &&
+        (digit || code === 'KeyT' || code === 'KeyW')) ||
+      (metaKey && altKey && !ctrlKey && !shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight'))
+    );
+  }
+  return (
+    (altKey && !ctrlKey && !metaKey && !shiftKey && digit) ||
+    (ctrlKey && !altKey && !metaKey && !shiftKey && (key === 'PageUp' || key === 'PageDown')) ||
+    (ctrlKey && shiftKey && !altKey && !metaKey && (code === 'KeyT' || code === 'KeyW'))
+  );
+}
 
 // Main webview context class
 class WebviewContext {
@@ -280,24 +337,36 @@ class WebviewContext {
   private readonly themeBuilder = new ThemeBuilder();
   private readonly vscode: VSCodeAPI;
   private readonly tabBar: HTMLElement;
+  private readonly tabList: HTMLElement;
+  private readonly scrollLeftButton: HTMLButtonElement;
+  private readonly scrollRightButton: HTMLButtonElement;
   private readonly terminalsContainer: HTMLElement;
   private resizeObserver: ResizeObserver | null = null;
+  private renderedActiveId: string | undefined;
 
   constructor() {
     this.vscode = acquireVsCodeApi();
 
     const tabBar = document.getElementById('tab-bar');
+    const tabList = document.getElementById('tab-list');
+    const scrollLeftButton = document.getElementById('tab-scroll-left');
+    const scrollRightButton = document.getElementById('tab-scroll-right');
     const terminalsContainer = document.getElementById('terminals-container');
 
-    if (!tabBar || !terminalsContainer) {
+    if (!tabBar || !tabList || !scrollLeftButton || !scrollRightButton || !terminalsContainer) {
       throw new Error('Required DOM elements not found');
     }
 
     this.tabBar = tabBar;
+    this.tabList = tabList;
+    this.scrollLeftButton = scrollLeftButton as HTMLButtonElement;
+    this.scrollRightButton = scrollRightButton as HTMLButtonElement;
     this.terminalsContainer = terminalsContainer;
   }
 
   initialize(): void {
+    this.setupFocusTracking();
+    this.setupTabScrolling();
     this.setupResizeObserver();
     this.setupMessageHandler();
     this.setupCleanup();
@@ -347,6 +416,30 @@ class WebviewContext {
     });
   }
 
+  /**
+   * Reports focus for the `agentTerminal.focused` context key. When the view
+   * gains focus, e.g. after Switch Tab… or a tab shortcut, keyboard input
+   * goes to the active terminal instead of the page.
+   */
+  private setupFocusTracking(): void {
+    window.addEventListener('focus', () => {
+      this.postMessage({ type: 'focus', focused: true });
+      this.focusActiveTerminal();
+    });
+    window.addEventListener('blur', () => this.postMessage({ type: 'focus', focused: false }));
+    if (document.hasFocus()) {
+      this.postMessage({ type: 'focus', focused: true });
+    }
+  }
+
+  private focusActiveTerminal(): void {
+    const activeId = this.state.getActiveId();
+    const active = activeId ? this.state.get(activeId) : undefined;
+    if (active && !active.element.contains(document.activeElement)) {
+      active.terminal.focus();
+    }
+  }
+
   private setupCleanup(): void {
     window.addEventListener('unload', () => {
       this.resizeObserver?.disconnect();
@@ -364,7 +457,7 @@ class WebviewContext {
   private measureInitialDimensions(): { cols: number; rows: number } {
     const tempContainer = document.createElement('div');
     tempContainer.style.cssText =
-      'position: absolute; visibility: hidden; width: calc(100% - 32px); height: 100%;';
+      'position: absolute; visibility: hidden; width: calc(100% - 20px); height: calc(100% - 37px);';
     document.body.appendChild(tempContainer);
 
     const tempTerminal = new Terminal({
@@ -391,87 +484,161 @@ class WebviewContext {
     this.vscode.postMessage(message);
   }
 
-  renderTabBar(tabsList: TabInfo[]): void {
-    this.tabBar.innerHTML = '';
+  /**
+   * Browser-style tab strip above the terminal. Tabs share its width and
+   * scroll sideways once they reach their minimum width.
+   */
+  renderTabBar(tabsList: TabInfo[], monochromeIcons: boolean, statusColors: boolean): void {
+    this.tabList.replaceChildren(...tabsList.map((tab) => this.createTabElement(tab)));
+    this.tabBar.classList.toggle('monochrome-icons', monochromeIcons);
+    this.tabBar.classList.toggle('status-colors', statusColors);
 
-    tabsList.forEach((tab, index) => {
-      const tabElement = this.createTabElement(tab, index);
-      this.tabBar.appendChild(tabElement);
+    const activeId = tabsList.find((tab) => tab.isActive)?.id;
+    const activeChanged = activeId !== this.renderedActiveId;
+    this.renderedActiveId = activeId;
+
+    requestAnimationFrame(() => {
+      if (activeChanged) {
+        this.tabList
+          .querySelector('.tab.active')
+          ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+      this.updateTabOverflow();
     });
-
-    const addButton = this.createAddButton();
-    this.tabBar.appendChild(addButton);
-
-    const customCmdButton = this.createCustomCommandButton();
-    this.tabBar.appendChild(customCmdButton);
   }
 
-  private createTabElement(tab: TabInfo, index: number): HTMLDivElement {
+  private createTabElement(tab: TabInfo): HTMLDivElement {
     const tabElement = document.createElement('div');
     tabElement.className = `tab ${tab.isActive ? 'active' : ''}`;
     tabElement.dataset.id = tab.id;
-    tabElement.title = tab.name;
-
-    // Apply accent color if provided (for multi-workspace folder coloring)
-    if (tab.accentColor) {
-      tabElement.dataset.accent = 'true';
-      tabElement.style.borderLeftColor = tab.accentColor;
+    tabElement.setAttribute('role', 'tab');
+    tabElement.setAttribute('aria-selected', String(tab.isActive));
+    tabElement.setAttribute(
+      'aria-label',
+      tab.statusText ? `${tab.label}, ${tab.statusText}` : tab.label
+    );
+    if (tab.statusText) {
+      tabElement.dataset.statusText = tab.statusText;
     }
+    if (tab.status) {
+      tabElement.dataset.status = tab.status;
+    }
+    if (tab.accentColor) {
+      tabElement.style.setProperty('--tab-accent', tab.accentColor);
+    }
+    // Read by VS Code for the `webview/context` menu (Close, Close Others)
+    tabElement.dataset.vscodeContext = JSON.stringify({
+      webviewSection: 'tab',
+      terminalId: tab.id,
+      preventDefaultContextMenuItems: true
+    });
 
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'tab-name';
-    nameSpan.textContent = String(index + 1);
+    const icon = document.createElement('span');
+    icon.className = 'tab-icon';
+    icon.innerHTML = tab.agent ? AGENT_ICONS[tab.agent] : TERMINAL_ICON;
+
+    const label = document.createElement('span');
+    label.className = 'tab-label';
+    label.textContent = tab.label;
 
     const closeButton = document.createElement('button');
     closeButton.className = 'tab-close';
     closeButton.title = 'Close';
+    closeButton.innerHTML = CLOSE_ICON;
+    closeButton.onmousedown = (e) => {
+      // Keep focus in the terminal instead of the button
+      e.preventDefault();
+    };
     closeButton.onclick = (e) => {
       e.stopPropagation();
       this.postMessage({ type: 'closeTab', id: tab.id });
     };
 
     tabElement.onclick = () => {
-      if (!tab.isActive) {
+      if (tab.isActive) {
+        this.focusActiveTerminal();
+      } else {
         this.postMessage({ type: 'switchTab', id: tab.id });
       }
     };
 
-    tabElement.appendChild(nameSpan);
-    tabElement.appendChild(closeButton);
+    // Middle-click closes, like editor tabs
+    tabElement.onauxclick = (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        this.postMessage({ type: 'closeTab', id: tab.id });
+      }
+    };
 
-    // Add notification pill if waiting for input
-    if (tab.isWaitingForInput) {
-      const pill = document.createElement('span');
-      pill.className = 'notification-pill';
-      tabElement.appendChild(pill);
+    // Status and close share a slot; hovering shows the close button
+    const slot = document.createElement('span');
+    slot.className = 'tab-slot';
+    if (tab.status) {
+      const status = document.createElement('span');
+      status.className = 'tab-status';
+      status.innerHTML = STATUS_ICONS[tab.status];
+      slot.append(status);
     }
+    slot.append(closeButton);
 
+    tabElement.append(icon, label, slot);
     return tabElement;
   }
 
-  private createAddButton(): HTMLButtonElement {
-    const addButton = document.createElement('button');
-    addButton.className = 'tab-add';
-    addButton.innerHTML = '+';
-    addButton.title = 'New Terminal (Ctrl+Shift+`)';
-    addButton.onclick = () => {
-      this.postMessage({ type: 'newTab' });
+  /**
+   * The strip scrolls sideways with the mouse wheel or trackpad and with the
+   * arrow buttons, which only appear while tabs overflow.
+   */
+  private setupTabScrolling(): void {
+    this.tabList.addEventListener(
+      'wheel',
+      (event) => {
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+          event.preventDefault();
+          this.tabList.scrollLeft += event.deltaY;
+        }
+      },
+      { passive: false }
+    );
+    this.tabList.addEventListener('scroll', () => this.updateScrollButtons(), { passive: true });
+    new ResizeObserver(() => this.updateTabOverflow()).observe(this.tabList);
+
+    const scrollByTab = (direction: number) => {
+      const tabWidth = this.tabList.querySelector('.tab')?.clientWidth ?? 100;
+      this.tabList.scrollBy({ left: direction * tabWidth, behavior: 'smooth' });
     };
-    return addButton;
+    this.scrollLeftButton.onclick = () => scrollByTab(-1);
+    this.scrollRightButton.onclick = () => scrollByTab(1);
   }
 
-  private createCustomCommandButton(): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.className = 'tab-add';
-    button.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="display: block; margin: auto;">
-      <path d="M1 3.5L4.5 7 1 10.5v1.12l4.5-4.5v-.24L1 2.38V3.5zm5 9h9v-1H6v1z"/>
-      <path d="M11 3v2H9v1h2v2h1V6h2V5h-2V3h-1z"/>
-    </svg>`;
-    button.title = 'New Terminal with Custom Command';
-    button.onclick = () => {
-      this.postMessage({ type: 'newTabWithCommand' });
-    };
-    return button;
+  /**
+   * Shows the scroll buttons while tabs overflow. A tab's tooltip shows its
+   * full label when it is cut off and its status, since hovering replaces
+   * the status icon with the close button.
+   */
+  private updateTabOverflow(): void {
+    for (const label of this.tabList.querySelectorAll<HTMLElement>('.tab-label')) {
+      const tab = label.parentElement;
+      if (!tab) continue;
+      const truncated = label.scrollWidth > label.clientWidth;
+      const tooltip = [truncated ? label.textContent : undefined, tab.dataset.statusText]
+        .filter(Boolean)
+        .join('\n');
+      if (tooltip) {
+        tab.title = tooltip;
+      } else {
+        tab.removeAttribute('title');
+      }
+    }
+    this.updateScrollButtons();
+  }
+
+  private updateScrollButtons(): void {
+    const { scrollLeft, scrollWidth, clientWidth } = this.tabList;
+    const overflowing = scrollWidth > clientWidth + 1;
+    this.tabBar.classList.toggle('overflowing', overflowing);
+    this.scrollLeftButton.disabled = scrollLeft <= 0;
+    this.scrollRightButton.disabled = scrollLeft + clientWidth >= scrollWidth - 1;
   }
 
   createTerminalElement(id: string): TerminalEntry {
@@ -538,6 +705,11 @@ class WebviewContext {
    * for the same keystroke.
    */
   private handleKeyEvent(terminal: Terminal, id: string, event: KeyboardEvent): boolean {
+    // Let the event reach VS Code's keybindings without typing it
+    if (isTabShortcut(event)) {
+      return false;
+    }
+
     const sequence = this.getKeySequence(event);
     const isClipboardKey =
       event.metaKey &&
@@ -630,20 +802,6 @@ class WebviewContext {
       t.terminal.dispose();
       t.element.remove();
       this.state.delete(id);
-    }
-  }
-
-  setTabNotification(id: string, show: boolean): void {
-    const tab = this.tabBar.querySelector(`.tab[data-id="${id}"]`);
-    if (!tab) return;
-
-    let pill = tab.querySelector('.notification-pill');
-    if (show && !pill) {
-      pill = document.createElement('span');
-      pill.className = 'notification-pill';
-      tab.appendChild(pill);
-    } else if (!show && pill) {
-      pill.remove();
     }
   }
 }

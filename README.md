@@ -9,7 +9,10 @@ This is a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero
 ## Differences from upstream
 
 - **Renamed** to _Agent Terminal_ (`patrick-lindemann.agent-terminal`). All command, view and setting IDs moved from `claudeTerminal.*` to `agentTerminal.*`, so it installs side by side with the original. Settings are not migrated: copy `claudeTerminal.*` entries to `agentTerminal.*`.
-- **Default command** is `pi` instead of `claude`. New tabs are named `Terminal N`.
+- **Default command** is `pi` instead of `claude`.
+- **Agent profiles** replace `agentTerminal.command` and `agentTerminal.args`: an ordered list with built-in support for pi, Claude Code and Codex and any custom CLI. See [Agent profiles](#agent-profiles).
+- **Agent status on tabs** (working, needs input, done, failed), read from what the agents report. See [Agent status](#agent-status).
+- **Browser-style tabs** above the terminal, labelled with the conversation summary or session name.
 - **Modified keys reach the agent.** The terminal is an xterm.js instance inside a webview, not a VS Code integrated terminal, so `workbench.action.terminal.sendSequence` keybindings do not apply to it. The webview now handles these keys itself:
   | Key | Sent to the program |
   | --- | --- |
@@ -30,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-terminal/ma
 
 Run it in a VS Code terminal. On a Remote-SSH connection, run it in the remote window's terminal so it installs the Linux build into the remote VS Code server. The script picks the `.vsix` for the current OS and architecture from the [latest release](https://github.com/patrick-lindemann/agent-terminal/releases/latest). Set `CODE=cursor` (or another CLI) to install into a different editor.
 
-Then reload the window, open the **Agent Terminal** view in the secondary sidebar and, if needed, set `agentTerminal.command` (for example to the absolute path of `pi`).
+Then reload the window, open the **Agent Terminal** view in the secondary sidebar and, if needed, set your agents in [`agentTerminal.profiles`](#agent-profiles).
 
 ### Branches and releases
 
@@ -74,45 +77,117 @@ This extension works with any command-line AI assistant. Here are some popular o
 
 1. **Open the Sidebar** - Click the terminal icon in the activity bar (secondary sidebar)
 2. **Interact with your AI** - Type your prompts and interact with your AI assistant directly in the terminal
-3. **Use Quick Actions** - Click the restart icon in the view title bar, or use the + button to add new tabs
+3. **Use the view title bar** - `+` opens a tab with the first profile, the `…` button next to it lists all profiles and Custom Command…
+
+### Tabs
+
+- A tab strip sits above the terminal. Each tab shows the agent's logo and the agent's title: Claude Code's conversation summary, a pi session's name (`/name`), otherwise the agent's name. Set `agentTerminal.autoTabTitles` to `false` to always show the agent's name.
+- A tooltip shows the full title when it does not fit, and the status.
+- An icon at the end of a tab shows its [status](#agent-status). Hovering the tab shows `×` instead. In multi-root workspaces, the left border shows the folder's color.
+- `×` closes a tab; it shows on hover and on the active tab while it has no status. Middle-click also closes a tab; right-click opens Close and Close Others.
+- Tabs share the strip's width. Below their minimum width, scroll the strip sideways with the mouse wheel or trackpad, or use the arrow buttons at its edges.
+- `Agent Terminal: Switch Tab…` lists all tabs with their status.
 
 ### Commands
 
-| Command                        | Description                    |
-| ------------------------------ | ------------------------------ |
-| `Agent Terminal: Restart`      | Restart the terminal session   |
-| `Agent Terminal: New Tab`      | Create a new terminal tab      |
-| `Agent Terminal: Close Tab`    | Close the current terminal tab |
-| `Agent Terminal: Next Tab`     | Switch to the next tab         |
-| `Agent Terminal: Previous Tab` | Switch to the previous tab     |
+| Command                                               | Description                    |
+| ----------------------------------------------------- | ------------------------------ |
+| `Agent Terminal: New Tab`                             | Create a new terminal tab      |
+| `Agent Terminal: Close Tab`                           | Close the current terminal tab |
+| `Agent Terminal: Next Tab`                            | Switch to the next tab         |
+| `Agent Terminal: Previous Tab`                        | Switch to the previous tab     |
+| `Agent Terminal: Switch Tab…`                         | Pick a tab from a list         |
+| `Agent Terminal: New Tab: pi`, `Claude Code`, `Codex` | Open a tab with a profile      |
 
 Access commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) or the view title bar icons.
 
 ### Keyboard Shortcuts
 
-| Action       | Windows/Linux   | macOS           |
-| ------------ | --------------- | --------------- |
-| New Tab      | `Ctrl+Shift+``  | `Cmd+Shift+``   |
-| Close Tab    | `Ctrl+W`        | `Cmd+W`         |
-| Next Tab     | `Ctrl+PageDown` | `Cmd+Alt+Right` |
-| Previous Tab | `Ctrl+PageUp`   | `Cmd+Alt+Left`  |
+These work while Agent Terminal has focus and follow the browser's tab shortcuts. The terminal program does not receive them; elsewhere in VS Code the keys keep their usual meaning.
+
+| Action         | Windows/Linux     | macOS             |
+| -------------- | ----------------- | ----------------- |
+| New Tab        | `Ctrl+Shift+T`    | `Cmd+T`           |
+| Close Tab      | `Ctrl+Shift+W`    | `Cmd+W`           |
+| Next Tab       | `Ctrl+PageDown`   | `Cmd+Alt+Right`   |
+| Previous Tab   | `Ctrl+PageUp`     | `Cmd+Alt+Left`    |
+| Go to Tab 1–8  | `Alt+1` … `Alt+8` | `Cmd+1` … `Cmd+8` |
+| Go to Last Tab | `Alt+9`           | `Cmd+9`           |
+| Switch Tab…    | `Ctrl+Tab`        | `Ctrl+Tab`        |
 
 ## Configuration
 
 Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
-| Setting                                 | Type    | Default  | Description                                               |
-| --------------------------------------- | ------- | -------- | --------------------------------------------------------- |
-| `agentTerminal.command`                 | string  | `"pi"`   | The command to run in the terminal                        |
-| `agentTerminal.args`                    | array   | `[]`     | Arguments to pass to the command                          |
-| `agentTerminal.autoRun`                 | boolean | `true`   | Automatically run the command when the terminal opens     |
-| `agentTerminal.shell`                   | string  | `""`     | Custom shell to use (empty for system default)            |
-| `agentTerminal.env`                     | object  | `{}`     | Additional environment variables                          |
-| `agentTerminal.directMode`              | boolean | `true`   | Run command directly without shell wrapper                |
-| `agentTerminal.onExit`                  | string  | `"auto"` | What happens when the process exits (see below)           |
-| `agentTerminal.promptNotification`      | boolean | `true`   | Show notification indicator when terminal awaits input    |
-| `agentTerminal.promptNotificationDelay` | number  | `300`    | Delay (ms) before showing notification after output stops |
-| `agentTerminal.promptPatterns`          | array   | `[]`     | Additional regex patterns to detect input prompts         |
+| Setting                                 | Type    | Default                | Description                                                |
+| --------------------------------------- | ------- | ---------------------- | ---------------------------------------------------------- |
+| `agentTerminal.profiles`                | array   | pi, Claude Code, Codex | Profiles for new tabs, in menu order (see below)           |
+| `agentTerminal.autoRun`                 | boolean | `true`                 | Automatically run the command when the terminal opens      |
+| `agentTerminal.shell`                   | string  | `""`                   | Custom shell to use (empty for system default)             |
+| `agentTerminal.env`                     | object  | `{}`                   | Additional environment variables                           |
+| `agentTerminal.directMode`              | boolean | `true`                 | Run command directly without shell wrapper                 |
+| `agentTerminal.onExit`                  | string  | `"auto"`               | What happens when the process exits (see below)            |
+| `agentTerminal.programStatus`           | boolean | `true`                 | Show agent status on tabs (see below)                      |
+| `agentTerminal.autoTabTitles`           | boolean | `true`                 | Name tabs after the agent's title, e.g. the conversation   |
+| `agentTerminal.monochromeIcons`         | boolean | `false`                | Show agent logos in the text color instead of brand colors |
+| `agentTerminal.statusColors`            | boolean | `true`                 | Color the status icons on tabs                             |
+| `agentTerminal.promptNotification`      | boolean | `true`                 | Show notification indicator when terminal awaits input     |
+| `agentTerminal.promptNotificationDelay` | number  | `300`                  | Delay (ms) before showing notification after output stops  |
+| `agentTerminal.promptPatterns`          | array   | `[]`                   | Additional regex patterns to detect input prompts          |
+
+### Agent profiles
+
+`agentTerminal.profiles` lists what new tabs can run, in order. The first profile opens with `+`, when the view starts and when the last tab closes. The `…` button next to `+` lists all profiles, followed by Custom Command…. Leave out agents you have not installed.
+
+```json
+{
+  "agentTerminal.profiles": [
+    { "id": "pi", "command": "/Users/me/bin/pi" },
+    { "id": "claude", "args": ["--model", "opus"] },
+    { "id": "aider", "label": "Aider", "command": "aider", "args": ["--model", "gpt-4"] }
+  ]
+}
+```
+
+| Field     | Meaning                                                                             |
+| --------- | ----------------------------------------------------------------------------------- |
+| `id`      | `pi`, `claude` or `codex` for a built-in agent, any other name for a custom profile |
+| `label`   | Name in the menu and on tabs; defaults to the agent's name or the id                |
+| `command` | Executable or path; required for custom profiles                                    |
+| `args`    | Arguments                                                                           |
+| `env`     | Environment variables, added to `agentTerminal.env`                                 |
+
+Built-in agents only need an `id`. They get their logo, their [title as tab label](#tabs) and [status](#agent-status) support:
+
+| Agent       | Command  | Added by the extension                                                                                  |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| pi          | `pi`     | Nothing                                                                                                 |
+| Claude Code | `claude` | Nothing                                                                                                 |
+| Codex       | `codex`  | `-c` options that make Codex write a notification when a turn completes or needs approval (status only) |
+
+Custom profiles show a terminal icon and the terminal title as label. A custom command (Custom Command…) that runs one of the built-in agents, for example `/opt/homebrew/bin/claude`, is recognized by name. Invalid entries are skipped with a warning; without any valid entry, pi, Claude Code and Codex are used.
+
+### Agent status
+
+An icon at the end of a tab shows what its agent is doing. The icons differ by shape, so they work without color. With `agentTerminal.statusColors` (on by default), the icons also take a theme color.
+
+| Icon                | Meaning                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| `⋯`, fading in turn | Working                                                                                     |
+| `!`                 | Needs input: a question, an approval or a login. Stays until you answer.                    |
+| `✓`                 | Done while you were looking elsewhere                                                       |
+| `✕` in a circle     | Failed while you were looking elsewhere: the agent reported an error or the process crashed |
+
+Done and failed clear once the tab has been in view for a second, or when you type into it. With VS Code's `workbench.reduceMotion`, the working dots stay still. The tooltip and screen readers announce the status with the title, for example "Fix login, Needs input: approve Bash".
+
+The badge on the sidebar icon counts tabs that need you. The status comes from:
+
+- The [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status), which pi, Claude Code (2.1.295+) and Codex report. The extension answers the support query that pi and Claude Code send before reporting.
+- The terminal bell while an agent works, for dialogs that ask something without reporting it, such as pi's `ask_user_question` tool. The tab shows "Needs input" until you type.
+- For Codex, the notifications enabled by its profile, which tell a finished turn from a cancelled one.
+- For other programs, the [prompt patterns](#prompt-notifications) below.
+
+Set `agentTerminal.programStatus` to `false` to turn this off.
 
 ### When the process exits
 
@@ -128,51 +203,6 @@ Configure the extension via VS Code Settings (`Cmd+,` / `Ctrl+,`):
 Closing the last tab opens a new one, so `/exit` in the only tab starts a fresh session.
 
 ### Configuration Examples
-
-**pi (default):**
-
-```json
-{
-  "agentTerminal.command": "pi",
-  "agentTerminal.args": []
-}
-```
-
-**Gemini CLI:**
-
-```json
-{
-  "agentTerminal.command": "gemini",
-  "agentTerminal.args": []
-}
-```
-
-**Aider:**
-
-```json
-{
-  "agentTerminal.command": "aider",
-  "agentTerminal.args": ["--model", "gpt-4"]
-}
-```
-
-**OpenAI Codex:**
-
-```json
-{
-  "agentTerminal.command": "codex",
-  "agentTerminal.args": []
-}
-```
-
-**GitHub Copilot CLI:**
-
-```json
-{
-  "agentTerminal.command": "gh",
-  "agentTerminal.args": ["copilot"]
-}
-```
 
 **Running with shell features:**
 
@@ -196,7 +226,7 @@ Closing the last tab opens a new one, so `/exit` in the only tab starts a fresh 
 
 ## Prompt Notifications
 
-The extension can detect when the terminal is waiting for user input and show a visual notification (pulsing red dot) on the tab. This helps you notice when your AI assistant needs attention, even when you're working in another part of VS Code.
+For programs that do not report their status, the extension detects when the terminal is waiting for user input and marks inactive tabs as needing input. This helps you notice when your AI assistant needs attention, even when you're working in another part of VS Code.
 
 ### Built-in Detection Patterns
 

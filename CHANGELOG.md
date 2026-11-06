@@ -5,14 +5,25 @@ All notable changes to the "Agent Terminal" extension (fork of "Claude Terminal 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2026-11-05
+## [1.2.0] - 2026-11-06
 
 ### Added
 
 - `agentTerminal.onExit` setting (`auto`, `close`, `restart`, `keep`)
+- `agentTerminal.profiles`: an ordered list of profiles for new tabs, with built-in pi, Claude Code and Codex and custom CLIs; the first one is the default and the `…` button next to `+` lists them all
+- Agent status on tabs from OSC 7501 reports, the terminal bell and Codex notifications, shown as an icon readable by shape (working, needs input, done, failed) with optional status colors (`agentTerminal.statusColors`); it clears after a second in view and is announced to screen readers; a badge on the sidebar icon counts tabs that need attention (`agentTerminal.programStatus`)
+- Tabs show the agent's logo and are labelled with its terminal title, e.g. Claude Code's conversation summary or a named pi session (`agentTerminal.autoTabTitles`); `agentTerminal.monochromeIcons` draws the logos in the text color
+- Tabs keep their width and the strip scrolls sideways, with arrow buttons while tabs overflow; a tooltip shows labels that do not fit
+- Browser-style tab shortcuts while Agent Terminal has focus: `Cmd+T`, `Cmd+W`, `Cmd+Alt+←/→`, `Cmd+1…9` and `Ctrl+Tab` for Switch Tab… (`Ctrl+Shift+T/W`, `Ctrl+PageUp/PageDown`, `Alt+1…9` on Windows and Linux)
+- Tab context menu with Close and Close Others; middle-click closes a tab
 
 ### Changed
 
+- `agentTerminal.command` and `agentTerminal.args` are replaced by `agentTerminal.profiles`
+- Tabs moved to a browser-style strip above the terminal; tabs share its width and scroll sideways below their minimum width
+- Tab strip uses VS Code's UI font; the `+` and custom-command buttons moved from the tab strip to the view title bar
+- The restart button and command are removed; an exited process still restarts with `Enter`
+- Close Tab is `Ctrl+Shift+W` on Windows and Linux, so `Ctrl+W` reaches the terminal
 - A clean exit (e.g. `/exit`) closes the tab instead of leaving a dead terminal; closing the last tab opens a new one
 - After a non-zero exit the output stays and `Enter` restarts the command, `Esc` closes the tab
 - Restarting a custom-command tab reuses its command and working directory

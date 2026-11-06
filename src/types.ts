@@ -36,39 +36,89 @@ export interface INodePty {
 // Configuration
 export type OnExitAction = 'auto' | 'close' | 'restart' | 'keep';
 
-export interface TerminalConfig {
+/** Program Status Protocol (OSC 7501) states reported by agents such as pi */
+export type ProgramState = 'idle' | 'working' | 'blocked' | 'done' | 'error';
+
+/** Status shown on a tab */
+export type TabStatus = 'working' | 'blocked' | 'done' | 'error';
+
+/** Agents the extension knows: logo, title format and status options */
+export type AgentId = 'pi' | 'claude' | 'codex';
+
+/** An entry of `agentTerminal.profiles` as configured */
+export interface ProfileConfig {
+  id: string;
+  label?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+/** What a tab runs; reused when the tab restarts */
+export interface LaunchSpec {
+  label: string;
   command: string;
   args: string[];
+  env: Record<string, string>;
+  /** Built-in agent, which selects the logo and how the terminal title is read */
+  agent?: AgentId;
+}
+
+/** A validated profile; the first one opens with the + button */
+export interface Profile extends LaunchSpec {
+  id: string;
+}
+
+export interface TerminalConfig {
   autoRun: boolean;
   shell: string;
   env: Record<string, string>;
   directMode: boolean;
   onExit: OnExitAction;
+  programStatus: boolean;
+  autoTabTitles: boolean;
+  monochromeIcons: boolean;
+  statusColors: boolean;
+  /** Never empty */
+  profiles: Profile[];
 }
 
 // Terminal instance for multi-tab support
 export interface TerminalInstance {
   id: string;
-  name: string;
   pty: IPty | undefined;
   isActive: boolean;
   workspaceFolderIndex?: number;
   isWaitingForInput?: boolean;
   cwd?: string;
-  /** Command and arguments of a custom-command tab, reused on restart */
-  command?: string;
-  args?: string[];
+  launch: LaunchSpec;
+  /** Short label from the terminal title, e.g. Claude Code's conversation summary */
+  titleLabel?: string;
   /** The process ended and the tab waits for Enter (restart) or Esc (close) */
   exited?: boolean;
+  /** The program reported its state through OSC 7501 */
+  reportsStatus?: boolean;
+  programState?: ProgramState;
+  statusMessage?: string;
+  /** Waiting for an answer the agent did not report, e.g. a dialog that rang the bell */
+  needsInput?: boolean;
+  /** Last OSC 9 notification since the current run started */
+  lastNotification?: string;
+  /** A run finished while the tab was not in view */
+  unseen?: 'done' | 'error';
 }
 
 // Tab information for UI
 export interface TabInfo {
   id: string;
-  name: string;
+  label: string;
+  /** Built-in agent, shown as its logo before the label */
+  agent?: AgentId;
   isActive: boolean;
   accentColor?: string;
-  isWaitingForInput?: boolean;
+  status?: TabStatus;
+  /** `Needs input: approve Bash`, for the tooltip and screen readers */
+  statusText?: string;
 }
 
 // Webview message types (from webview to extension)
@@ -80,17 +130,17 @@ export type WebviewMessage =
   | { type: 'newTabWithCommand' }
   | { type: 'closeTab'; id: string }
   | { type: 'switchTab'; id: string }
-  | { type: 'openFile'; id: string; path: string; line?: number; column?: number };
+  | { type: 'openFile'; id: string; path: string; line?: number; column?: number }
+  | { type: 'focus'; focused: boolean };
 
 // Extension message types (from extension to webview)
 export type ExtensionMessage =
   | { type: 'output'; id: string; data: string }
   | { type: 'clear'; id: string }
-  | { type: 'tabsUpdate'; tabs: TabInfo[] }
-  | { type: 'createTab'; id: string; name: string; accentColor?: string }
+  | { type: 'tabsUpdate'; tabs: TabInfo[]; monochromeIcons: boolean; statusColors: boolean }
+  | { type: 'createTab'; id: string }
   | { type: 'switchTab'; id: string }
-  | { type: 'removeTab'; id: string }
-  | { type: 'setNotification'; id: string; show: boolean };
+  | { type: 'removeTab'; id: string };
 
 // Command help parsing types
 export interface CommandFlag {

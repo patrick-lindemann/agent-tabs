@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as os from 'os';
 import * as fs from 'fs';
-import type { IPty, INodePty, TerminalConfig } from './types';
+import type { IPty, INodePty, LaunchSpec, TerminalConfig } from './types';
 
 /**
  * Callbacks for PTY events.
@@ -38,6 +38,7 @@ export class PtyManager {
   spawn(
     terminalId: string,
     config: TerminalConfig,
+    launch: LaunchSpec,
     cols: number,
     rows: number,
     cwd?: string
@@ -47,13 +48,13 @@ export class PtyManager {
 
     try {
       this.ensureNodePtyLoaded();
-      const { shell, env, cwd: defaultCwd } = this.prepareSpawnOptions(config);
+      const { shell, env, cwd: defaultCwd } = this.prepareSpawnOptions(config, launch);
       const workingDir = cwd ?? defaultCwd;
-      const pty = this.createPty(config, shell, cols, rows, workingDir, env);
+      const pty = this.createPty(config, launch, shell, cols, rows, workingDir, env);
 
       this.ptys.set(terminalId, pty);
       this.setupPtyEventHandlers(terminalId, pty);
-      this.handleAutoRun(pty, config);
+      this.handleAutoRun(pty, config, launch);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.callbacks.onError(terminalId, errorMessage);
@@ -108,14 +109,17 @@ export class PtyManager {
     }
   }
 
-  private prepareSpawnOptions(config: TerminalConfig): {
+  private prepareSpawnOptions(
+    config: TerminalConfig,
+    launch: LaunchSpec
+  ): {
     shell: string;
     env: Record<string, string>;
     cwd: string;
   } {
     const shell = config.shell || this.getDefaultShell();
     const cwd = this.getWorkingDirectory();
-    const env = this.buildEnvironment(config.env);
+    const env = this.buildEnvironment({ ...config.env, ...launch.env });
     return { shell, env, cwd };
   }
 
@@ -157,6 +161,7 @@ export class PtyManager {
 
   private createPty(
     config: TerminalConfig,
+    launch: LaunchSpec,
     shell: string,
     cols: number,
     rows: number,
@@ -175,8 +180,8 @@ export class PtyManager {
       env
     };
 
-    if (config.directMode && config.command) {
-      return this.nodePty.spawn(config.command, config.args, spawnOptions);
+    if (config.directMode && launch.command) {
+      return this.nodePty.spawn(launch.command, launch.args, spawnOptions);
     }
     return this.nodePty.spawn(shell, [], spawnOptions);
   }
@@ -197,9 +202,9 @@ export class PtyManager {
     });
   }
 
-  private handleAutoRun(pty: IPty, config: TerminalConfig): void {
-    if (!config.directMode && config.autoRun && config.command) {
-      const fullCommand = [config.command, ...config.args].join(' ');
+  private handleAutoRun(pty: IPty, config: TerminalConfig, launch: LaunchSpec): void {
+    if (!config.directMode && config.autoRun && launch.command) {
+      const fullCommand = [launch.command, ...launch.args.map(shellQuote)].join(' ');
       // Clear screen and run command
       pty.write('clear && ' + fullCommand + '\r');
     }
@@ -242,4 +247,9 @@ export class PtyManager {
       this.kill(terminalId);
     }
   }
+}
+
+/** Quotes an argument for the shell when it contains special characters */
+function shellQuote(arg: string): string {
+  return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`;
 }
