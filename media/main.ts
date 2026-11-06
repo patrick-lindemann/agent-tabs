@@ -273,6 +273,37 @@ const messageHandlers: MessageHandlers = {
 const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
 
 /**
+ * Sequences for keys that xterm.js does not encode the way shells and agents
+ * expect. Except for Shift/Option+Enter, these are VS Code's built-in
+ * `workbench.action.terminal.sendSequence` keybindings (VS Code 1.144, without
+ * the shell-specific ones). VS Code applies them only to its own terminal, so
+ * the webview applies them itself. Keys read `[Ctrl+][Alt+][Shift+][Meta+]code`.
+ */
+const KEY_SEQUENCES: Record<string, string> = {
+  'Shift+Enter': '\x1b[13;2u',
+  'Alt+Enter': '\x1b\r',
+  'Alt+ArrowUp': '\x1b[1;5A',
+  'Alt+ArrowDown': '\x1b[1;5B',
+  'Ctrl+Alt+KeyG': '\x07',
+  'Ctrl+Shift+Digit2': '\x00',
+  'Ctrl+Shift+Digit6': '\x1e',
+  ...(IS_MAC
+    ? {
+        'Ctrl+KeyC': '\x03',
+        'Meta+ArrowLeft': '\x01',
+        'Meta+ArrowRight': '\x05',
+        'Meta+Backspace': '\x15',
+        'Alt+Backspace': '\x17',
+        'Alt+Delete': '\x1bd'
+      }
+    : {
+        'Meta+KeyC': '\x03',
+        'Ctrl+Backspace': '\x17',
+        'Ctrl+Delete': '\x1bd'
+      })
+};
+
+/**
  * Status icons, readable by shape without color or motion. Except for the
  * working dots, they are VS Code's Codicons (CC BY 4.0,
  * https://github.com/microsoft/vscode-codicons), so they match the warning
@@ -653,9 +684,9 @@ class WebviewContext {
    * Handles keys that xterm.js cannot encode for CLI agents or that VS Code's
    * webview host intercepts before they reach the terminal.
    *
-   * - Shift+Enter sends the CSI-u sequence `ESC [13;2u`, so agents such as pi
-   *   can tell it apart from Enter (xterm.js sends `\r` for both).
-   * - Option+Enter sends `ESC \r` (Alt+Enter).
+   * - Keys in `KEY_SEQUENCES` send their sequence, e.g. Cmd+Left `Ctrl+A`
+   *   like VS Code's terminal, and Shift+Enter the CSI-u sequence
+   *   `ESC [13;2u`, so agents such as pi can tell it apart from Enter.
    * - Cmd+C / Cmd+V use the clipboard directly. The VS Code webview host
    *   cancels the native copy/paste events on desktop, so without this they
    *   silently do nothing in the terminal.
@@ -703,16 +734,10 @@ class WebviewContext {
   }
 
   private getKeySequence(event: KeyboardEvent): string | undefined {
-    if (event.key !== 'Enter' || event.ctrlKey || event.metaKey) {
-      return undefined;
-    }
-    if (event.shiftKey && !event.altKey) {
-      return '\x1b[13;2u';
-    }
-    if (event.altKey && !event.shiftKey) {
-      return '\x1b\r';
-    }
-    return undefined;
+    const { ctrlKey, altKey, shiftKey, metaKey, code } = event;
+    return KEY_SEQUENCES[
+      `${ctrlKey ? 'Ctrl+' : ''}${altKey ? 'Alt+' : ''}${shiftKey ? 'Shift+' : ''}${metaKey ? 'Meta+' : ''}${code}`
+    ];
   }
 
   switchToTerminal(id: string): void {

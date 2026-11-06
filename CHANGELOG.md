@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tabs keep their width and the strip scrolls sideways, with arrow buttons while tabs overflow; a tooltip shows labels that do not fit
 - Browser-style tab shortcuts while Agent Terminal has focus: `Cmd+T`, `Cmd+W`, `Cmd+Alt+←/→`, `Cmd+1…9` and `Ctrl+Tab` for Switch Tab… (`Ctrl+Shift+T/W`, `Ctrl+PageUp/PageDown`, `Alt+1…9` on Windows and Linux)
 - Tab context menu with Close and Close Others; middle-click closes a tab
+- The terminal sends the same sequences as VS Code's terminal for editing keys, e.g. `Cmd+←/→` to the start/end of the line, `Cmd+Backspace` to delete the line and `Option+Backspace` to delete a word
 
 ### Changed
 

@@ -13,9 +13,15 @@ This is a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero
 - **Agent profiles** replace `agentTerminal.command` and `agentTerminal.args`: an ordered list with built-in support for pi, Claude Code and Codex and any custom CLI. See [Agent profiles](#agent-profiles).
 - **Agent status on tabs** (working, needs input, done, failed), read from what the agents report. See [Agent status](#agent-status).
 - **Browser-style tabs** above the terminal, labelled with a short key from the conversation summary or session name, e.g. `refactor-api-client`.
-- **Modified keys reach the agent.** The terminal is an xterm.js instance inside a webview, not a VS Code integrated terminal, so `workbench.action.terminal.sendSequence` keybindings do not apply to it. The webview now handles these keys itself:
+- **Keys work like in VS Code's terminal.** The terminal is an xterm.js instance inside a webview, not a VS Code integrated terminal, so VS Code's `workbench.action.terminal.sendSequence` keybindings do not apply to it. The webview sends the same sequences itself, plus two for multi-line input:
   | Key | Sent to the program |
   | --- | --- |
+  | `Cmd+Left` / `Cmd+Right` (macOS) | `Ctrl+A` / `Ctrl+E`, start / end of line |
+  | `Cmd+Backspace` (macOS) | `Ctrl+U`, delete to start of line |
+  | `Option+Backspace` (macOS), `Ctrl+Backspace` | `Ctrl+W`, delete word before the cursor |
+  | `Option+Delete` (macOS), `Ctrl+Delete` | `ESC d`, delete word after the cursor |
+  | `Alt+Up` / `Alt+Down` | `ESC [1;5A` / `ESC [1;5B` |
+  | `Ctrl+Shift+2` / `Ctrl+Shift+6` | `NUL` / `RS` |
   | `Shift+Enter` | `ESC [13;2u` (CSI-u), distinguishable from `Enter` |
   | `Option/Alt+Enter` | `ESC CR` |
   | `Cmd+C` | Copies the terminal selection to the clipboard |
