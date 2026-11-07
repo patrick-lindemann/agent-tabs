@@ -87,7 +87,6 @@ export interface TerminalConfig {
 // Terminal instance for multi-tab support
 export interface TerminalInstance {
   id: string;
-  pty: IPty | undefined;
   isActive: boolean;
   workspaceFolderIndex?: number;
   isWaitingForInput?: boolean;

@@ -1,3 +1,4 @@
+import { isWebviewMessage } from './message-validation';
 import type { WebviewMessage } from './types';
 
 /**
@@ -63,7 +64,8 @@ const messageHandlers: MessageHandlerMap = {
 /**
  * Dispatches a message to its appropriate handler.
  */
-export function dispatchMessage(message: WebviewMessage, ctx: MessageHandlerContext): void {
-  const handler = messageHandlers[message.type] as MessageHandler<typeof message>;
-  handler(message, ctx);
+export function dispatchMessage(message: unknown, ctx: MessageHandlerContext): void {
+  if (!isWebviewMessage(message)) return;
+  const handler = messageHandlers[message.type] as MessageHandler<typeof message> | undefined;
+  handler?.(message, ctx);
 }
