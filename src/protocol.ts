@@ -1,7 +1,16 @@
 /** Protocol shared by the extension host and its webview. Keep this file free of platform APIs. */
 export type AgentId =
-  | 'claude' | 'codex' | 'antigravity' | 'gemini' | 'opencode' | 'pi'
-  | 'cursor' | 'copilot' | 'grok' | 'hermes' | 'devin';
+  | 'claude'
+  | 'codex'
+  | 'antigravity'
+  | 'gemini'
+  | 'opencode'
+  | 'pi'
+  | 'cursor'
+  | 'copilot'
+  | 'grok'
+  | 'hermes'
+  | 'devin';
 
 export type TabStatus = 'working' | 'blocked' | 'done' | 'error';
 

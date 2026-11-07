@@ -15,8 +15,6 @@ import opencodeIcon from './icons/opencode.svg';
 import piIcon from './icons/pi.svg';
 import piMonoIcon from './icons/pi-mono.svg';
 import type { TabInfo } from './types';
-const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
-
 /**
  * Agent logos (media/icons), from Lobe Icons (MIT,
  * https://github.com/lobehub/lobe-icons) except pi's (https://pi.dev). Each
@@ -56,4 +54,3 @@ export const IDLE_ICON =
 
 export const CLOSE_ICON =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
-

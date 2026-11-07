@@ -27,4 +27,3 @@ export class TerminalState {
     this.activeTerminalId = id;
   }
 }
-

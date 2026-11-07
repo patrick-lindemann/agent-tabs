@@ -65,4 +65,3 @@ export class ThemeBuilder {
     this.cachedFontFamily = null;
   }
 }
-
