@@ -2,10 +2,16 @@
 .vscode-test/**
 src/**
 node_modules/**
-!node_modules/node-pty/**
+!node_modules/node-pty/
+!node_modules/node-pty/package.json
+!node_modules/node-pty/lib/**
+!node_modules/node-pty/bin/**
 .gitignore
 *.map
 *.ts
+media/**/*.ts
+media/tsconfig.json
+scripts/**
 tsconfig.json
 *.md
 .husky/**

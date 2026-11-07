@@ -10,6 +10,15 @@
     "type": "git",
     "url": "https://github.com/patrick-lindemann/agent-terminal"
   },
+  "galleryBanner": {
+    "color": "#1f2937",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "qna": "marketplace",
+  "config": {
+    "electronVersion": "43.8.3"
+  },
   "bugs": {
     "url": "https://github.com/patrick-lindemann/agent-terminal/issues"
   },
@@ -18,17 +27,24 @@
     "vscode": "^1.106.0"
   },
   "keywords": [
-    "pi",
-    "ai",
-    "terminal",
-    "sidebar",
-    "agent",
+    "claude",
+    "codex",
     "gemini",
+    "copilot",
+    "opencode",
+    "pi",
+    "terminal",
+    "agent",
+    "sidebar",
+    "tabs",
+    "ai",
     "aider",
     "cli",
     "assistant"
   ],
   "categories": [
+    "AI",
+    "Chat",
     "Other"
   ],
   "activationEvents": [
@@ -346,9 +362,10 @@
     "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser --loader:.svg=text",
     "copy:xterm-css": "node -e \"require('fs').copyFileSync('node_modules/@xterm/xterm/css/xterm.css', 'media/xterm.css')\"",
     "watch": "concurrently -k \"npm:watch:extension\" \"npm:watch:media\"",
-    "rebuild": "npx @electron/rebuild --version 43.8.3",
+    "rebuild": "node scripts/rebuild.js",
     "postinstall": "npm run rebuild",
     "package": "vsce package",
+    "publish:marketplace": "vsce publish",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome check --write .",
@@ -370,6 +387,7 @@
     "@vitest/coverage-v8": "^5.1.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "4.1.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
