@@ -30,7 +30,9 @@ export function extractFileLinks(line: string): FileLinkMatch[] {
   const links: FileLinkMatch[] = [];
   FILE_PATH_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = FILE_PATH_REGEX.exec(line)) !== null) {
+  while (true) {
+    match = FILE_PATH_REGEX.exec(line);
+    if (match === null) break;
     const path = match[1];
     const hasExtension = /\.[a-zA-Z0-9]+$/.test(path);
     if (!hasExtension && !EXTENSIONLESS_FILES.has(path.split(/[\\/]/).pop() ?? '')) continue;

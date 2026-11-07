@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TerminalStateManager } from '../../src/terminal-state-manager';
-import type { TerminalInstance } from '../../src/types';
+import { TerminalStateManager } from '../../src/terminal/terminal-state-manager';
+import type { TerminalInstance } from '../../src/shared/types';
 
 const launch = { label: 'Work', command: 'claude', args: [], env: {}, commandLine: 'claude' };
 const instance = (overrides: Partial<TerminalInstance> = {}): TerminalInstance => ({ id: 'a', isActive: false, launch, ...overrides });

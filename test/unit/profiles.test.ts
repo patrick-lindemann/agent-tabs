@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fromLegacyProfiles, launchForCommand, resolveProfiles, splitCommandLine } from '../../src/profiles';
+import { fromLegacyProfiles, launchForCommand, resolveProfiles, splitCommandLine } from '../../src/profiles/profiles';
 
 describe('command line profiles', () => {
   it('splits quoted and escaped shell words', () => {

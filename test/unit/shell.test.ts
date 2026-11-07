@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shellClearCommand, shellQuote } from '../../src/terminal-shell';
+import { shellClearCommand, shellQuote } from '../../src/terminal/terminal-shell';
 
 describe('shell helpers', () => {
   it.each([

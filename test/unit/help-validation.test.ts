@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CommandHelpParser } from '../../src/command-help-parser';
-import { isWebviewMessage } from '../../src/message-validation';
+import { CommandHelpParser } from '../../src/commands/command-help-parser';
+import { isWebviewMessage } from '../../src/webview/message-validation';
 
 describe('help parsing and protocol guards', () => {
   it('parses GNU flags and continuation text', () => {

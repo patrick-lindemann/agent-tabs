@@ -1,6 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { type ILink, type ILinkProvider, Terminal } from '@xterm/xterm';
+import { extractFileLinks } from './file-links';
 import antigravityIcon from './icons/antigravity.svg';
 import antigravityMonoIcon from './icons/antigravity-mono.svg';
 import claudeIcon from './icons/claude.svg';
@@ -29,7 +30,6 @@ import type {
   WebviewOutgoingMessage,
   XTermTheme
 } from './types';
-import { extractFileLinks } from './file-links';
 
 // File path link provider for terminal
 class FileLinkProvider implements ILinkProvider {
@@ -258,41 +258,6 @@ const AGENT_ICONS: Record<NonNullable<TabInfo['agent']>, { color: string; mono: 
   devin: { color: devinIcon, mono: devinMonoIcon }
 };
 
-/**
- * Sequences for keys that xterm.js does not encode the way shells and agents
- * expect. Except for Shift/Option+Enter, these are VS Code's built-in
- * `workbench.action.terminal.sendSequence` keybindings (VS Code 1.144, without
- * the shell-specific ones). VS Code applies them only to its own terminal, so
- * the webview applies them itself. Keys read `[Ctrl+][Alt+][Shift+][Meta+]code`.
- */
-const _KEY_SEQUENCES: Record<string, string> = {
-  'Shift+Enter': '\x1b[13;2u',
-  'Alt+Enter': '\x1b\r',
-  'Alt+ArrowUp': '\x1b[1;5A',
-  'Alt+ArrowDown': '\x1b[1;5B',
-  'Ctrl+Alt+KeyG': '\x07',
-  'Ctrl+Shift+Digit2': '\x00',
-  'Ctrl+Shift+Digit6': '\x1e',
-  ...(IS_MAC
-    ? {
-        'Ctrl+KeyC': '\x03',
-        'Meta+ArrowLeft': '\x01',
-        'Meta+ArrowRight': '\x05',
-        'Meta+Backspace': '\x15',
-        'Alt+Backspace': '\x17',
-        'Alt+Delete': '\x1bd'
-      }
-    : {
-        'Meta+KeyC': '\x03',
-        'Ctrl+Backspace': '\x17',
-        'Ctrl+Delete': '\x1bd'
-      })
-};
-
-/**
- * Status icons, readable by shape without color or motion. The check is VS
- * Code's Codicon (CC BY 4.0, https://github.com/microsoft/vscode-codicons).
- */
 const STATUS_ICONS: Record<NonNullable<TabInfo['status']>, string> = {
   working:
     '<svg viewBox="0 0 16 16" aria-hidden="true"><circle fill="currentColor" cx="3.5" cy="8" r="1.5"/><circle fill="currentColor" cx="8" cy="8" r="1.5"/><circle fill="currentColor" cx="12.5" cy="8" r="1.5"/></svg>',
@@ -312,32 +277,6 @@ const IDLE_ICON =
 
 const CLOSE_ICON =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
-
-/**
- * Keys bound to SideMates commands (package.json `keybindings`, scoped to
- * the focused view). xterm.js ignores them so they only switch, open or close
- * tabs and are not also typed into the program.
- */
-function _isTabShortcut(event: KeyboardEvent): boolean {
-  const { key, code, ctrlKey, metaKey, altKey, shiftKey } = event;
-  const digit = /^Digit[1-9]$/.test(code);
-  if (ctrlKey && !metaKey && !altKey && key === 'Tab') return true;
-  if (IS_MAC) {
-    return (
-      (metaKey &&
-        !ctrlKey &&
-        !altKey &&
-        !shiftKey &&
-        (digit || code === 'KeyT' || code === 'KeyW')) ||
-      (metaKey && altKey && !ctrlKey && !shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight'))
-    );
-  }
-  return (
-    (altKey && !ctrlKey && !metaKey && !shiftKey && digit) ||
-    (ctrlKey && !altKey && !metaKey && !shiftKey && (key === 'PageUp' || key === 'PageDown')) ||
-    (ctrlKey && shiftKey && !altKey && !metaKey && (code === 'KeyT' || code === 'KeyW'))
-  );
-}
 
 // Main webview context class
 class WebviewContext {
