@@ -75,6 +75,8 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Rebuild native modules for Electron
         run: npm run rebuild -- --arch ${{ matrix.arch }}
+      - name: Prune native prebuilds
+        run: node scripts/prune.js ${{ matrix.target }}
       - name: Package extension
         run: npm run package -- --target ${{ matrix.target }}
       - name: Upload artifact

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractFileLinks } from '../../media/file-links';
+import { extractFileLinks } from '../../media/links';
 
 describe('file link extraction', () => {
   it.each([

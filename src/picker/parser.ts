@@ -1,4 +1,4 @@
-import type { CommandFlag, ParsedHelp } from '../shared/types';
+import type { CommandFlag, ParsedHelp } from '../types';
 
 interface HelpParser {
   canParse(output: string): boolean;

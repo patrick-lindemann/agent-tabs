@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { launchForCommand, resolveProfiles, shortTitle } from '../../src/profiles/profiles';
+import { launchForCommand, resolveProfiles, shortTitle } from '../../src/profiles';
 
 describe('profile behaviour and titles', () => {
   it.each([

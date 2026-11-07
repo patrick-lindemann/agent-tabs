@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROGRAM_STATUS_REPLY, TerminalSignalParser, isTerminalReport } from '../../src/terminal/terminal-signals';
+import { PROGRAM_STATUS_REPLY, TerminalSignalParser, isTerminalReport } from '../../src/terminal/signals';
 
 describe('terminal signals', () => {
   it('parses status, title, notification and bell', () => {

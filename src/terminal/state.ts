@@ -1,6 +1,6 @@
-import { shortTitle } from '../profiles/profiles';
-import type { TabInfo, TabStatus, TerminalInstance } from '../shared/types';
-import { WORKSPACE_ACCENT_COLORS } from '../shared/types';
+import { shortTitle } from '../profiles';
+import type { TabInfo, TabStatus, TerminalInstance } from '../types';
+import { WORKSPACE_ACCENT_COLORS } from '../types';
 
 const STATUS_LABELS: Record<TabStatus, string> = {
   working: 'Working',

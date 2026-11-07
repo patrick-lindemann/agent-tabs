@@ -2,7 +2,9 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "dist",
     "rootDir": ".",
     "strict": true,
@@ -14,6 +16,12 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*", "shared/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*",
+    "src/protocol.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

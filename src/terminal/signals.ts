@@ -1,4 +1,4 @@
-import type { ProgramState } from '../shared/types';
+import type { ProgramState } from '../types';
 
 /**
  * Reads the signals CLI agents write to their terminal:

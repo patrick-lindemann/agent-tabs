@@ -1,19 +1,19 @@
 import * as vscode from 'vscode';
-import { CommandInputPicker } from '../commands/command-input-picker';
-import { ConfigManager } from '../config/config-manager';
-import { labelFromTitle, launchForCommand, missingCommand } from '../profiles/profiles';
-import type { AgentId, ExtensionMessage, LaunchSpec, TerminalInstance } from '../shared/types';
-import { PromptDetector, type PromptDetectorConfig } from '../terminal/prompt-detector';
-import { type PtyEventCallbacks, PtyManager } from '../terminal/pty-manager';
+import { CommandInputPicker } from '../picker/picker';
+import { ConfigManager } from '../config';
+import { labelFromTitle, launchForCommand, missingCommand } from '../profiles';
+import type { AgentId, ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
+import { PromptDetector, type PromptDetectorConfig } from '../terminal/prompt';
+import { type PtyEventCallbacks, PtyManager } from '../terminal/pty';
 import {
   isTerminalReport,
   PROGRAM_STATUS_REPLY,
   type ProgramStatusReport,
   TerminalSignalParser,
   type TerminalSignals
-} from '../terminal/terminal-signals';
-import { TerminalStateManager } from '../terminal/terminal-state-manager';
-import { dispatchMessage, type MessageHandlerContext } from './message-handlers';
+} from '../terminal/signals';
+import { TerminalStateManager } from '../terminal/state';
+import { dispatchMessage, type MessageHandlerContext } from './messages';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
 const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi', 'devin']);

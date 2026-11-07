@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTabShortcut, keySequence } from '../../media/keybindings';
+import { isTabShortcut, keySequence } from '../../media/keys';
 const event = (code: string, key = code, mods: Partial<Record<'ctrlKey'|'metaKey'|'altKey'|'shiftKey', boolean>> = {}) => ({ key, code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...mods });
 
 describe('webview keybindings', () => {

@@ -100,9 +100,9 @@ export type {
   TabInfo,
   TabStatus,
   WebviewMessage
-} from '../../shared/protocol';
+} from './protocol';
 
-import type { AgentId } from '../../shared/protocol';
+import type { AgentId } from './protocol';
 
 // Command help parsing types
 export interface CommandFlag {

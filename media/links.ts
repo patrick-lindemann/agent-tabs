@@ -51,3 +51,41 @@ export function extractFileLinks(line: string): FileLinkMatch[] {
   }
   return links;
 }
+
+import { type ILink, type ILinkProvider, Terminal } from '@xterm/xterm';
+import type { WebviewOutgoingMessage } from './types';
+export class FileLinkProvider implements ILinkProvider {
+  constructor(
+    private readonly terminal: Terminal,
+    private readonly terminalId: string,
+    private readonly postMessage: (msg: WebviewOutgoingMessage) => void
+  ) {}
+
+  provideLinks(bufferLineNumber: number, callback: (links: ILink[] | undefined) => void): void {
+    const line = this.terminal.buffer.active.getLine(bufferLineNumber - 1);
+    if (!line) {
+      callback(undefined);
+      return;
+    }
+
+    const lineText = line.translateToString();
+    const links: ILink[] = extractFileLinks(lineText).map((match) => ({
+      range: {
+        start: { x: match.start + 1, y: bufferLineNumber },
+        end: { x: match.end + 1, y: bufferLineNumber }
+      },
+      text: match.path,
+      activate: () => {
+        this.postMessage({
+          type: 'openFile',
+          id: this.terminalId,
+          path: match.path,
+          line: match.line,
+          column: match.column
+        });
+      }
+    }));
+    callback(links.length > 0 ? links : undefined);
+  }
+}
+

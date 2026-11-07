@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
-import type { AgentId, LaunchSpec } from '../shared/types';
+import type { AgentId, LaunchSpec } from './types';
 
 interface AgentDefinition {
   label: string;

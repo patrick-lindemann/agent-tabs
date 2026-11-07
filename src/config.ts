@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { fromLegacyProfiles, resolveProfiles } from '../profiles/profiles';
-import type { OnExitAction, TerminalConfig } from '../shared/types';
+import { fromLegacyProfiles, resolveProfiles } from './profiles';
+import type { OnExitAction, TerminalConfig } from './types';
 
 /**
  * Manages terminal configuration with caching.

@@ -1,4 +1,4 @@
-import type { WebviewMessage } from '../shared/types';
+import type { WebviewMessage } from './types';
 
 const MAX_TEXT = 1_000_000;
 const MAX_ID = 256;

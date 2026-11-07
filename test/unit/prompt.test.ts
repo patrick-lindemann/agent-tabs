@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PromptDetector } from '../../src/terminal/prompt-detector';
+import { PromptDetector } from '../../src/terminal/prompt';
 
 describe('prompt detection', () => {
   afterEach(() => vi.useRealTimers());

@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as vscode from 'vscode';
-import type { INodePty, IPty, LaunchSpec, TerminalConfig } from '../shared/types';
-import { shellClearCommand, shellQuote } from './terminal-shell';
+import type { INodePty, IPty, LaunchSpec, TerminalConfig } from '../types';
+import { shellClearCommand, shellQuote } from './shell';
 
 /**
  * Callbacks for PTY events.

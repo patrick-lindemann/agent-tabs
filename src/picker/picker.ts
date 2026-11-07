@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import type { CommandFlag, PathContext, PathFilterMode, PathSuggestion } from '../shared/types';
-import { HelpExecutor } from './help-executor';
-import { PathAutocompleteProvider } from './path-autocomplete-provider';
+import type { CommandFlag, PathContext, PathFilterMode, PathSuggestion } from '../types';
+import { HelpExecutor } from './help';
+import { PathAutocompleteProvider } from './paths';
 
 interface CommandQuickPickItem extends vscode.QuickPickItem {
   flag?: CommandFlag;

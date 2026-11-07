@@ -1,8 +1,8 @@
 import type { FitAddon as XTermFitAddon } from '@xterm/addon-fit';
 import type { ITheme, Terminal as XTermTerminal } from '@xterm/xterm';
-import type { WebviewOutgoingMessage } from '../shared/protocol';
+import type { WebviewOutgoingMessage } from '../src/protocol';
 
-export type { TabInfo, WebviewIncomingMessage, WebviewOutgoingMessage } from '../shared/protocol';
+export type { TabInfo, WebviewIncomingMessage, WebviewOutgoingMessage } from '../src/protocol';
 
 // VS Code API types for webview
 export interface VSCodeAPI {

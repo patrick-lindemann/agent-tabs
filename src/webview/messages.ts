@@ -1,5 +1,5 @@
-import type { WebviewMessage } from '../shared/types';
-import { isWebviewMessage } from './message-validation';
+import type { WebviewMessage } from '../types';
+import { isWebviewMessage } from '../validate';
 
 /**
  * Context interface that message handlers use to perform actions.
