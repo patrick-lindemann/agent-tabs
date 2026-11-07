@@ -211,6 +211,17 @@ export class PtyManager {
   }
 
   /**
+   * The PATH a tab's process gets, for checking that its command exists.
+   */
+  getSearchPath(config: TerminalConfig, launch: LaunchSpec): string {
+    const env: Partial<Record<string, string>> = this.buildEnvironment({
+      ...config.env,
+      ...launch.env
+    });
+    return env.PATH ?? '';
+  }
+
+  /**
    * Writes data to the PTY.
    */
   write(terminalId: string, data: string): void {

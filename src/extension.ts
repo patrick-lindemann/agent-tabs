@@ -32,6 +32,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('agentTerminal.newTabWithProfile', () => {
       void terminalProvider?.pickProfileAndCreateTerminal();
     }),
+    vscode.commands.registerCommand('agentTerminal.manageProfiles', () => {
+      void terminalProvider?.manageProfiles();
+    }),
     vscode.commands.registerCommand('agentTerminal.switchTab', () => {
       void terminalProvider?.pickTerminal();
     }),

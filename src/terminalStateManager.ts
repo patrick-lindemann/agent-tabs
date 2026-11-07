@@ -1,6 +1,6 @@
 import type { TerminalInstance, TabInfo, TabStatus } from './types';
 import { WORKSPACE_ACCENT_COLORS } from './types';
-import { tabKey } from './profiles';
+import { shortTitle } from './profiles';
 
 const STATUS_LABELS: Record<TabStatus, string> = {
   working: 'Working',
@@ -124,6 +124,7 @@ export class TerminalStateManager {
       id: t.id,
       label: this.getLabel(t, autoTitles, titleWords),
       description: this.getFullLabel(t, true),
+      agent: t.launch.agent,
       isActive: t.isActive,
       accentColor: this.getAccentColor(t.workspaceFolderIndex),
       status: this.getStatus(t),
@@ -132,16 +133,13 @@ export class TerminalStateManager {
   }
 
   /**
-   * With automatic titles, a key from the terminal title, e.g.
-   * `refactor-api-client` from Claude Code's conversation summary or a named
-   * pi session, and the agent's key (`claude-code`) until the program sets
-   * one. Otherwise the agent's name.
+   * With automatic titles, the shortened terminal title, e.g. `Refactor API
+   * client` from Claude Code's conversation summary or a named pi session.
+   * Otherwise, or until the program sets a title, the profile's name.
    */
   getLabel(instance: TerminalInstance, autoTitles: boolean, titleWords: number): string {
-    if (!autoTitles) return instance.launch.label;
-    return (
-      tabKey(instance.titleLabel ?? instance.launch.label, titleWords) ?? instance.launch.label
-    );
+    const title = autoTitles ? instance.titleLabel : undefined;
+    return (title && shortTitle(title, titleWords)) ?? instance.launch.label;
   }
 
   /** `pi / Refactor the API client`: agent and full title, e.g. for the tab picker */
@@ -186,6 +184,9 @@ export class TerminalStateManager {
    * detector marks inactive tabs as blocked.
    */
   getStatus(instance: TerminalInstance): TabStatus | undefined {
+    if (instance.missing) {
+      return 'error';
+    }
     if (instance.needsInput) {
       return 'blocked';
     }

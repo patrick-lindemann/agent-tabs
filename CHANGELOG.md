@@ -5,6 +5,25 @@ All notable changes to the "Agent Terminal" extension (fork of "Claude Terminal 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Agents recognized in a profile's command line, also behind a wrapper such as tmux: Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, Pi, Cursor, GitHub Copilot, Grok Build, Hermes Agent and Devin; they get their logo and status support
+- Agent logos in Use Profile… and on tabs, in brand colors or the text color (`agentTerminal.monochromeIcons`)
+- Manage Profiles opens `agentTerminal.profiles` in the Settings editor
+- Without any profile, there is one for each known agent that is installed
+- A profile whose command or agent is not installed shows an error naming the missing command instead of a spawn error; Use Profile… marks it as not installed
+
+### Changed
+
+- `agentTerminal.profiles` is a table of names and command lines, editable in the Settings editor and in its order; the list from 1.2 is converted on the first start
+- `+` and `…` in the view title bar are replaced by a `+ ⌄` split button at the end of the tab strip, like the one in VS Code's terminal panel: `+` opens the first profile, `⌄` (Use Profile…) lists the profiles, Custom Command and Manage Profiles
+- Use Profile… marks the first profile with `(default)`
+- Needs input shows `!` and failed `✕`, without the triangle and circle around them; with `agentTerminal.statusColors`, the tab's name also turns yellow, green or red
+- Tab names keep the title's case and spaces: `Refactor API client` instead of `refactor-api-client`
+- A tab shows its agent's logo while idle; a status icon takes its place while there is a status. Profiles without a known agent show a filled sparkle
+
 ## [1.2.0] - 2026-11-06
 
 ### Added

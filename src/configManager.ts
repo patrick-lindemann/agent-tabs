@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { OnExitAction, TerminalConfig } from './types';
-import { resolveProfiles } from './profiles';
+import { fromLegacyProfiles, resolveProfiles } from './profiles';
 
 /**
  * Manages terminal configuration with caching.
@@ -49,10 +49,29 @@ export class ConfigManager {
       tabTitleWords: Math.max(1, Math.floor(config.get<number>('tabTitleWords', 4))),
       statusColors: config.get<boolean>('statusColors', true),
       confirmClose: config.get<boolean>('confirmClose', true),
+      monochromeIcons: config.get<boolean>('monochromeIcons', false),
       profiles
     };
 
     return this.cachedConfig;
+  }
+
+  /**
+   * Rewrites `agentTerminal.profiles` from 1.2, a list of objects, as the
+   * table of names and command lines that the Settings editor can edit.
+   */
+  async migrateProfiles(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('agentTerminal');
+    const inspected = config.inspect('profiles');
+    const scopes = [
+      [inspected?.globalValue, vscode.ConfigurationTarget.Global],
+      [inspected?.workspaceValue, vscode.ConfigurationTarget.Workspace]
+    ] as const;
+    for (const [value, target] of scopes) {
+      if (Array.isArray(value)) {
+        await config.update('profiles', fromLegacyProfiles(value), target);
+      }
+    }
   }
 
   /**

@@ -7,8 +7,8 @@ import type {
   WebviewMessage,
   TerminalInstance,
   ExtensionMessage,
-  LaunchSpec,
-  Profile
+  AgentId,
+  LaunchSpec
 } from './types';
 import { CommandInputPicker } from './commandInputPicker';
 import { PromptDetector, type PromptDetectorConfig } from './promptDetector';
@@ -19,7 +19,13 @@ import {
   type ProgramStatusReport,
   type TerminalSignals
 } from './terminalSignals';
-import { labelFromTitle, launchForCommand } from './profiles';
+import { labelFromTitle, launchForCommand, missingCommand } from './profiles';
+
+/** Agents whose logo has brand colors; the others are drawn in the text color */
+const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi', 'devin']);
+
+/** Exit code of a shell or wrapper that could not find a command */
+const COMMAND_NOT_FOUND = 127;
 
 /** How long a tab must stay in view before its result counts as seen */
 const SEEN_DELAY_MS = 1000;
@@ -53,6 +59,10 @@ export class AgentTerminalViewProvider
       this.getPromptDetectorConfig(),
       this.handleNotificationChange.bind(this)
     );
+
+    void this.configManager.migrateProfiles().catch((error: unknown) => {
+      console.error('Agent Terminal: could not convert agentTerminal.profiles', error);
+    });
 
     // Pre-load help for the custom command picker (missing commands are handled gracefully)
     const profileCommands = this.configManager.getConfig().profiles.map((p) => p.command);
@@ -111,6 +121,10 @@ export class AgentTerminalViewProvider
 
   handleNewTab(): void {
     void this.createTerminal();
+  }
+
+  handleNewTabWithProfile(): void {
+    void this.pickProfileAndCreateTerminal();
   }
 
   handleNewTabWithCommand(): void {
@@ -202,6 +216,14 @@ export class AgentTerminalViewProvider
   private handlePtyExit(terminalId: string, exitCode: number, runtimeMs: number): void {
     const instance = this.stateManager.get(terminalId);
     if (this.disposed || !this.view || !instance) return;
+
+    // A shell or wrapper that could not find the command, e.g. tmux or
+    // directMode off; a long-running program may use 127 for its own reasons
+    if (exitCode === COMMAND_NOT_FOUND && runtimeMs < 5000) {
+      const { launch } = instance;
+      this.showNotInstalled(instance, missingCommand(launch) ?? launch.command);
+      return;
+    }
 
     const { onExit } = this.configManager.getConfig();
     if (onExit === 'close' || (onExit === 'auto' && exitCode === 0)) {
@@ -431,7 +453,7 @@ export class AgentTerminalViewProvider
     this.postMessage({ type: 'createTab', id });
     this.sendTabsUpdate();
 
-    this.ptyManager.spawn(id, config, instance.launch, this.lastCols, this.lastRows, cwd);
+    this.startProcess(instance);
 
     // Switch to the new tab
     this.postMessage({ type: 'switchTab', id });
@@ -440,31 +462,87 @@ export class AgentTerminalViewProvider
   }
 
   /**
-   * Quick pick over the profiles in their configured order, followed by
-   * Custom Command…. VS Code's native view menus cannot follow a setting's
-   * order or list user-defined profiles.
+   * Use Profile…: the profiles in their configured order with their logos and
+   * Custom Command, then Manage Profiles. VS Code's native view menus
+   * cannot follow a setting's order or list user-defined profiles.
    */
   public async pickProfileAndCreateTerminal(): Promise<void> {
-    const { profiles } = this.configManager.getConfig();
-    type Item = vscode.QuickPickItem & { profile?: Profile };
+    const config = this.configManager.getConfig();
+    const { profiles, monochromeIcons } = config;
+    type Item = vscode.QuickPickItem & { profile?: LaunchSpec; action?: () => Promise<void> };
     const items: Item[] = [
       ...profiles.map((profile, index) => ({
         label: profile.label,
-        description: index === 0 ? `${profile.command} · default` : profile.command,
+        description: [
+          profile.commandLine,
+          index === 0 ? '(default)' : undefined,
+          missingCommand(profile, this.ptyManager.getSearchPath(config, profile))
+            ? '· not installed'
+            : undefined
+        ]
+          .filter(Boolean)
+          .join(' '),
+        iconPath: this.getProfileIcon(profile, monochromeIcons),
         profile
       })),
+      {
+        label: 'Custom Command',
+        iconPath: new vscode.ThemeIcon('terminal'),
+        action: () => this.promptAndCreateTerminal()
+      },
       { label: '', kind: vscode.QuickPickItemKind.Separator },
-      { label: 'Custom Command…' }
+      { label: 'Manage Profiles', action: () => this.manageProfiles() }
     ];
 
     const picked = await vscode.window.showQuickPick(items, {
-      placeHolder: 'Open a new tab with'
+      placeHolder: 'Open a new tab with',
+      matchOnDescription: true
     });
     if (picked?.profile) {
       await this.createTerminal(picked.profile);
-    } else if (picked) {
-      await this.promptAndCreateTerminal();
+    } else {
+      await picked?.action?.();
     }
+  }
+
+  /**
+   * Opens `agentTerminal.profiles` in the Settings editor. Without own
+   * profiles, the ones in use are written first, so there is something to
+   * edit.
+   */
+  public async manageProfiles(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('agentTerminal');
+    const inspected = config.inspect<Record<string, string>>('profiles');
+    const isSet = [
+      inspected?.globalValue,
+      inspected?.workspaceValue,
+      inspected?.workspaceFolderValue
+    ].some((value) => value !== undefined && Object.keys(value).length > 0);
+    if (!isSet) {
+      const { profiles } = this.configManager.getConfig();
+      await config.update(
+        'profiles',
+        Object.fromEntries(profiles.map((profile) => [profile.label, profile.commandLine])),
+        vscode.ConfigurationTarget.Global
+      );
+    }
+    await vscode.commands.executeCommand('workbench.action.openSettings', 'agentTerminal.profiles');
+  }
+
+  /**
+   * The agent's logo; in its brand colors unless `agentTerminal.monochromeIcons`
+   * is set. Logos without brand colors follow the theme.
+   */
+  private getProfileIcon(profile: LaunchSpec, monochrome: boolean): vscode.IconPath {
+    if (!profile.agent) {
+      return new vscode.ThemeIcon('sparkle-filled');
+    }
+    const icon = (name: string) =>
+      vscode.Uri.joinPath(this.extensionUri, 'media', 'icons', `${name}.svg`);
+    if (!monochrome && BRAND_COLORED.has(profile.agent)) {
+      return icon(profile.agent);
+    }
+    return { light: icon(`${profile.agent}-light`), dark: icon(`${profile.agent}-dark`) };
   }
 
   public async promptAndCreateTerminal(): Promise<void> {
@@ -653,19 +731,57 @@ export class AgentTerminalViewProvider
     instance.lastNotification = undefined;
     instance.titleLabel = undefined;
     instance.unseen = undefined;
+    instance.missing = undefined;
     this.signalParsers.delete(terminalId);
     this.sendTabsUpdate();
     this.postMessage({ type: 'clear', id: terminalId });
+    this.startProcess(instance);
+  }
 
+  /**
+   * Starts a tab's process, unless its command or the agent it wraps cannot
+   * be found on the PATH the process would get. Then the tab explains that
+   * instead of failing with a spawn error.
+   */
+  private startProcess(instance: TerminalInstance): void {
     const config = this.configManager.getConfig();
+    const missing = missingCommand(
+      instance.launch,
+      this.ptyManager.getSearchPath(config, instance.launch)
+    );
+    if (missing) {
+      this.showNotInstalled(instance, missing);
+      return;
+    }
     this.ptyManager.spawn(
-      terminalId,
+      instance.id,
       config,
       instance.launch,
       this.lastCols,
       this.lastRows,
       instance.cwd
     );
+  }
+
+  /**
+   * Shows in the tab that a command was not found, with the failed status.
+   * Enter tries again and Esc closes, like after any exit.
+   */
+  private showNotInstalled(instance: TerminalInstance, command: string): void {
+    const { agent, label } = instance.launch;
+    instance.exited = true;
+    instance.missing = command;
+    instance.statusMessage = `${command} not found`;
+    this.sendTabsUpdate();
+
+    const what = agent ? `${label} is not installed` : `"${label}" cannot start`;
+    const message = `${what}: \`${command}\` was not found on the PATH.`;
+    this.postMessage({
+      type: 'output',
+      id: instance.id,
+      data: `\x1b[1m${message}\x1b[0m\r\n\x1b[2mPress Enter to try again or Esc to close.\x1b[0m\r\n`
+    });
+    void vscode.window.showErrorMessage(message);
   }
 
   public clear(): void {
@@ -715,9 +831,10 @@ export class AgentTerminalViewProvider
    * tabs that need the user.
    */
   private sendTabsUpdate(): void {
-    const { autoTabTitles, tabTitleWords, statusColors } = this.configManager.getConfig();
+    const { autoTabTitles, tabTitleWords, statusColors, monochromeIcons } =
+      this.configManager.getConfig();
     const tabs = this.stateManager.getTabsInfo(autoTabTitles, tabTitleWords);
-    this.postMessage({ type: 'tabsUpdate', tabs, statusColors });
+    this.postMessage({ type: 'tabsUpdate', tabs, statusColors, monochromeIcons });
 
     if (this.view) {
       const count = this.stateManager
@@ -767,6 +884,14 @@ export class AgentTerminalViewProvider
         <button id="tab-scroll-right" class="tab-scroll" title="Scroll Right" aria-label="Scroll Right">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M10.072 8.024L5.715 3.667l.618-.62L11 7.716v.618L6.333 13l-.618-.619 4.357-4.357z"/></svg>
         </button>
+        <div id="new-tab" role="group" aria-label="New Tab">
+            <button id="new-tab-default" title="New Tab" aria-label="New Tab">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/></svg>
+            </button>
+            <button id="new-tab-profile" title="Use Profile…" aria-label="Use Profile…">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z"/></svg>
+            </button>
+        </div>
     </div>
     <div id="terminals-container"></div>
     <script nonce="${nonce}" src="${scriptUri.toString()}"></script>

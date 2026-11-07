@@ -42,17 +42,19 @@ export type ProgramState = 'idle' | 'working' | 'blocked' | 'done' | 'error';
 /** Status shown on a tab */
 export type TabStatus = 'working' | 'blocked' | 'done' | 'error';
 
-/** Agents the extension knows: logo, title format and status options */
-export type AgentId = 'pi' | 'claude' | 'codex';
-
-/** An entry of `agentTerminal.profiles` as configured */
-export interface ProfileConfig {
-  id: string;
-  label?: string;
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-}
+/** Agents recognized in a command line: logo, title format and status options */
+export type AgentId =
+  | 'claude'
+  | 'codex'
+  | 'antigravity'
+  | 'gemini'
+  | 'opencode'
+  | 'pi'
+  | 'cursor'
+  | 'copilot'
+  | 'grok'
+  | 'hermes'
+  | 'devin';
 
 /** What a tab runs; reused when the tab restarts */
 export interface LaunchSpec {
@@ -62,11 +64,8 @@ export interface LaunchSpec {
   env: Record<string, string>;
   /** Built-in agent, which selects the logo and how the terminal title is read */
   agent?: AgentId;
-}
-
-/** A validated profile; the first one opens with the + button */
-export interface Profile extends LaunchSpec {
-  id: string;
+  /** The profile's command line as configured, for menus */
+  commandLine: string;
 }
 
 export interface TerminalConfig {
@@ -80,8 +79,9 @@ export interface TerminalConfig {
   tabTitleWords: number;
   statusColors: boolean;
   confirmClose: boolean;
-  /** Never empty */
-  profiles: Profile[];
+  monochromeIcons: boolean;
+  /** Validated `agentTerminal.profiles`; never empty, the first one opens with + */
+  profiles: LaunchSpec[];
 }
 
 // Terminal instance for multi-tab support
@@ -107,6 +107,8 @@ export interface TerminalInstance {
   lastNotification?: string;
   /** A run finished while the tab was not in view */
   unseen?: 'done' | 'error';
+  /** The command that could not be found, while the tab shows the hint */
+  missing?: string;
 }
 
 // Tab information for UI
@@ -115,6 +117,8 @@ export interface TabInfo {
   label: string;
   /** `pi / Refactor the API client`: agent and full title, for the tooltip */
   description: string;
+  /** Built-in agent, shown as its logo while the tab has no status */
+  agent?: AgentId;
   isActive: boolean;
   accentColor?: string;
   status?: TabStatus;
@@ -128,6 +132,7 @@ export type WebviewMessage =
   | { type: 'input'; id: string; data: string }
   | { type: 'resize'; id: string; cols: number; rows: number }
   | { type: 'newTab' }
+  | { type: 'newTabWithProfile' }
   | { type: 'newTabWithCommand' }
   | { type: 'closeTab'; id: string }
   | { type: 'switchTab'; id: string }
@@ -138,7 +143,7 @@ export type WebviewMessage =
 export type ExtensionMessage =
   | { type: 'output'; id: string; data: string }
   | { type: 'clear'; id: string }
-  | { type: 'tabsUpdate'; tabs: TabInfo[]; statusColors: boolean }
+  | { type: 'tabsUpdate'; tabs: TabInfo[]; statusColors: boolean; monochromeIcons: boolean }
   | { type: 'createTab'; id: string }
   | { type: 'switchTab'; id: string }
   | { type: 'removeTab'; id: string };

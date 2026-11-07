@@ -80,6 +80,62 @@ body {
 }
 
 /*
+ * New tab split button, like the one in VS Code's terminal panel: + opens the
+ * first profile, the chevron lists all profiles.
+ */
+#new-tab {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin: 0 4px;
+  border-radius: 5px;
+}
+
+#new-tab:hover {
+  outline: 1px dashed var(--vscode-toolbar-hoverOutline, transparent);
+}
+
+#new-tab button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, #c5c5c5);
+  cursor: pointer;
+}
+
+#new-tab-default {
+  width: 22px;
+}
+
+#new-tab-profile {
+  width: 16px;
+}
+
+#new-tab button:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+#new-tab button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+#new-tab-default svg {
+  width: 16px;
+  height: 16px;
+}
+
+#new-tab-profile svg {
+  width: 14px;
+  height: 14px;
+}
+
+/*
  * Tabs share the strip's width; below their minimum width the strip scrolls.
  * The left border shows the workspace folder's color in multi-root
  * workspaces.
@@ -121,8 +177,9 @@ body {
 }
 
 /*
- * The status icon leads the tab and keeps its space while idle, so labels do
- * not shift. The close button shows on the active tab and on hover.
+ * The agent's logo leads the tab; a status icon takes its place while there
+ * is a status, so labels do not shift. The close button shows on the active
+ * tab and on hover.
  */
 .tab-status {
   display: flex;
@@ -136,10 +193,6 @@ body {
 .tab-status svg {
   width: 14px;
   height: 14px;
-}
-
-.tab:not([data-status]) .tab-status {
-  opacity: 0.6;
 }
 
 .tab-close {
@@ -187,6 +240,13 @@ body {
 
 .tab-status {
   color: var(--status-color, currentColor);
+}
+
+/* Needs input, done and failed also color the name, since they need the user */
+#tab-bar.status-colors .tab[data-status='blocked'] .tab-label,
+#tab-bar.status-colors .tab[data-status='done'] .tab-label,
+#tab-bar.status-colors .tab[data-status='error'] .tab-label {
+  color: var(--status-color);
 }
 
 /*

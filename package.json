@@ -64,9 +64,9 @@
       },
       {
         "command": "agentTerminal.newTabWithProfile",
-        "title": "New Terminal Tab with Profile…",
+        "title": "Use Profile…",
         "category": "Agent Terminal",
-        "icon": "$(ellipsis)"
+        "icon": "$(chevron-down)"
       },
       {
         "command": "agentTerminal.newTabWithCommand",
@@ -106,6 +106,11 @@
       {
         "command": "agentTerminal.closeOtherTabs",
         "title": "Close Others",
+        "category": "Agent Terminal"
+      },
+      {
+        "command": "agentTerminal.manageProfiles",
+        "title": "Manage Profiles",
         "category": "Agent Terminal"
       }
     ],
@@ -204,18 +209,6 @@
       }
     ],
     "menus": {
-      "view/title": [
-        {
-          "command": "agentTerminal.newTab",
-          "when": "view == agentTerminal.terminalView",
-          "group": "navigation@1"
-        },
-        {
-          "command": "agentTerminal.newTabWithProfile",
-          "when": "view == agentTerminal.terminalView",
-          "group": "navigation@2"
-        }
-      ],
       "webview/context": [
         {
           "command": "agentTerminal.closeTabFromMenu",
@@ -247,59 +240,12 @@
       "title": "Agent Terminal",
       "properties": {
         "agentTerminal.profiles": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "id"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string",
-                "description": "`pi`, `claude` or `codex` for a built-in agent with its logo and status support, or any other name for a custom profile",
-                "examples": [
-                  "pi",
-                  "claude",
-                  "codex"
-                ]
-              },
-              "label": {
-                "type": "string",
-                "description": "Name shown in the menu and on tabs; defaults to the agent's name or the id"
-              },
-              "command": {
-                "type": "string",
-                "description": "Executable or path; required for custom profiles"
-              },
-              "args": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Arguments, added after the options the extension needs for status reporting"
-              },
-              "env": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "description": "Environment variables, added to agentTerminal.env"
-              }
-            }
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
           },
-          "default": [
-            {
-              "id": "pi"
-            },
-            {
-              "id": "claude"
-            },
-            {
-              "id": "codex"
-            }
-          ],
-          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+` and when the view starts. Leave out agents you do not use. `pi`, `claude` and `codex` are built in and only need an `id`; other entries need a `command`.\n\nExample: `[{ \"id\": \"pi\", \"command\": \"/Users/me/bin/pi\" }, { \"id\": \"claude\", \"args\": [\"--model\", \"opus\"] }, { \"id\": \"aider\", \"label\": \"Aider\", \"command\": \"aider\" }]`"
+          "markdownDescription": "Profiles for new tabs: a name and the command line it runs, in the order listed here. The first one opens with `+`; `⌄` lists all of them. Write arguments as in a shell, with quotes where needed. To set environment variables for one profile, put them before the command with `env`, e.g. `env NAME=value command` (macOS and Linux); `#agentTerminal.env#` sets them for all profiles. A known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nWhen empty, there is a profile for each known agent that is installed."
         },
         "agentTerminal.autoRun": {
           "type": "boolean",
@@ -346,19 +292,24 @@
         "agentTerminal.autoTabTitles": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Name tabs with a short key from the agent's terminal title, e.g. `refactor-api-client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the agent's name (pi, Claude Code, Codex)."
+          "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the profile's name."
         },
         "agentTerminal.tabTitleWords": {
           "type": "integer",
           "default": 4,
           "minimum": 1,
           "maximum": 12,
-          "markdownDescription": "Maximum number of words in a tab's key with `#agentTerminal.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `refactor-api-client-v2`. Filler words such as `the` or `die` are left out for about 60 languages."
+          "markdownDescription": "Maximum number of words in a tab's name with `#agentTerminal.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages."
         },
         "agentTerminal.statusColors": {
           "type": "boolean",
           "default": true,
-          "description": "Color the status icons on tabs (working, needs input, done, failed). The icons' shapes show the status without color."
+          "description": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color."
+        },
+        "agentTerminal.monochromeIcons": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show agent logos in the text color instead of their brand colors."
         },
         "agentTerminal.confirmClose": {
           "type": "boolean",
@@ -392,7 +343,7 @@
     "vscode:prepublish": "npm run lint && npm run compile",
     "compile": "npm run compile:extension && npm run copy:xterm-css && npm run compile:media",
     "compile:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:node-pty --format=cjs --platform=node",
-    "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser",
+    "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser --loader:.svg=text",
     "copy:xterm-css": "node -e \"require('fs').copyFileSync('node_modules/@xterm/xterm/css/xterm.css', 'media/xterm.css')\"",
     "watch": "npm run compile:extension -- --watch",
     "rebuild": "npx @electron/rebuild --version 43.8.3",

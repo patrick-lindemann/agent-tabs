@@ -9,6 +9,7 @@ export interface MessageHandlerContext {
   handleInput(id: string, data: string): void;
   handleResize(id: string, cols: number, rows: number): void;
   handleNewTab(): void;
+  handleNewTabWithProfile(): void;
   handleNewTabWithCommand(): void;
   handleCloseTab(id: string): void;
   handleSwitchTab(id: string): void;
@@ -38,6 +39,9 @@ const messageHandlers: MessageHandlerMap = {
   },
   newTab: (_message, ctx) => {
     ctx.handleNewTab();
+  },
+  newTabWithProfile: (_message, ctx) => {
+    ctx.handleNewTabWithProfile();
   },
   newTabWithCommand: (_message, ctx) => {
     ctx.handleNewTabWithCommand();
