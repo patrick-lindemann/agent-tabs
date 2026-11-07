@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { AgentTerminalViewProvider } from './AgentTerminalViewProvider';
+import { AgentTerminalViewProvider } from './agent-terminal-view-provider';
 
 let terminalProvider: AgentTerminalViewProvider | undefined;
 

@@ -17,6 +17,10 @@ import hermesIcon from './icons/hermes.svg';
 import opencodeIcon from './icons/opencode.svg';
 import piIcon from './icons/pi.svg';
 import piMonoIcon from './icons/pi-mono.svg';
+import {
+  isTabShortcut as isTabShortcutForPlatform,
+  keySequence as keySequenceForPlatform
+} from './keybindings';
 import type {
   TabInfo,
   TerminalEntry,
@@ -316,7 +320,7 @@ const AGENT_ICONS: Record<NonNullable<TabInfo['agent']>, { color: string; mono: 
  * the shell-specific ones). VS Code applies them only to its own terminal, so
  * the webview applies them itself. Keys read `[Ctrl+][Alt+][Shift+][Meta+]code`.
  */
-const KEY_SEQUENCES: Record<string, string> = {
+const _KEY_SEQUENCES: Record<string, string> = {
   'Shift+Enter': '\x1b[13;2u',
   'Alt+Enter': '\x1b\r',
   'Alt+ArrowUp': '\x1b[1;5A',
@@ -369,7 +373,7 @@ const CLOSE_ICON =
  * the focused view). xterm.js ignores them so they only switch, open or close
  * tabs and are not also typed into the program.
  */
-function isTabShortcut(event: KeyboardEvent): boolean {
+function _isTabShortcut(event: KeyboardEvent): boolean {
   const { key, code, ctrlKey, metaKey, altKey, shiftKey } = event;
   const digit = /^Digit[1-9]$/.test(code);
   if (ctrlKey && !metaKey && !altKey && key === 'Tab') return true;
@@ -757,7 +761,7 @@ class WebviewContext {
    */
   private handleKeyEvent(terminal: Terminal, id: string, event: KeyboardEvent): boolean {
     // Let the event reach VS Code's keybindings without typing it
-    if (isTabShortcut(event)) {
+    if (isTabShortcutForPlatform(event, IS_MAC)) {
       return false;
     }
 
@@ -795,10 +799,7 @@ class WebviewContext {
   }
 
   private getKeySequence(event: KeyboardEvent): string | undefined {
-    const { ctrlKey, altKey, shiftKey, metaKey, code } = event;
-    return KEY_SEQUENCES[
-      `${ctrlKey ? 'Ctrl+' : ''}${altKey ? 'Alt+' : ''}${shiftKey ? 'Shift+' : ''}${metaKey ? 'Meta+' : ''}${code}`
-    ];
+    return keySequenceForPlatform(event, IS_MAC);
   }
 
   switchToTerminal(id: string): void {

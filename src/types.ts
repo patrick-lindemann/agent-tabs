@@ -39,23 +39,6 @@ export type OnExitAction = 'auto' | 'close' | 'restart' | 'keep';
 /** Program Status Protocol (OSC 7501) states reported by agents such as pi */
 export type ProgramState = 'idle' | 'working' | 'blocked' | 'done' | 'error';
 
-/** Status shown on a tab */
-export type TabStatus = 'working' | 'blocked' | 'done' | 'error';
-
-/** Agents recognized in a command line: logo, title format and status options */
-export type AgentId =
-  | 'claude'
-  | 'codex'
-  | 'antigravity'
-  | 'gemini'
-  | 'opencode'
-  | 'pi'
-  | 'cursor'
-  | 'copilot'
-  | 'grok'
-  | 'hermes'
-  | 'devin';
-
 /** What a tab runs; reused when the tab restarts */
 export interface LaunchSpec {
   label: string;
@@ -110,42 +93,16 @@ export interface TerminalInstance {
   missing?: string;
 }
 
-// Tab information for UI
-export interface TabInfo {
-  id: string;
-  label: string;
-  /** `pi / Refactor the API client`: agent and full title, for the tooltip */
-  description: string;
-  /** Built-in agent, shown as its logo while the tab has no status */
-  agent?: AgentId;
-  isActive: boolean;
-  accentColor?: string;
-  status?: TabStatus;
-  /** `Needs input: approve Bash`, for the tooltip and screen readers */
-  statusText?: string;
-}
+// Host/webview protocol is defined once in the platform-neutral shared module.
+export type {
+  AgentId,
+  ExtensionMessage,
+  TabInfo,
+  TabStatus,
+  WebviewMessage
+} from '../shared/protocol';
 
-// Webview message types (from webview to extension)
-export type WebviewMessage =
-  | { type: 'ready'; cols?: number; rows?: number }
-  | { type: 'input'; id: string; data: string }
-  | { type: 'resize'; id: string; cols: number; rows: number }
-  | { type: 'newTab' }
-  | { type: 'newTabWithProfile' }
-  | { type: 'newTabWithCommand' }
-  | { type: 'closeTab'; id: string }
-  | { type: 'switchTab'; id: string }
-  | { type: 'openFile'; id: string; path: string; line?: number; column?: number }
-  | { type: 'focus'; focused: boolean };
-
-// Extension message types (from extension to webview)
-export type ExtensionMessage =
-  | { type: 'output'; id: string; data: string }
-  | { type: 'clear'; id: string }
-  | { type: 'tabsUpdate'; tabs: TabInfo[]; statusColors: boolean; monochromeIcons: boolean }
-  | { type: 'createTab'; id: string }
-  | { type: 'switchTab'; id: string }
-  | { type: 'removeTab'; id: string };
+import type { AgentId } from '../shared/protocol';
 
 // Command help parsing types
 export interface CommandFlag {

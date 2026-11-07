@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CommandHelpParser } from '../../src/commandHelpParser';
+import { CommandHelpParser } from '../../src/command-help-parser';
 import { isWebviewMessage } from '../../src/message-validation';
 
 describe('help parsing and protocol guards', () => {

@@ -1,18 +1,18 @@
 import * as vscode from 'vscode';
-import { CommandInputPicker } from './commandInputPicker';
-import { ConfigManager } from './configManager';
-import { dispatchMessage, type MessageHandlerContext } from './messageHandlers';
+import { CommandInputPicker } from './command-input-picker';
+import { ConfigManager } from './config-manager';
+import { dispatchMessage, type MessageHandlerContext } from './message-handlers';
 import { labelFromTitle, launchForCommand, missingCommand } from './profiles';
-import { PromptDetector, type PromptDetectorConfig } from './promptDetector';
-import { type PtyEventCallbacks, PtyManager } from './ptyManager';
+import { PromptDetector, type PromptDetectorConfig } from './prompt-detector';
+import { type PtyEventCallbacks, PtyManager } from './pty-manager';
 import {
   isTerminalReport,
   PROGRAM_STATUS_REPLY,
   type ProgramStatusReport,
   TerminalSignalParser,
   type TerminalSignals
-} from './terminalSignals';
-import { TerminalStateManager } from './terminalStateManager';
+} from './terminal-signals';
+import { TerminalStateManager } from './terminal-state-manager';
 import type { AgentId, ExtensionMessage, LaunchSpec, TerminalInstance } from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
