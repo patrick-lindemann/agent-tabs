@@ -46,10 +46,8 @@ export const PROGRAM_STATUS_REPLY = '\x1b]7501;?\x1b\\';
  * are typed input and do not match. Programs like pi turn on focus and mouse reporting, so clicking
  * into the terminal sends these.
  */
-/* eslint-disable no-control-regex -- matches escape sequences */
 const TERMINAL_REPORT =
   /^(?:\x1b\[[IO]|\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[M[\s\S]{3}|\x1b\[[?>=]?[\d;]*(?:[cnR]|\$y)|\x1b\[\?\d*u|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))+$/;
-/* eslint-enable no-control-regex */
 
 export function isTerminalReport(data: string): boolean {
   return TERMINAL_REPORT.test(data);
@@ -59,7 +57,6 @@ const OSC = '\x1b]';
 const MAX_SEQUENCE_LENGTH = 4096;
 const MAX_MESSAGE_LENGTH = 2732;
 const STATES = new Set<string>(['idle', 'working', 'blocked', 'done', 'error', 'clear']);
-// eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
 
 export class TerminalSignalParser {

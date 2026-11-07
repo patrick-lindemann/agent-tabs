@@ -10,7 +10,7 @@ body {
   width: 100%;
   overflow: visible;
   background-color: var(--vscode-terminal-background, var(--vscode-editor-background, #1e1e1e));
-  font-family: var(--vscode-editor-font-family, 'SF Mono', Monaco, Menlo, 'Courier New', monospace);
+  font-family: var(--vscode-editor-font-family, "SF Mono", Monaco, Menlo, "Courier New", monospace);
   display: flex;
   flex-direction: column;
 }
@@ -222,19 +222,19 @@ body {
 }
 
 /* Theme colors reinforce the icon shapes (agentTerminal.statusColors) */
-#tab-bar.status-colors .tab[data-status='working'] {
+#tab-bar.status-colors .tab[data-status="working"] {
   --status-color: var(--vscode-charts-blue, #3794ff);
 }
 
-#tab-bar.status-colors .tab[data-status='blocked'] {
+#tab-bar.status-colors .tab[data-status="blocked"] {
   --status-color: var(--vscode-editorWarning-foreground, #cca700);
 }
 
-#tab-bar.status-colors .tab[data-status='done'] {
+#tab-bar.status-colors .tab[data-status="done"] {
   --status-color: var(--vscode-charts-green, #89d185);
 }
 
-#tab-bar.status-colors .tab[data-status='error'] {
+#tab-bar.status-colors .tab[data-status="error"] {
   --status-color: var(--vscode-errorForeground, #f48771);
 }
 
@@ -243,9 +243,9 @@ body {
 }
 
 /* Needs input, done and failed also color the name, since they need the user */
-#tab-bar.status-colors .tab[data-status='blocked'] .tab-label,
-#tab-bar.status-colors .tab[data-status='done'] .tab-label,
-#tab-bar.status-colors .tab[data-status='error'] .tab-label {
+#tab-bar.status-colors .tab[data-status="blocked"] .tab-label,
+#tab-bar.status-colors .tab[data-status="done"] .tab-label,
+#tab-bar.status-colors .tab[data-status="error"] .tab-label {
   color: var(--status-color);
 }
 
@@ -253,19 +253,19 @@ body {
  * Working: the dots fade in turn, like a typing indicator. Subtle on
  * purpose, and static with VS Code's workbench.reduceMotion.
  */
-.tab[data-status='working'] .tab-status circle {
+.tab[data-status="working"] .tab-status circle {
   animation: dot-fade 1.6s ease-in-out infinite;
 }
 
-.tab[data-status='working'] .tab-status circle:nth-child(2) {
+.tab[data-status="working"] .tab-status circle:nth-child(2) {
   animation-delay: 0.2s;
 }
 
-.tab[data-status='working'] .tab-status circle:nth-child(3) {
+.tab[data-status="working"] .tab-status circle:nth-child(3) {
   animation-delay: 0.4s;
 }
 
-.vscode-reduce-motion .tab[data-status='working'] .tab-status circle {
+.vscode-reduce-motion .tab[data-status="working"] .tab-status circle {
   animation: none;
 }
 

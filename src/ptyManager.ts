@@ -1,7 +1,7 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as vscode from 'vscode';
-import * as os from 'os';
-import * as fs from 'fs';
-import type { IPty, INodePty, LaunchSpec, TerminalConfig } from './types';
+import type { INodePty, IPty, LaunchSpec, TerminalConfig } from './types';
 
 /**
  * Callbacks for PTY events.
@@ -206,7 +206,7 @@ export class PtyManager {
     if (!config.directMode && config.autoRun && launch.command) {
       const fullCommand = [launch.command, ...launch.args.map(shellQuote)].join(' ');
       // Clear screen and run command
-      pty.write('clear && ' + fullCommand + '\r');
+      pty.write(`clear && ${fullCommand}\r`);
     }
   }
 

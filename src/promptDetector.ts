@@ -30,7 +30,6 @@ const DEFAULT_PROMPT_PATTERNS: RegExp[] = [
 
 // Strip ANSI escape codes from terminal output
 function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
 }
 

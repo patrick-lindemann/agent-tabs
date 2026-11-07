@@ -1,5 +1,5 @@
-import type { Terminal as XTermTerminal, ITheme } from '@xterm/xterm';
 import type { FitAddon as XTermFitAddon } from '@xterm/addon-fit';
+import type { ITheme, Terminal as XTermTerminal } from '@xterm/xterm';
 
 // VS Code API types for webview
 export interface VSCodeAPI {

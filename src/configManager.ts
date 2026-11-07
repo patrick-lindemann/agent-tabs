@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import type { OnExitAction, TerminalConfig } from './types';
 import { fromLegacyProfiles, resolveProfiles } from './profiles';
+import type { OnExitAction, TerminalConfig } from './types';
 
 /**
  * Manages terminal configuration with caching.
@@ -34,7 +34,7 @@ export class ConfigManager {
     const { profiles, problems } = resolveProfiles(config.get('profiles'), programStatus);
     if (problems.length > 0) {
       void vscode.window.showWarningMessage(
-        `Agent Terminal: check agentTerminal.profiles: ${problems.join('; ')}.`
+        `SideMates: check agentTerminal.profiles: ${problems.join('; ')}.`
       );
     }
 

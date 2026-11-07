@@ -1,8 +1,8 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { PathSuggestion, PathFilterMode } from './types';
+import type { PathFilterMode, PathSuggestion } from './types';
 
 export interface PathAutocompleteOptions {
   debounceMs?: number;
@@ -63,7 +63,7 @@ export class PathAutocompleteProvider {
     if (!partialPath && !isAbsolute && workspaceFolders.length > 1) {
       return workspaceFolders.map((folder) => ({
         name: folder.name,
-        path: folder.path + '/',
+        path: `${folder.path}/`,
         isDirectory: true
       }));
     }
@@ -164,7 +164,7 @@ export class PathAutocompleteProvider {
       return '~';
     }
     if (p.startsWith(home + path.sep)) {
-      return '~/' + p.slice(home.length + 1);
+      return `~/${p.slice(home.length + 1)}`;
     }
     return p;
   }

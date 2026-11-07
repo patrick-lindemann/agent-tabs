@@ -1,4 +1,4 @@
-import { CommandFlag, ParsedHelp } from './types';
+import type { CommandFlag, ParsedHelp } from './types';
 
 interface HelpParser {
   canParse(output: string): boolean;
@@ -71,7 +71,7 @@ class GnuStyleParser implements HelpParser {
             const desc = description.trim();
             // Detect repeatable flags by valueHint pattern (...) or description keywords
             const isRepeatable =
-              (valueHint && valueHint.includes('...')) ||
+              valueHint?.includes('...') ||
               /\badditional\b/i.test(desc) ||
               /\bmultiple\b/i.test(desc);
             currentFlag = {
@@ -90,7 +90,7 @@ class GnuStyleParser implements HelpParser {
 
       // Check for continuation lines (deeply indented)
       if (!matched && currentFlag && /^\s{10,}\S/.test(line)) {
-        currentFlag.description += ' ' + line.trim();
+        currentFlag.description += ` ${line.trim()}`;
       }
     }
 
@@ -141,7 +141,7 @@ class ArgparseStyleParser implements HelpParser {
           const desc = description.trim();
           // Detect repeatable flags by valueHint pattern (...) or description keywords
           const isRepeatable =
-            (valueHint && valueHint.includes('...')) ||
+            valueHint?.includes('...') ||
             /\badditional\b/i.test(desc) ||
             /\bmultiple\b/i.test(desc);
           currentFlag = {
@@ -155,7 +155,7 @@ class ArgparseStyleParser implements HelpParser {
         }
       } else if (currentFlag && /^\s{20,}\S/.test(line)) {
         // Continuation line
-        currentFlag.description += ' ' + line.trim();
+        currentFlag.description += ` ${line.trim()}`;
       }
     }
 
@@ -169,7 +169,6 @@ class ArgparseStyleParser implements HelpParser {
 
 // Fallback regex-based parser - tries to extract anything that looks like a flag
 class FallbackParser implements HelpParser {
-  private readonly flagPattern = /(--[\w-]+(?:=\S+)?|-\w)\b/g;
   private readonly linePattern = /^\s*(--[\w-]+|-\w)(?:[,=\s]+[<[]?\w+[>\]]?)?\s+(.+)$/;
 
   canParse(_output: string): boolean {

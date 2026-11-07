@@ -1,25 +1,25 @@
 import * as vscode from 'vscode';
-import { PtyManager, type PtyEventCallbacks } from './ptyManager';
-import { ConfigManager } from './configManager';
-import { TerminalStateManager } from './terminalStateManager';
-import { dispatchMessage, type MessageHandlerContext } from './messageHandlers';
-import type {
-  WebviewMessage,
-  TerminalInstance,
-  ExtensionMessage,
-  AgentId,
-  LaunchSpec
-} from './types';
 import { CommandInputPicker } from './commandInputPicker';
+import { ConfigManager } from './configManager';
+import { dispatchMessage, type MessageHandlerContext } from './messageHandlers';
+import { labelFromTitle, launchForCommand, missingCommand } from './profiles';
 import { PromptDetector, type PromptDetectorConfig } from './promptDetector';
+import { type PtyEventCallbacks, PtyManager } from './ptyManager';
 import {
-  PROGRAM_STATUS_REPLY,
-  TerminalSignalParser,
   isTerminalReport,
+  PROGRAM_STATUS_REPLY,
   type ProgramStatusReport,
+  TerminalSignalParser,
   type TerminalSignals
 } from './terminalSignals';
-import { labelFromTitle, launchForCommand, missingCommand } from './profiles';
+import { TerminalStateManager } from './terminalStateManager';
+import type {
+  AgentId,
+  ExtensionMessage,
+  LaunchSpec,
+  TerminalInstance,
+  WebviewMessage
+} from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
 const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi', 'devin']);
@@ -61,7 +61,7 @@ export class AgentTerminalViewProvider
     );
 
     void this.configManager.migrateProfiles().catch((error: unknown) => {
-      console.error('Agent Terminal: could not convert agentTerminal.profiles', error);
+      console.error('SideMates: could not convert agentTerminal.profiles', error);
     });
 
     // Pre-load help for the custom command picker (missing commands are handled gracefully)
@@ -194,7 +194,7 @@ export class AgentTerminalViewProvider
       }
     } catch (error) {
       // Log error for debugging but don't show disruptive notifications
-      console.warn(`[Agent Terminal] Failed to open file: ${filePath}`, error);
+      console.warn(`[SideMates] Failed to open file: ${filePath}`, error);
     }
   }
 

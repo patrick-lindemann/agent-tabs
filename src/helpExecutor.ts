@@ -1,6 +1,6 @@
-import { spawn, ChildProcess } from 'child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { CommandHelpParser } from './commandHelpParser';
-import { ParsedHelp } from './types';
+import type { ParsedHelp } from './types';
 
 export interface HelpExecutorOptions {
   timeout?: number;

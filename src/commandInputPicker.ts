@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { HelpExecutor } from './helpExecutor';
 import { PathAutocompleteProvider } from './pathAutocompleteProvider';
-import { CommandFlag, PathContext, PathFilterMode, PathSuggestion } from './types';
+import type { CommandFlag, PathContext, PathFilterMode, PathSuggestion } from './types';
 
 interface CommandQuickPickItem extends vscode.QuickPickItem {
   flag?: CommandFlag;
@@ -379,7 +379,7 @@ export class CommandInputPicker {
               }
             } else {
               // No partial path (trailing space after flag) - append the path
-              newValue = newValue + ' ' + suggestion.path;
+              newValue = `${newValue} ${suggestion.path}`;
             }
 
             // If it's a file, add a trailing space for next argument
@@ -408,7 +408,7 @@ export class CommandInputPicker {
           }
 
           // Add the selected flag with trailing space
-          newValue = newValue + (newValue ? ' ' : '') + flag.flag + ' ';
+          newValue = `${newValue + (newValue ? ' ' : '') + flag.flag} `;
 
           quickPick.value = newValue;
           // Keep picker open for more flag selection

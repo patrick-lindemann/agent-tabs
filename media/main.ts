@@ -1,6 +1,6 @@
-import { Terminal, type ILinkProvider, type ILink } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { type ILink, type ILinkProvider, Terminal } from '@xterm/xterm';
 import antigravityIcon from './icons/antigravity.svg';
 import antigravityMonoIcon from './icons/antigravity-mono.svg';
 import claudeIcon from './icons/claude.svg';
@@ -18,11 +18,11 @@ import opencodeIcon from './icons/opencode.svg';
 import piIcon from './icons/pi.svg';
 import piMonoIcon from './icons/pi-mono.svg';
 import type {
+  TabInfo,
+  TerminalEntry,
   VSCodeAPI,
   WebviewIncomingMessage,
   WebviewOutgoingMessage,
-  TabInfo,
-  TerminalEntry,
   XTermTheme
 } from './types';
 
@@ -71,8 +71,8 @@ class FileLinkProvider implements ILinkProvider {
     // Reset regex state
     FileLinkProvider.FILE_PATH_REGEX.lastIndex = 0;
 
-    let match: RegExpExecArray | null;
-    while ((match = FileLinkProvider.FILE_PATH_REGEX.exec(lineText)) !== null) {
+    let match = FileLinkProvider.FILE_PATH_REGEX.exec(lineText);
+    while (match !== null) {
       const fullMatch = match[0];
       const path = match[1];
       const lineNum = match[2] ? parseInt(match[2], 10) : undefined;
@@ -111,6 +111,7 @@ class FileLinkProvider implements ILinkProvider {
           });
         }
       });
+      match = FileLinkProvider.FILE_PATH_REGEX.exec(lineText);
     }
 
     callback(links.length > 0 ? links : undefined);
@@ -215,7 +216,7 @@ class ThemeBuilder {
   }
 }
 
-// Scroll management for terminal viewport
+// biome-ignore lint/complexity/noStaticOnlyClass: Static grouping keeps scroll helpers namespaced.
 class ScrollManager {
   static isAtBottom(terminal: InstanceType<typeof Terminal>): boolean {
     const buffer = terminal.buffer.active;
@@ -224,7 +225,7 @@ class ScrollManager {
 
   static setupScrollTracking(entry: TerminalEntry): void {
     entry.terminal.onScroll(() => {
-      entry.isAtBottom = this.isAtBottom(entry.terminal);
+      entry.isAtBottom = ScrollManager.isAtBottom(entry.terminal);
     });
 
     const viewport = entry.element.querySelector('.xterm-viewport') as HTMLElement;
@@ -233,7 +234,7 @@ class ScrollManager {
         'scroll',
         () => {
           entry.lastScrollTop = viewport.scrollTop;
-          entry.isAtBottom = this.isAtBottom(entry.terminal);
+          entry.isAtBottom = ScrollManager.isAtBottom(entry.terminal);
         },
         { passive: true }
       );
@@ -364,7 +365,7 @@ const CLOSE_ICON =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z"/></svg>';
 
 /**
- * Keys bound to Agent Terminal commands (package.json `keybindings`, scoped to
+ * Keys bound to SideMates commands (package.json `keybindings`, scoped to
  * the focused view). xterm.js ignores them so they only switch, open or close
  * tabs and are not also typed into the program.
  */
@@ -851,7 +852,7 @@ class WebviewContext {
 }
 
 // Entry point
-(function () {
+(() => {
   try {
     const ctx = new WebviewContext();
     ctx.initialize();
