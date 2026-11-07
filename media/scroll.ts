@@ -1,4 +1,4 @@
-import { Terminal } from '@xterm/xterm';
+import type { Terminal } from '@xterm/xterm';
 import type { TerminalEntry } from './types';
 // biome-ignore lint/complexity/noStaticOnlyClass: Static grouping keeps scroll helpers namespaced.
 export class ScrollManager {
@@ -25,4 +25,3 @@ export class ScrollManager {
     }
   }
 }
-

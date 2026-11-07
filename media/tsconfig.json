@@ -2,11 +2,7 @@
   "compilerOptions": {
     "module": "ES2022",
     "target": "ES2022",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "outDir": "../dist/media",
     "rootDir": "..",
     "strict": true,
@@ -17,11 +13,6 @@
     "moduleResolution": "bundler",
     "isolatedModules": true
   },
-  "include": [
-    "./**/*.ts",
-    "../src/protocol.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["./**/*.ts", "../src/protocol.ts"],
+  "exclude": ["node_modules"]
 }

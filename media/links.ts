@@ -52,7 +52,7 @@ export function extractFileLinks(line: string): FileLinkMatch[] {
   return links;
 }
 
-import { type ILink, type ILinkProvider, Terminal } from '@xterm/xterm';
+import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm';
 import type { WebviewOutgoingMessage } from './types';
 export class FileLinkProvider implements ILinkProvider {
   constructor(
@@ -88,4 +88,3 @@ export class FileLinkProvider implements ILinkProvider {
     callback(links.length > 0 ? links : undefined);
   }
 }
-

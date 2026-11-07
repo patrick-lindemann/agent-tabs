@@ -1,23 +1,6 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { type ILink, type ILinkProvider, Terminal } from '@xterm/xterm';
-import { extractFileLinks } from './links';
-import antigravityIcon from './icons/antigravity.svg';
-import antigravityMonoIcon from './icons/antigravity-mono.svg';
-import claudeIcon from './icons/claude.svg';
-import claudeMonoIcon from './icons/claude-mono.svg';
-import codexIcon from './icons/codex.svg';
-import copilotIcon from './icons/copilot.svg';
-import cursorIcon from './icons/cursor.svg';
-import devinIcon from './icons/devin.svg';
-import devinMonoIcon from './icons/devin-mono.svg';
-import geminiIcon from './icons/gemini.svg';
-import geminiMonoIcon from './icons/gemini-mono.svg';
-import grokIcon from './icons/grok.svg';
-import hermesIcon from './icons/hermes.svg';
-import opencodeIcon from './icons/opencode.svg';
-import piIcon from './icons/pi.svg';
-import piMonoIcon from './icons/pi-mono.svg';
+import { Terminal } from '@xterm/xterm';
 import {
   isTabShortcut as isTabShortcutForPlatform,
   keySequence as keySequenceForPlatform
@@ -27,18 +10,17 @@ import type {
   TerminalEntry,
   VSCodeAPI,
   WebviewIncomingMessage,
-  WebviewOutgoingMessage,
-  XTermTheme
+  WebviewOutgoingMessage
 } from './types';
-
 
 const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
 
+import { AGENT_ICONS, CLOSE_ICON, IDLE_ICON, STATUS_ICONS } from './icons';
 import { FileLinkProvider } from './links';
+import { ScrollManager } from './scroll';
 import { TerminalState } from './state';
 import { ThemeBuilder } from './theme';
-import { ScrollManager } from './scroll';
-import { AGENT_ICONS, STATUS_ICONS, IDLE_ICON, CLOSE_ICON } from './icons';
+
 // Handler registry pattern for message handling
 type MessageHandler<T extends WebviewIncomingMessage> = (message: T, ctx: WebviewContext) => void;
 
@@ -83,7 +65,6 @@ const messageHandlers: MessageHandlers = {
     ctx.removeTerminal(message.id);
   }
 };
-
 
 class WebviewContext {
   readonly state = new TerminalState();
@@ -541,6 +522,5 @@ class WebviewContext {
     }
   }
 }
-
 
 export { WebviewContext };
