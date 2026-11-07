@@ -13,13 +13,7 @@ import {
   type TerminalSignals
 } from './terminalSignals';
 import { TerminalStateManager } from './terminalStateManager';
-import type {
-  AgentId,
-  ExtensionMessage,
-  LaunchSpec,
-  TerminalInstance,
-  WebviewMessage
-} from './types';
+import type { AgentId, ExtensionMessage, LaunchSpec, TerminalInstance } from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
 const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi', 'devin']);
@@ -29,6 +23,12 @@ const COMMAND_NOT_FOUND = 127;
 
 /** How long a tab must stay in view before its result counts as seen */
 const SEEN_DELAY_MS = 1000;
+
+function isAbsoluteFilePath(filePath: string): boolean {
+  return (
+    filePath.startsWith('/') || filePath.startsWith('\\\\') || /^[a-zA-Z]:[\\/]/.test(filePath)
+  );
+}
 
 export class AgentTerminalViewProvider
   implements vscode.WebviewViewProvider, MessageHandlerContext
@@ -161,7 +161,7 @@ export class AgentTerminalViewProvider
 
       // Resolve relative paths using terminal's cwd or workspace folder
       let uri: vscode.Uri;
-      if (resolvedPath.startsWith('/') || /^[a-zA-Z]:/.test(resolvedPath)) {
+      if (isAbsoluteFilePath(resolvedPath)) {
         // Absolute path
         uri = vscode.Uri.file(resolvedPath);
       } else if (terminalCwd) {
@@ -385,10 +385,18 @@ export class AgentTerminalViewProvider
   }
 
   private handlePtyError(terminalId: string, error: string): void {
+    const instance = this.stateManager.get(terminalId);
+    if (!instance) return;
+    // A failed spawn has no PTY to restart, but the tab must still enter the
+    // same retryable state as a normal process exit.
+    instance.exited = true;
+    instance.statusMessage = 'Terminal failed to start';
+    instance.missing = instance.launch.command || 'terminal';
+    this.sendTabsUpdate();
     this.postMessage({
       type: 'output',
       id: terminalId,
-      data: `\r\nError starting terminal: ${error}\r\n`
+      data: `\r\nError starting terminal: ${error}\r\n\x1b[2mPress Enter to retry or Esc to close.\x1b[0m\r\n`
     });
   }
 
@@ -408,7 +416,7 @@ export class AgentTerminalViewProvider
 
     webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: WebviewMessage) => {
+    webviewView.webview.onDidReceiveMessage((message: unknown) => {
       dispatchMessage(message, this);
     });
 
@@ -422,6 +430,12 @@ export class AgentTerminalViewProvider
     webviewView.onDidDispose(() => {
       this.handleFocus(false);
       this.ptyManager.killAll();
+      // PTYs are destroyed with the webview. Keep no stale tabs that refer to
+      // those processes; the next webview sends `ready` and starts cleanly.
+      this.promptDetector.dispose();
+      this.signalParsers.clear();
+      this.stateManager.clear();
+      this.view = undefined;
     });
   }
 
@@ -439,7 +453,6 @@ export class AgentTerminalViewProvider
 
     const instance: TerminalInstance = {
       id,
-      pty: undefined,
       isActive: false,
       workspaceFolderIndex: folderIndex,
       cwd,

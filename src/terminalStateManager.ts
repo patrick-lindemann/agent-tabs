@@ -45,6 +45,12 @@ export class TerminalStateManager {
     return this.terminals.delete(id);
   }
 
+  /** Clears all terminal instances, used when the webview is recreated. */
+  clear(): void {
+    this.terminals.clear();
+    this.activeTerminalId = undefined;
+  }
+
   /**
    * Gets all terminal instances.
    */
