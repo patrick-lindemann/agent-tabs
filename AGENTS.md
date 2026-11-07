@@ -8,3 +8,6 @@
   `npm version <level> --no-git-tag-version` and add a `CHANGELOG.md` entry.
 - Pull requests run the _CI_ workflow. Run `npm run lint`, `npm run format:check`
   and `npm run compile` locally before pushing.
+- Merging to `main` also publishes platform VSIX files to the VS Code Marketplace
+  after the GitHub Release succeeds. The `marketplace` environment requires a
+  `VSCE_PAT` secret with Marketplace Manage scope.
