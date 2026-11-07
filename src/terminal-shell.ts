@@ -4,7 +4,7 @@ export function shellClearCommand(platform: NodeJS.Platform = process.platform):
 }
 
 export function shellQuote(arg: string, platform: NodeJS.Platform = process.platform): string {
-  if (/^[\\w@%+=:,./-]+$/.test(arg)) return arg;
+  if (/^[\w@%+=:,./-]+$/.test(arg)) return arg;
   if (platform === 'win32') {
     // cmd.exe uses double quotes; double embedded quotes and escape metacharacters.
     return `"${arg.replace(/([%&|<>^])/g, '^$1').replace(/"/g, '\\"')}"`;

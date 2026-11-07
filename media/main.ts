@@ -29,33 +29,10 @@ import type {
   WebviewOutgoingMessage,
   XTermTheme
 } from './types';
+import { extractFileLinks } from './file-links';
 
 // File path link provider for terminal
 class FileLinkProvider implements ILinkProvider {
-  // Regex to match file paths with optional :line:column
-  // Matches: /path/file.ts, ./file.ts, src/file.ts:10:5, ~/file.ts
-  // Also matches extensionless files: Makefile, Dockerfile, src/Makefile
-  private static readonly FILE_PATH_REGEX =
-    /(?:^|[\s"'`([{])((?:[.~]?\/[\w./-]+|[a-zA-Z]:[\\/][\w.\\/-]+|\\\\[^\s"'`]+|[\w.-]+\/[\w./-]+)(?:\.[a-zA-Z0-9]+)?)(?::(\d+))?(?::(\d+))?/g;
-
-  // Common extensionless files that should be recognized
-  private static readonly EXTENSIONLESS_FILES = new Set([
-    'Makefile',
-    'Dockerfile',
-    'Containerfile',
-    'Vagrantfile',
-    'Procfile',
-    'Gemfile',
-    'Rakefile',
-    'Brewfile',
-    'Justfile',
-    'Taskfile',
-    'Earthfile',
-    'CMakeLists',
-    'GNUmakefile',
-    'BSDmakefile'
-  ]);
-
   constructor(
     private readonly terminal: Terminal,
     private readonly terminalId: string,
@@ -70,54 +47,22 @@ class FileLinkProvider implements ILinkProvider {
     }
 
     const lineText = line.translateToString();
-    const links: ILink[] = [];
-
-    // Reset regex state
-    FileLinkProvider.FILE_PATH_REGEX.lastIndex = 0;
-
-    let match = FileLinkProvider.FILE_PATH_REGEX.exec(lineText);
-    while (match !== null) {
-      const fullMatch = match[0];
-      const path = match[1];
-      const lineNum = match[2] ? parseInt(match[2], 10) : undefined;
-      const column = match[3] ? parseInt(match[3], 10) : undefined;
-
-      // Skip paths without extensions unless they're known extensionless files
-      const hasExtension = /\.[a-zA-Z0-9]+$/.test(path);
-      if (!hasExtension) {
-        const filename = path.split('/').pop() ?? '';
-        if (!FileLinkProvider.EXTENSIONLESS_FILES.has(filename)) {
-          continue;
-        }
+    const links: ILink[] = extractFileLinks(lineText).map((match) => ({
+      range: {
+        start: { x: match.start + 1, y: bufferLineNumber },
+        end: { x: match.end + 1, y: bufferLineNumber }
+      },
+      text: match.path,
+      activate: () => {
+        this.postMessage({
+          type: 'openFile',
+          id: this.terminalId,
+          path: match.path,
+          line: match.line,
+          column: match.column
+        });
       }
-
-      // Calculate the start position (skip leading whitespace/quotes captured)
-      const pathStart = match.index + fullMatch.indexOf(path);
-      const pathEnd =
-        pathStart +
-        path.length +
-        (match[2] ? `:${match[2]}`.length : 0) +
-        (match[3] ? `:${match[3]}`.length : 0);
-
-      links.push({
-        range: {
-          start: { x: pathStart + 1, y: bufferLineNumber },
-          end: { x: pathEnd + 1, y: bufferLineNumber }
-        },
-        text: path,
-        activate: () => {
-          this.postMessage({
-            type: 'openFile',
-            id: this.terminalId,
-            path,
-            line: lineNum,
-            column
-          });
-        }
-      });
-      match = FileLinkProvider.FILE_PATH_REGEX.exec(lineText);
-    }
-
+    }));
     callback(links.length > 0 ? links : undefined);
   }
 }
