@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as vscode from 'vscode';
+import { shellClearCommand, shellQuote } from './terminal-shell';
 import type { INodePty, IPty, LaunchSpec, TerminalConfig } from './types';
 
 /**
@@ -204,9 +205,9 @@ export class PtyManager {
 
   private handleAutoRun(pty: IPty, config: TerminalConfig, launch: LaunchSpec): void {
     if (!config.directMode && config.autoRun && launch.command) {
-      const fullCommand = [launch.command, ...launch.args.map(shellQuote)].join(' ');
+      const fullCommand = [launch.command, ...launch.args.map((arg) => shellQuote(arg))].join(' ');
       // Clear screen and run command
-      pty.write(`clear && ${fullCommand}\r`);
+      pty.write(`${shellClearCommand()} && ${fullCommand}\r`);
     }
   }
 
@@ -258,9 +259,4 @@ export class PtyManager {
       this.kill(terminalId);
     }
   }
-}
-
-/** Quotes an argument for the shell when it contains special characters */
-function shellQuote(arg: string): string {
-  return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`;
 }

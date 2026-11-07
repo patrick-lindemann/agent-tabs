@@ -28,6 +28,16 @@ const DEFAULT_PROMPT_PATTERNS: RegExp[] = [
   /esc to cancel/i
 ];
 
+// Keep workspace-configured expressions bounded and reject common sources of
+// catastrophic backtracking. Built-in patterns remain unrestricted.
+function isSafeCustomPattern(pattern: string): boolean {
+  if (pattern.length === 0 || pattern.length > 200) return false;
+  if (/\\(?:1[0-9]|[2-9][0-9])/.test(pattern)) return false;
+  if (/([+*])[^)]*\1/.test(pattern)) return false;
+  if (/\([^)]*[+*][^)]*\)[+*]/.test(pattern)) return false;
+  return true;
+}
+
 // Strip ANSI escape codes from terminal output
 function stripAnsi(text: string): string {
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
@@ -84,10 +94,14 @@ export class PromptDetector {
     const patterns = [...DEFAULT_PROMPT_PATTERNS];
 
     for (const pattern of customPatterns) {
+      if (!isSafeCustomPattern(pattern)) {
+        console.warn('SideMates: rejected unsafe prompt pattern');
+        continue;
+      }
       try {
         patterns.push(new RegExp(pattern));
       } catch {
-        // Skip invalid patterns
+        console.warn('SideMates: rejected invalid prompt pattern');
       }
     }
 
@@ -156,7 +170,12 @@ export class PromptDetector {
     // Check last 200 characters for patterns (sufficient for any prompt)
     const tail = content.slice(-200);
 
-    const isWaiting = this.patterns.some((pattern) => pattern.test(tail));
+    const isWaiting = this.patterns.some((pattern) => {
+      // User-provided expressions may carry the global flag only if this
+      // module is changed later; resetting keeps matching deterministic.
+      pattern.lastIndex = 0;
+      return pattern.test(tail);
+    });
     this.setWaitingState(terminalId, isWaiting);
   }
 

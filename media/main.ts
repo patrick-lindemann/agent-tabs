@@ -32,7 +32,7 @@ class FileLinkProvider implements ILinkProvider {
   // Matches: /path/file.ts, ./file.ts, src/file.ts:10:5, ~/file.ts
   // Also matches extensionless files: Makefile, Dockerfile, src/Makefile
   private static readonly FILE_PATH_REGEX =
-    /(?:^|[\s"'`([{])([.~]?\/[\w./-]+(?:\.[a-zA-Z0-9]+)?|[\w.-]+\/[\w./-]+(?:\.[a-zA-Z0-9]+)?)(?::(\d+))?(?::(\d+))?/g;
+    /(?:^|[\s"'`([{])((?:[.~]?\/[\w./-]+|[a-zA-Z]:[\\/][\w.\\/-]+|\\\\[^\s"'`]+|[\w.-]+\/[\w./-]+)(?:\.[a-zA-Z0-9]+)?)(?::(\d+))?(?::(\d+))?/g;
 
   // Common extensionless files that should be recognized
   private static readonly EXTENSIONLESS_FILES = new Set([
