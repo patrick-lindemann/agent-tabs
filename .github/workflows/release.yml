@@ -123,6 +123,8 @@ jobs:
     environment: marketplace
     permissions:
       contents: read
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -141,17 +143,23 @@ jobs:
           merge-multiple: true
       - name: Publish platform packages
         if: env.VSCE_PAT != ''
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         shell: bash
         run: |
-          args=(--packagePath vsix-artifacts/*.vsix)
-          if [[ "${{ contains(needs.version.outputs.tag, '-') }}" == "true" ]]; then
-            args+=(--pre-release)
+          shopt -s nullglob
+          packages=(vsix-artifacts/*.vsix)
+          if (( ${#packages[@]} == 0 )); then
+            echo "No VSIX packages were downloaded" >&2
+            exit 1
           fi
-          npm run publish:marketplace -- "${args[@]}"
+
+          pre_release=()
+          if [[ "${{ contains(needs.version.outputs.tag, '-') }}" == "true" ]]; then
+            pre_release+=(--pre-release)
+          fi
+          for package in "${packages[@]}"; do
+            echo "Publishing $package"
+            npm run publish:marketplace -- --packagePath "$package" "${pre_release[@]}"
+          done
       - name: Skip publishing without VSCE_PAT
         if: env.VSCE_PAT == ''
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: echo "::notice::VSCE_PAT is not set; skipping VS Code Marketplace publishing."

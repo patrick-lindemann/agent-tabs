@@ -82,7 +82,7 @@ Common terminal editing keys mirror VS Code: `Cmd/Ctrl+Left/Right` moves to line
 
 ## Troubleshooting
 
-- **The terminal does not start after a VS Code update:** the native `node-pty` module must match VS Code's Electron version. Install the latest SideMates release; if building a release, update the Electron version used by the rebuild workflow and `package.json` script.
+- **The terminal does not start after a VS Code update:** the native `node-pty` module must match VS Code's Electron version. Install the latest SideMates release.
 - **A profile is marked not installed:** install its CLI and ensure it is available on the `PATH` inherited by VS Code, then reload the window.
 - **A CLI is not recognized:** check the command in the profile and use `agentTerminal.directMode: false` when it requires shell features.
 

@@ -14,9 +14,7 @@ media/tsconfig.json
 scripts/**
 tsconfig.json
 CONTRIBUTING.md
-.husky/**
 .editorconfig
-.eslintcache
 biome.json
 .github/**
 .claude/**

@@ -46,6 +46,8 @@ A release is made by bumping the version on `develop`, updating `CHANGELOG.md`, 
 2. Creates GitHub release `v<package.json version>` with those VSIX files.
 3. Publishes the platform packages to the VS Code Marketplace when the `marketplace` environment has a `VSCE_PAT` secret with Marketplace Manage scope.
 
+The Electron version used to rebuild native modules is single-sourced in `package.json` under `config.electronVersion`. Update that value when preparing a release for a new VS Code Electron version; the rebuild script reads it automatically.
+
 For example:
 
 ```bash
