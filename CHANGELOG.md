@@ -1,11 +1,21 @@
 # Changelog
 
-All notable changes to the "Agent Terminal" extension (fork of "Claude Terminal Panel") will be documented in this file.
+All notable changes to SideMates will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+
+- Renamed the display name to SideMates: Terminal Agents for VS Code.
+- Reworked the README and added contributor documentation for Marketplace and GitHub releases.
+- Standardized linting and formatting on Biome.
+- Added and documented unit and integration test workflows.
+- Refactored extension internals and prepared Marketplace publishing.
+
+## [1.2.0]
 
 ### Added
 

@@ -13,7 +13,7 @@ media/**/*.ts
 media/tsconfig.json
 scripts/**
 tsconfig.json
-*.md
+CONTRIBUTING.md
 .husky/**
 .editorconfig
 .eslintcache
