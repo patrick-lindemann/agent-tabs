@@ -11,9 +11,7 @@ tsconfig.json
 .husky/**
 .editorconfig
 .eslintcache
-eslint.config.mjs
-.prettierrc.json
-.prettierignore
+biome.json
 .github/**
 .claude/**
 .pi/**

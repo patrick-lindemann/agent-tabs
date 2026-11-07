@@ -6,9 +6,6 @@ media/xterm.css
 .vscode-test/
 .claude/
 
-# ESLint
-.eslintcache
-
 # Editor
 .idea/
 *.swp
