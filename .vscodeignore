@@ -18,3 +18,9 @@ biome.json
 *.vsix
 install.sh
 AGENTS.md
+test/
+coverage/
+.vscode-test*
+vitest.config.ts
+tsconfig.tests.json
+out/

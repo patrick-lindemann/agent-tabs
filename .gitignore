@@ -4,6 +4,8 @@ dist/
 media/main.js
 media/xterm.css
 .vscode-test/
+coverage/
+out/
 .claude/
 
 # Editor

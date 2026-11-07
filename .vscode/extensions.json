@@ -2,6 +2,8 @@
   "recommendations": [
     "biomejs.biome",
     "connor4312.esbuild-problem-matchers",
-    "editorconfig.editorconfig"
+    "editorconfig.editorconfig",
+    "vitest.explorer",
+    "ms-vscode.extension-test-runner"
   ]
 }

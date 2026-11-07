@@ -2,35 +2,46 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [develop]
 
 jobs:
   check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
-
       - name: Install dependencies
         run: npm ci --ignore-scripts
-
       - name: Run lint
         run: npm run lint
-
       - name: Check formatting
         run: npm run format:check
-
       - name: Type check
         run: npm run typecheck
-
       - name: Build
         run: npm run compile
+      - name: Run unit tests
+        run: npm test
 
-      - name: Run tests
-        run: npm test --if-present
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      # Do not use --ignore-scripts: node-pty needs its native build for the
+      # Electron runtime when integration tests launch the extension host.
+      - name: Install dependencies
+        run: npm ci
+      - name: Run integration tests
+        run: xvfb-run -a npm run test:integration
