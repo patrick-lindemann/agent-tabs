@@ -4,7 +4,7 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "outDir": "../dist/media",
-    "rootDir": ".",
+    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,6 +13,6 @@
     "moduleResolution": "bundler",
     "isolatedModules": true
   },
-  "include": ["./**/*.ts"],
+  "include": ["./**/*.ts", "../src/protocol.ts"],
   "exclude": ["node_modules"]
 }

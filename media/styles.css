@@ -10,7 +10,7 @@ body {
   width: 100%;
   overflow: visible;
   background-color: var(--vscode-terminal-background, var(--vscode-editor-background, #1e1e1e));
-  font-family: var(--vscode-editor-font-family, 'SF Mono', Monaco, Menlo, 'Courier New', monospace);
+  font-family: var(--vscode-editor-font-family, "SF Mono", Monaco, Menlo, "Courier New", monospace);
   display: flex;
   flex-direction: column;
 }
@@ -80,6 +80,62 @@ body {
 }
 
 /*
+ * New tab split button, like the one in VS Code's terminal panel: + opens the
+ * first profile, the chevron lists all profiles.
+ */
+#new-tab {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin: 0 4px;
+  border-radius: 5px;
+}
+
+#new-tab:hover {
+  outline: 1px dashed var(--vscode-toolbar-hoverOutline, transparent);
+}
+
+#new-tab button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, #c5c5c5);
+  cursor: pointer;
+}
+
+#new-tab-default {
+  width: 22px;
+}
+
+#new-tab-profile {
+  width: 16px;
+}
+
+#new-tab button:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+#new-tab button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+#new-tab-default svg {
+  width: 16px;
+  height: 16px;
+}
+
+#new-tab-profile svg {
+  width: 14px;
+  height: 14px;
+}
+
+/*
  * Tabs share the strip's width; below their minimum width the strip scrolls.
  * The left border shows the workspace folder's color in multi-root
  * workspaces.
@@ -121,8 +177,9 @@ body {
 }
 
 /*
- * The status icon leads the tab and keeps its space while idle, so labels do
- * not shift. The close button shows on the active tab and on hover.
+ * The agent's logo leads the tab; a status icon takes its place while there
+ * is a status, so labels do not shift. The close button shows on the active
+ * tab and on hover.
  */
 .tab-status {
   display: flex;
@@ -136,10 +193,6 @@ body {
 .tab-status svg {
   width: 14px;
   height: 14px;
-}
-
-.tab:not([data-status]) .tab-status {
-  opacity: 0.6;
 }
 
 .tab-close {
@@ -168,20 +221,20 @@ body {
   visibility: visible;
 }
 
-/* Theme colors reinforce the icon shapes (agentTerminal.statusColors) */
-#tab-bar.status-colors .tab[data-status='working'] {
+/* Theme colors reinforce the icon shapes (agentTabs.statusColors) */
+#tab-bar.status-colors .tab[data-status="working"] {
   --status-color: var(--vscode-charts-blue, #3794ff);
 }
 
-#tab-bar.status-colors .tab[data-status='blocked'] {
+#tab-bar.status-colors .tab[data-status="blocked"] {
   --status-color: var(--vscode-editorWarning-foreground, #cca700);
 }
 
-#tab-bar.status-colors .tab[data-status='done'] {
+#tab-bar.status-colors .tab[data-status="done"] {
   --status-color: var(--vscode-charts-green, #89d185);
 }
 
-#tab-bar.status-colors .tab[data-status='error'] {
+#tab-bar.status-colors .tab[data-status="error"] {
   --status-color: var(--vscode-errorForeground, #f48771);
 }
 
@@ -189,23 +242,30 @@ body {
   color: var(--status-color, currentColor);
 }
 
+/* Needs input, done and failed also color the name, since they need the user */
+#tab-bar.status-colors .tab[data-status="blocked"] .tab-label,
+#tab-bar.status-colors .tab[data-status="done"] .tab-label,
+#tab-bar.status-colors .tab[data-status="error"] .tab-label {
+  color: var(--status-color);
+}
+
 /*
  * Working: the dots fade in turn, like a typing indicator. Subtle on
  * purpose, and static with VS Code's workbench.reduceMotion.
  */
-.tab[data-status='working'] .tab-status circle {
+.tab[data-status="working"] .tab-status circle {
   animation: dot-fade 1.6s ease-in-out infinite;
 }
 
-.tab[data-status='working'] .tab-status circle:nth-child(2) {
+.tab[data-status="working"] .tab-status circle:nth-child(2) {
   animation-delay: 0.2s;
 }
 
-.tab[data-status='working'] .tab-status circle:nth-child(3) {
+.tab[data-status="working"] .tab-status circle:nth-child(3) {
   animation-delay: 0.4s;
 }
 
-.vscode-reduce-motion .tab[data-status='working'] .tab-status circle {
+.vscode-reduce-motion .tab[data-status="working"] .tab-status circle {
   animation: none;
 }
 

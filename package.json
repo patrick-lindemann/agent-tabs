@@ -1,34 +1,50 @@
 {
-  "name": "agent-terminal",
-  "displayName": "Agent Terminal",
-  "description": "A dedicated terminal in the secondary sidebar for running CLI coding agents such as pi",
-  "version": "1.2.0",
+  "name": "agent-tabs",
+  "displayName": "Agent Tabs: Coding Agents in the Sidebar",
+  "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
+  "version": "2.0.0",
   "publisher": "patrick-lindemann",
   "license": "MIT",
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/patrick-lindemann/agent-terminal"
+    "url": "https://github.com/patrick-lindemann/agent-tabs"
+  },
+  "galleryBanner": {
+    "color": "#1f2937",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "qna": "marketplace",
+  "config": {
+    "electronVersion": "43.8.3"
   },
   "bugs": {
-    "url": "https://github.com/patrick-lindemann/agent-terminal/issues"
+    "url": "https://github.com/patrick-lindemann/agent-tabs/issues"
   },
-  "homepage": "https://github.com/patrick-lindemann/agent-terminal#readme",
+  "homepage": "https://github.com/patrick-lindemann/agent-tabs#readme",
   "engines": {
     "vscode": "^1.106.0"
   },
   "keywords": [
-    "pi",
-    "ai",
-    "terminal",
-    "sidebar",
-    "agent",
+    "claude",
+    "codex",
     "gemini",
+    "copilot",
+    "opencode",
+    "pi",
+    "terminal",
+    "agent",
+    "sidebar",
+    "tabs",
+    "ai",
     "aider",
     "cli",
     "assistant"
   ],
   "categories": [
+    "AI",
+    "Chat",
     "Other"
   ],
   "activationEvents": [
@@ -39,17 +55,17 @@
     "viewsContainers": {
       "secondarySidebar": [
         {
-          "id": "agentTerminalContainer",
-          "title": "Agent Terminal",
+          "id": "agentTabsContainer",
+          "title": "Agent Tabs",
           "icon": "$(terminal)"
         }
       ]
     },
     "views": {
-      "agentTerminalContainer": [
+      "agentTabsContainer": [
         {
           "type": "webview",
-          "id": "agentTerminal.terminalView",
+          "id": "agentTabs.terminalView",
           "name": "Terminal",
           "visibility": "visible"
         }
@@ -57,271 +73,198 @@
     },
     "commands": [
       {
-        "command": "agentTerminal.newTab",
+        "command": "agentTabs.newTab",
         "title": "New Terminal Tab",
-        "category": "Agent Terminal",
+        "category": "Agent Tabs",
         "icon": "$(add)"
       },
       {
-        "command": "agentTerminal.newTabWithProfile",
-        "title": "New Terminal Tab with Profile…",
-        "category": "Agent Terminal",
-        "icon": "$(ellipsis)"
+        "command": "agentTabs.newTabWithProfile",
+        "title": "Use Profile…",
+        "category": "Agent Tabs",
+        "icon": "$(chevron-down)"
       },
       {
-        "command": "agentTerminal.newTabWithCommand",
+        "command": "agentTabs.newTabWithCommand",
         "title": "New Terminal Tab with Custom Command…",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
       },
       {
-        "command": "agentTerminal.closeTab",
+        "command": "agentTabs.closeTab",
         "title": "Close Terminal Tab",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
       },
       {
-        "command": "agentTerminal.nextTab",
+        "command": "agentTabs.nextTab",
         "title": "Next Terminal Tab",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
       },
       {
-        "command": "agentTerminal.previousTab",
+        "command": "agentTabs.previousTab",
         "title": "Previous Terminal Tab",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
       },
       {
-        "command": "agentTerminal.switchTab",
+        "command": "agentTabs.switchTab",
         "title": "Switch Tab…",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "title": "Switch to Tab at Position",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
       },
       {
-        "command": "agentTerminal.closeTabFromMenu",
+        "command": "agentTabs.closeTabFromMenu",
         "title": "Close",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
       },
       {
-        "command": "agentTerminal.closeOtherTabs",
+        "command": "agentTabs.closeOtherTabs",
         "title": "Close Others",
-        "category": "Agent Terminal"
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.manageProfiles",
+        "title": "Manage Profiles",
+        "category": "Agent Tabs"
       }
     ],
     "keybindings": [
       {
-        "command": "agentTerminal.newTab",
+        "command": "agentTabs.newTab",
         "key": "ctrl+shift+t",
         "mac": "cmd+t",
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.closeTab",
+        "command": "agentTabs.closeTab",
         "key": "ctrl+shift+w",
         "mac": "cmd+w",
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.nextTab",
+        "command": "agentTabs.nextTab",
         "key": "ctrl+pagedown",
         "mac": "cmd+alt+right",
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.previousTab",
+        "command": "agentTabs.previousTab",
         "key": "ctrl+pageup",
         "mac": "cmd+alt+left",
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchTab",
+        "command": "agentTabs.switchTab",
         "key": "ctrl+tab",
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+1",
         "mac": "cmd+1",
         "args": 1,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+2",
         "mac": "cmd+2",
         "args": 2,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+3",
         "mac": "cmd+3",
         "args": 3,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+4",
         "mac": "cmd+4",
         "args": 4,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+5",
         "mac": "cmd+5",
         "args": 5,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+6",
         "mac": "cmd+6",
         "args": 6,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+7",
         "mac": "cmd+7",
         "args": 7,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+8",
         "mac": "cmd+8",
         "args": 8,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTerminal.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+9",
         "mac": "cmd+9",
         "args": 9,
-        "when": "agentTerminal.focused || focusedView == 'agentTerminal.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       }
     ],
     "menus": {
-      "view/title": [
-        {
-          "command": "agentTerminal.newTab",
-          "when": "view == agentTerminal.terminalView",
-          "group": "navigation@1"
-        },
-        {
-          "command": "agentTerminal.newTabWithProfile",
-          "when": "view == agentTerminal.terminalView",
-          "group": "navigation@2"
-        }
-      ],
       "webview/context": [
         {
-          "command": "agentTerminal.closeTabFromMenu",
-          "when": "webviewId == 'agentTerminal.terminalView' && webviewSection == 'tab'",
+          "command": "agentTabs.closeTabFromMenu",
+          "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
           "group": "2_close@1"
         },
         {
-          "command": "agentTerminal.closeOtherTabs",
-          "when": "webviewId == 'agentTerminal.terminalView' && webviewSection == 'tab'",
+          "command": "agentTabs.closeOtherTabs",
+          "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
           "group": "2_close@2"
         }
       ],
       "commandPalette": [
         {
-          "command": "agentTerminal.closeTabFromMenu",
+          "command": "agentTabs.closeTabFromMenu",
           "when": "false"
         },
         {
-          "command": "agentTerminal.closeOtherTabs",
+          "command": "agentTabs.closeOtherTabs",
           "when": "false"
         },
         {
-          "command": "agentTerminal.switchToTabAt",
+          "command": "agentTabs.switchToTabAt",
           "when": "false"
         }
       ]
     },
     "configuration": {
-      "title": "Agent Terminal",
+      "title": "Agent Tabs",
       "properties": {
-        "agentTerminal.profiles": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "id"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string",
-                "description": "`pi`, `claude` or `codex` for a built-in agent with its logo and status support, or any other name for a custom profile",
-                "examples": [
-                  "pi",
-                  "claude",
-                  "codex"
-                ]
-              },
-              "label": {
-                "type": "string",
-                "description": "Name shown in the menu and on tabs; defaults to the agent's name or the id"
-              },
-              "command": {
-                "type": "string",
-                "description": "Executable or path; required for custom profiles"
-              },
-              "args": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Arguments, added after the options the extension needs for status reporting"
-              },
-              "env": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "description": "Environment variables, added to agentTerminal.env"
-              }
-            }
-          },
-          "default": [
-            {
-              "id": "pi"
-            },
-            {
-              "id": "claude"
-            },
-            {
-              "id": "codex"
-            }
-          ],
-          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+` and when the view starts. Leave out agents you do not use. `pi`, `claude` and `codex` are built in and only need an `id`; other entries need a `command`.\n\nExample: `[{ \"id\": \"pi\", \"command\": \"/Users/me/bin/pi\" }, { \"id\": \"claude\", \"args\": [\"--model\", \"opus\"] }, { \"id\": \"aider\", \"label\": \"Aider\", \"command\": \"aider\" }]`"
-        },
-        "agentTerminal.autoRun": {
-          "type": "boolean",
-          "default": true,
-          "description": "With directMode off: run the profile's command in the shell when a tab opens"
-        },
-        "agentTerminal.shell": {
-          "type": "string",
-          "default": "",
-          "description": "Custom shell path (empty = system default)"
-        },
-        "agentTerminal.env": {
+        "agentTabs.profiles": {
           "type": "object",
           "default": {},
-          "description": "Additional environment variables"
+          "additionalProperties": {
+            "type": "string"
+          },
+          "markdownDescription": "Profiles for new tabs: a name and the command line it runs, in the order listed here. The first one opens with `+`; `⌄` lists all of them. Write arguments as in a shell, with quotes where needed. To set environment variables for one profile, put them before the command with `env`, e.g. `env NAME=value command` (macOS and Linux); `#agentTabs.env#` sets them for all profiles. A known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nWhen empty, there is a profile for each known agent that is installed.",
+          "order": 0
         },
-        "agentTerminal.directMode": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run command directly without shell wrapper (cleaner output, but no shell features)"
-        },
-        "agentTerminal.onExit": {
+        "agentTabs.onExit": {
           "type": "string",
           "enum": [
             "auto",
@@ -336,109 +279,143 @@
             "Keep the tab open; press Enter to restart or Esc to close."
           ],
           "default": "auto",
-          "description": "What happens when the terminal's process exits (e.g. after /exit)"
+          "description": "What happens when the terminal's process exits (e.g. after /exit)",
+          "order": 1
         },
-        "agentTerminal.programStatus": {
+        "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show agent status (working, needs input, done, error) on tabs. Agents such as pi, Claude Code and Codex report it through the [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status). Other programs fall back to `#agentTerminal.promptNotification#`."
+          "description": "Ask before closing a tab whose agent is working or waiting for input, since closing ends its session.",
+          "order": 2
         },
-        "agentTerminal.autoTabTitles": {
+        "agentTabs.autoTabTitles": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Name tabs with a short key from the agent's terminal title, e.g. `refactor-api-client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the agent's name (pi, Claude Code, Codex)."
+          "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the profile's name.",
+          "order": 3
         },
-        "agentTerminal.tabTitleWords": {
+        "agentTabs.tabTitleWords": {
           "type": "integer",
           "default": 4,
           "minimum": 1,
           "maximum": 12,
-          "markdownDescription": "Maximum number of words in a tab's key with `#agentTerminal.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `refactor-api-client-v2`. Filler words such as `the` or `die` are left out for about 60 languages."
+          "markdownDescription": "Maximum number of words in a tab's name with `#agentTabs.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages.",
+          "order": 4
         },
-        "agentTerminal.statusColors": {
+        "agentTabs.monochromeIcons": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show agent logos in the text color instead of their brand colors.",
+          "order": 5
+        },
+        "agentTabs.programStatus": {
           "type": "boolean",
           "default": true,
-          "description": "Color the status icons on tabs (working, needs input, done, failed). The icons' shapes show the status without color."
+          "markdownDescription": "Show agent status (working, needs input, done, error) on tabs. Agents such as pi, Claude Code and Codex report it through the [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status). Other programs fall back to `#agentTabs.promptNotification#`.",
+          "order": 6
         },
-        "agentTerminal.confirmClose": {
+        "agentTabs.statusColors": {
           "type": "boolean",
           "default": true,
-          "description": "Ask before closing a tab whose agent is working or waiting for input, since closing ends its session."
+          "description": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color.",
+          "order": 7
         },
-        "agentTerminal.promptNotification": {
+        "agentTabs.promptNotification": {
           "type": "boolean",
           "default": true,
-          "description": "Show notification indicator on tab when terminal is waiting for user input"
+          "description": "Show notification indicator on tab when terminal is waiting for user input",
+          "order": 8
         },
-        "agentTerminal.promptNotificationDelay": {
+        "agentTabs.promptNotificationDelay": {
           "type": "number",
           "default": 300,
           "minimum": 100,
           "maximum": 2000,
-          "description": "Delay in milliseconds before showing the notification after output stops"
+          "description": "Delay in milliseconds before showing the notification after output stops",
+          "order": 9
         },
-        "agentTerminal.promptPatterns": {
+        "agentTabs.promptPatterns": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [],
-          "description": "Additional regex patterns to detect when terminal is waiting for input (e.g., '^mybot> $'). Built-in patterns detect most CLI AI tools automatically."
+          "description": "Additional regex patterns to detect when terminal is waiting for input (e.g., '^mybot> $'). Built-in patterns detect most CLI AI tools automatically.",
+          "order": 10
+        },
+        "agentTabs.directMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run command directly without shell wrapper (cleaner output, but no shell features)",
+          "order": 11
+        },
+        "agentTabs.shell": {
+          "type": "string",
+          "default": "",
+          "description": "Custom shell path (empty = system default)",
+          "order": 12
+        },
+        "agentTabs.autoRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "With directMode off: run the profile's command in the shell when a tab opens",
+          "order": 13
+        },
+        "agentTabs.env": {
+          "type": "object",
+          "default": {},
+          "description": "Additional environment variables",
+          "order": 14
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run lint && npm run compile",
+    "vscode:prepublish": "npm run typecheck && npm run compile && npm run icons",
     "compile": "npm run compile:extension && npm run copy:xterm-css && npm run compile:media",
     "compile:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:node-pty --format=cjs --platform=node",
-    "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser",
+    "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser --loader:.svg=text",
     "copy:xterm-css": "node -e \"require('fs').copyFileSync('node_modules/@xterm/xterm/css/xterm.css', 'media/xterm.css')\"",
-    "watch": "npm run compile:extension -- --watch",
-    "rebuild": "npx @electron/rebuild --version 43.8.3",
+    "watch": "concurrently -k \"npm:watch:extension\" \"npm:watch:media\"",
+    "rebuild": "node scripts/rebuild.js",
     "postinstall": "npm run rebuild",
     "package": "vsce package",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"media/**/*.{ts,css}\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"media/**/*.{ts,css}\"",
-    "prepare": "husky"
-  },
-  "lint-staged": {
-    "src/**/*.ts": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "media/**/*.ts": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "media/**/*.css": [
-      "prettier --write"
-    ],
-    "*.{json,md}": [
-      "prettier --write"
-    ]
+    "publish:marketplace": "vsce publish",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome check --write .",
+    "format:check": "biome format .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p media/tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
+    "watch:extension": "npm run compile:extension -- --watch",
+    "watch:media": "npm run compile:media -- --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "sh scripts/headless.sh",
+    "test:integration:visible": "npm run compile:tests && vscode-test",
+    "compile:tests": "npm run compile && tsc -p tsconfig.tests.json",
+    "icons": "node scripts/icons.js"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.6",
     "@electron/rebuild": "^4.0.2",
-    "@eslint/js": "^9.39.2",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.0.0",
     "@types/stopword": "^2.0.3",
     "@types/vscode": "^1.106.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "4.1.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
-    "esbuild": "^0.25.0",
-    "eslint": "^9.39.2",
-    "eslint-config-prettier": "^10.0.0",
-    "globals": "^16.0.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.0.0",
-    "prettier": "^3.7.4",
+    "concurrently": "^9.2.1",
+    "esbuild": "^0.28.2",
     "stopword": "^3.1.5",
     "typescript": "^5.3.0",
-    "typescript-eslint": "^8.52.0"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   },
   "dependencies": {
     "node-pty": "^1.0.0"

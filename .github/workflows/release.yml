@@ -3,27 +3,35 @@ name: Build and Release
 on:
   push:
     branches: [main]
+  # Dry runs: check and build every platform package without releasing or
+  # publishing. Release pull requests get one automatically; any branch can
+  # be run by hand (Actions > Build and Release > Run workflow).
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
+# Releases run one at a time; a new dry run of a branch replaces the last one
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'push' && 'release' || format('release-dry-run-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
-# Electron version used by VS Code (Help > About). node-pty uses N-API, so the
-# build normally keeps working across Electron updates; bump this when it doesn't.
-env:
-  ELECTRON_VERSION: "43.8.3"
+permissions:
+  contents: read
 
 jobs:
+  # Pull requests already run CI
+  checks:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/ci.yml
+
   version:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       exists: ${{ steps.version.outputs.exists }}
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
+        uses: actions/checkout@v5
       - name: Read version and check for an existing release
         id: version
         env:
@@ -39,17 +47,26 @@ jobs:
           fi
 
   build:
-    needs: version
-    if: needs.version.outputs.exists == 'false'
+    needs: [checks, version]
+    # A dry run builds even when the version was already released
+    if: >-
+      !cancelled() && needs.version.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.checks.result) &&
+      (needs.version.outputs.exists == 'false' || github.event_name != 'push')
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Build in an older Debian so pty.node only needs glibc 2.31,
-          # not the runner's much newer glibc
+          # Build in an older Debian so pty.node only needs glibc 2.31.
           - os: ubuntu-latest
             target: linux-x64
             arch: x64
+            container: node:22-bullseye
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            arch: arm64
             container: node:22-bullseye
           - os: macos-latest
             target: darwin-x64
@@ -57,33 +74,27 @@ jobs:
           - os: macos-latest
             target: darwin-arm64
             arch: arm64
-          # windows-2022 ships a Visual Studio release node-gyp can detect
           - os: windows-2022
             target: win32-x64
             arch: x64
-
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
+        uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
-          cache: "npm"
-
+          cache: npm
       - name: Install dependencies (skip rebuild)
         run: npm ci --ignore-scripts
-
       - name: Rebuild native modules for Electron
-        run: npx @electron/rebuild --version ${{ env.ELECTRON_VERSION }} --arch ${{ matrix.arch }}
-
+        run: npm run rebuild -- --arch ${{ matrix.arch }}
+      - name: Prune native prebuilds
+        run: node scripts/prune.js ${{ matrix.target }}
       - name: Package extension
-        run: npx @vscode/vsce package --target ${{ matrix.target }}
-
+        run: npm run package -- --target ${{ matrix.target }}
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -92,30 +103,26 @@ jobs:
 
   release:
     needs: [version, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
+        uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
-          cache: "npm"
-
+          cache: npm
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: vsix-artifacts
           pattern: vsix-*
           merge-multiple: true
-
       - name: List artifacts
         run: ls -la vsix-artifacts/
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -127,3 +134,44 @@ jobs:
           prerelease: ${{ contains(needs.version.outputs.tag, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Trusted publishing: the Marketplace accepts this workflow file
+  # (release.yml) in the production environment instead of a stored token
+  marketplace:
+    needs: [version, release]
+    if: github.event_name == 'push' && needs.version.outputs.exists == 'false' && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install publishing tool
+        run: npm ci --ignore-scripts
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: vsix-artifacts
+          pattern: vsix-*
+          merge-multiple: true
+      - name: Publish platform packages
+        shell: bash
+        run: |
+          shopt -s nullglob
+          packages=(vsix-artifacts/*.vsix)
+          if (( ${#packages[@]} != 5 )); then
+            echo "Expected 5 platform packages, found ${#packages[@]}" >&2
+            exit 1
+          fi
+          pre_release=()
+          if [[ "${{ contains(needs.version.outputs.tag, '-') }}" == "true" ]]; then
+            pre_release+=(--pre-release)
+          fi
+          npm run publish:marketplace -- --oidc --packagePath "${packages[@]}" "${pre_release[@]}"

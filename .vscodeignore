@@ -1,22 +1,61 @@
-.vscode/**
-.vscode-test/**
+# The package holds the bundled extension (dist/), the webview (media/),
+# node-pty's runtime files, the PNG icons and the documents users see.
+
+# Sources and build configuration
 src/**
-node_modules/**
-!node_modules/node-pty/**
-.gitignore
+media/**/*.ts
+media/tsconfig.json
+media/**/*.svg
+media/screenshots/**
+scripts/**
 *.map
 *.ts
-tsconfig.json
-*.md
-.husky/**
+tsconfig*.json
+biome.json
 .editorconfig
-.eslintcache
-eslint.config.mjs
-.prettierrc.json
-.prettierignore
+
+# Tests
+test/**
+coverage/**
+out/**
+vitest.config.mts
+.vscode-test/**
+.vscode-test.mjs
+
+# Repository and editor files
 .github/**
+.vscode/**
 .claude/**
 .pi/**
-*.vsix
-install.sh
+.gitignore
 AGENTS.md
+CONTRIBUTING.md
+install.sh
+*.vsix
+
+# Dependencies: only node-pty's runtime files; everything else is bundled
+node_modules/**
+!node_modules/node-pty/package.json
+!node_modules/node-pty/lib/conpty_console_list_agent.js
+!node_modules/node-pty/lib/eventEmitter2.js
+!node_modules/node-pty/lib/index.js
+!node_modules/node-pty/lib/interfaces.js
+!node_modules/node-pty/lib/terminal.js
+!node_modules/node-pty/lib/types.js
+!node_modules/node-pty/lib/unixTerminal.js
+!node_modules/node-pty/lib/utils.js
+!node_modules/node-pty/lib/windowsConoutConnection.js
+!node_modules/node-pty/lib/windowsPtyAgent.js
+!node_modules/node-pty/lib/windowsTerminal.js
+!node_modules/node-pty/lib/shared/conout.js
+!node_modules/node-pty/lib/worker/conoutSocketWorker.js
+!node_modules/node-pty/prebuilds/**/*.node
+!node_modules/node-pty/prebuilds/**/spawn-helper
+!node_modules/node-pty/prebuilds/**/*.dll
+!node_modules/node-pty/prebuilds/**/*.exe
+!node_modules/node-pty/build/Release/*.node
+!node_modules/node-pty/build/Release/spawn-helper
+!node_modules/node-pty/build/Release/*.dll
+!node_modules/node-pty/build/Release/*.exe
+!node_modules/node-pty/build/Release/*/*.dll
+!node_modules/node-pty/build/Release/*/*.exe

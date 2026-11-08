@@ -1,15 +1,26 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
-*.vsix
+out/
 media/main.js
 media/xterm.css
+# Rendered from the SVG files by `npm run icons`
+media/icon.png
+media/icons/*.png
+
+# Packages
+*.vsix
+
+# Tests
 .vscode-test/
+coverage/
+
+# Agents
 .claude/
 
-# ESLint
-.eslintcache
-
-# Editor
+# Editors
 .idea/
 *.swp
 *.swo
