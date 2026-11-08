@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { PROGRAM_STATUS_REPLY, TerminalSignalParser, isTerminalReport } from '../../src/terminal/signals';
+import {
+  isTerminalReport,
+  PROGRAM_STATUS_REPLY,
+  TerminalSignalParser
+} from '../../src/terminal/signals';
 
 describe('terminal signals', () => {
   it('parses status, title, notification and bell', () => {
     const p = new TerminalSignalParser();
-    const result = p.scan('\x1b]7501;state=working:msg=SGVsbG8=\x1b\\\x1b]2;Build API\x07\x1b]9;approve\x07\x07');
+    const result = p.scan(
+      '\x1b]7501;state=working:msg=SGVsbG8=\x1b\\\x1b]2;Build API\x07\x1b]9;approve\x07\x07'
+    );
     expect(result.reports).toEqual([{ state: 'working', message: 'Hello' }]);
     expect(result.title).toBe('Build API');
     expect(result.notifications).toEqual(['approve']);

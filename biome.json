@@ -9,6 +9,10 @@
     "includes": [
       "src/**/*.ts",
       "media/**/*.ts",
+      "test/**/*.ts",
+      "*.ts",
+      "*.mjs",
+      "scripts/**/*.js",
       "media/**/*.css",
       "**/*.json",
       "**/*.jsonc",

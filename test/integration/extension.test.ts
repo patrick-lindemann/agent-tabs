@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
-import * as vscode from 'vscode';
 import { suite, test } from 'mocha';
+import * as vscode from 'vscode';
 
 suite('SideMates extension', () => {
   test('activates and contributes the terminal view and commands', async () => {

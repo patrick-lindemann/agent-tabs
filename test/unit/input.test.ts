@@ -11,7 +11,13 @@ import {
 import type { CommandFlag } from '../../src/types';
 
 const flags: CommandFlag[] = [
-  { flag: '--dir', shortFlag: '-d', description: 'Directory', takesValue: true, valueHint: '<dir>' },
+  {
+    flag: '--dir',
+    shortFlag: '-d',
+    description: 'Directory',
+    takesValue: true,
+    valueHint: '<dir>'
+  },
   { flag: '--file', description: 'File', takesValue: true, valueHint: '<file>' },
   { flag: '--name', description: 'Name', takesValue: true, valueHint: '<name>' },
   { flag: '--verbose', shortFlag: '-v', description: 'Verbose' },
@@ -25,7 +31,10 @@ describe('command picker input', () => {
       existingArgs: ['--verbose'],
       partial: '--mo'
     });
-    expect(parseInput('claude --model=x')).toMatchObject({ partial: '', existingArgs: ['--model=x'] });
+    expect(parseInput('claude --model=x')).toMatchObject({
+      partial: '',
+      existingArgs: ['--model=x']
+    });
   });
 
   it.each([
