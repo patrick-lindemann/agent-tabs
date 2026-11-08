@@ -21,7 +21,7 @@ AGENTS.md
 test/
 coverage/
 .vscode-test*
-vitest.config.ts
+vitest.config.mts
 tsconfig.tests.json
 out/
 

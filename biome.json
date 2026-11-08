@@ -12,6 +12,7 @@
       "test/**/*.ts",
       "*.ts",
       "*.mjs",
+      "*.mts",
       "scripts/**/*.js",
       "media/**/*.css",
       "**/*.json",
