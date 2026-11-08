@@ -25,14 +25,18 @@ export interface ProgramStatusReport {
   message?: string;
 }
 
+/** A status report, notification or bell, in the order the program wrote them */
+export type StatusEvent =
+  | { type: 'report'; report: ProgramStatusReport }
+  | { type: 'notification'; text: string }
+  | { type: 'bell' };
+
 export interface TerminalSignals {
-  reports: ProgramStatusReport[];
+  events: StatusEvent[];
   /** Number of OSC 7501 support queries that need a reply */
   queries: number;
   /** Last window title in the chunk */
   title?: string;
-  notifications: string[];
-  bell: boolean;
 }
 
 export const PROGRAM_STATUS_REPLY = '\x1b]7501;?\x1b\\';
@@ -63,16 +67,16 @@ export class TerminalSignalParser {
   private pending = '';
 
   scan(data: string): TerminalSignals {
-    const signals: TerminalSignals = { reports: [], queries: 0, notifications: [], bell: false };
+    const signals: TerminalSignals = { events: [], queries: 0 };
     const text = this.pending + data;
     this.pending = '';
 
     let position = 0;
     while (position < text.length) {
       const osc = text.indexOf(OSC, position);
-      const bellEnd = osc === -1 ? text.length : osc;
-      if (text.indexOf('\x07', position) !== -1 && text.indexOf('\x07', position) < bellEnd) {
-        signals.bell = true;
+      const bell = text.indexOf('\x07', position);
+      if (bell !== -1 && bell < (osc === -1 ? text.length : osc)) {
+        signals.events.push({ type: 'bell' });
       }
       if (osc === -1) {
         // Keep a trailing ESC that may start the next sequence
@@ -103,13 +107,13 @@ export class TerminalSignalParser {
         signals.queries++;
       } else {
         const report = parseReport(payload);
-        if (report) signals.reports.push(report);
+        if (report) signals.events.push({ type: 'report', report });
       }
     } else if (code === '0' || code === '2') {
       signals.title = payload;
     } else if (code === '9' && payload && !/^\d+;/.test(payload)) {
       // `9;4;…` is ConEmu progress, not a notification
-      signals.notifications.push(payload);
+      signals.events.push({ type: 'notification', text: payload });
     }
   }
 }

@@ -1,4 +1,4 @@
-import { labelFromTitle } from '../profiles';
+import { idleWhenDone, labelFromTitle } from '../profiles';
 import type { TerminalInstance } from '../types';
 import {
   PROGRAM_STATUS_REPLY,
@@ -9,18 +9,22 @@ import {
 
 /**
  * Applies status signals from a tab's output and returns whether the tab
- * changed. `inView` is whether the tab is shown, so a result arriving there
- * counts as seen.
+ * changed. Signals apply in the order the program wrote them, except that
+ * an idle report also sees a notification right after it in the same chunk,
+ * so a Codex turn counts as done in either order. `inView` is whether the
+ * tab is shown, so a result arriving there counts as seen.
  *
  * - OSC 7501 reports set the tab status. A finished run in a tab that is
  *   not in view stays marked until the tab is shown.
  * - A bell while working means a dialog asks something the agent did not
  *   report, e.g. pi's ask_user_question tool. It counts as blocked until
  *   the user types or the agent reports again.
- * - Codex reports `working` then `idle` instead of `done`. With the
- *   profile's options it writes an OSC 9 notification first when the turn
- *   completed, so idle after a notification is done, a bare idle is a
- *   cancel. A plan prompt notification asks for input instead.
+ * - `idle` right after `working` is a cancel, as the protocol asks for,
+ *   except for agents that report `idle` instead of `done` (OpenCode).
+ *   Codex before 0.163 also did; with the profile's options it writes an
+ *   OSC 9 notification first when the turn completed, so idle after a
+ *   notification is done. A plan prompt notification asks for input
+ *   instead.
  */
 export function applySignals(
   instance: TerminalInstance,
@@ -28,16 +32,25 @@ export function applySignals(
   inView: boolean
 ): boolean {
   let changed = false;
-  if (signals.notifications.length > 0) {
-    instance.lastNotification = signals.notifications[signals.notifications.length - 1];
-  }
-  for (const report of signals.reports) {
-    applyProgramStatus(instance, report, inView);
-    changed = true;
-  }
-  if (signals.bell && instance.programState === 'working' && !instance.needsInput) {
-    instance.needsInput = true;
-    changed = true;
+  const { events } = signals;
+  for (const [index, event] of events.entries()) {
+    if (event.type === 'notification') {
+      instance.lastNotification = event.text;
+    } else if (event.type === 'report') {
+      const next = events[index + 1];
+      if (event.report.state === 'idle' && next?.type === 'notification') {
+        instance.lastNotification ??= next.text;
+      }
+      applyProgramStatus(instance, event.report, inView);
+      changed = true;
+    } else if (
+      event.type === 'bell' &&
+      instance.programState === 'working' &&
+      !instance.needsInput
+    ) {
+      instance.needsInput = true;
+      changed = true;
+    }
   }
   return changed;
 }
@@ -76,7 +89,7 @@ export function applyProgramStatus(
       instance.statusMessage = notification;
       return;
     }
-    const finished = instance.launch.agent !== 'codex' || notification !== undefined;
+    const finished = idleWhenDone(instance.launch.agent) || notification !== undefined;
     if (finished && !inView) {
       instance.unseen = 'done';
     }
