@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
-import { AgentTerminalViewProvider } from './webview/provider';
+import { ViewProvider } from './webview/provider';
 
-let terminalProvider: AgentTerminalViewProvider | undefined;
+let terminalProvider: ViewProvider | undefined;
 
 interface TabContext {
   terminalId: string;
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  terminalProvider = new AgentTerminalViewProvider(context.extensionUri);
+  terminalProvider = new ViewProvider(context.extensionUri);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('agentTerminal.terminalView', terminalProvider, {

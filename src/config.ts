@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { fromLegacyProfiles, resolveProfiles } from './profiles';
+import type { PromptDetectorConfig } from './terminal/prompt';
 import type { OnExitAction, TerminalConfig } from './types';
 
 /**
@@ -90,4 +91,14 @@ export class ConfigManager {
     });
     this.disposables.length = 0;
   }
+}
+
+/** Settings of the pattern-based prompt detector, read fresh on each change */
+export function promptConfig(): PromptDetectorConfig {
+  const config = vscode.workspace.getConfiguration('agentTerminal');
+  return {
+    enabled: config.get<boolean>('promptNotification', true),
+    showDelay: config.get<number>('promptNotificationDelay', 300),
+    customPatterns: config.get<string[]>('promptPatterns', [])
+  };
 }

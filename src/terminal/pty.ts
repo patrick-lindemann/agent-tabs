@@ -24,7 +24,6 @@ export interface WorkingDirectorySelection {
 
 /**
  * Manages PTY process lifecycle.
- * Extracted from AgentTerminalViewProvider._startTerminalForInstance().
  */
 export class PtyManager {
   private nodePty: INodePty | undefined;

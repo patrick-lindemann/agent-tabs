@@ -3,7 +3,7 @@ import { isWebviewMessage } from '../validate';
 
 /**
  * Context interface that message handlers use to perform actions.
- * Implemented by AgentTerminalViewProvider.
+ * Implemented by ViewProvider.
  */
 export interface MessageHandlerContext {
   handleReady(cols: number, rows: number): void;
