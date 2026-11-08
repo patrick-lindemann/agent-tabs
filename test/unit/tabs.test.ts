@@ -428,6 +428,15 @@ describe('process exit', () => {
     expect(tabs.state.isBusy(instance(id))).toBe(false);
   });
 
+  it('describes a failed exit without the message of the last report', async () => {
+    const { tabs, instance } = setup();
+    const id = await tabs.create();
+    await tabs.create();
+    spawned[0].emit(status(`state=blocked:msg=${Buffer.from('Allow Bash?').toString('base64')}`));
+    spawned[0].exit(1);
+    expect(tabs.state.describeStatus(instance(id))).toBe('Failed');
+  });
+
   it('shows no status after a clean exit in a background tab', async () => {
     const { tabs, status: tabStatus } = setup();
     const id = await tabs.create();

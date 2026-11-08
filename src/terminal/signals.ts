@@ -61,6 +61,7 @@ const OSC = '\x1b]';
 const MAX_SEQUENCE_LENGTH = 4096;
 const MAX_MESSAGE_LENGTH = 2732;
 const STATES = new Set<string>(['idle', 'working', 'blocked', 'done', 'error', 'clear']);
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
 
 export class TerminalSignalParser {
@@ -143,7 +144,7 @@ function parseReport(body: string): ProgramStatusReport | undefined {
   let message: string | undefined;
   const encoded = pairs.get('msg');
   if (encoded) {
-    if (encoded.length > MAX_MESSAGE_LENGTH) return undefined;
+    if (encoded.length > MAX_MESSAGE_LENGTH || !BASE64.test(encoded)) return undefined;
     message = Buffer.from(encoded, 'base64').toString('utf8');
     if (CONTROL_CHARACTERS.test(message)) return undefined;
   }

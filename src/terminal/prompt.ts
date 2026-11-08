@@ -110,6 +110,13 @@ export class PromptDetector {
 
   updateConfig(config: PromptDetectorConfig): void {
     this.config = config;
+    if (!config.enabled) {
+      // Nothing would clear a prompt shown before
+      for (const id of [...this.waitingState.keys()]) {
+        this.clearTimer(id);
+        this.setWaitingState(id, false);
+      }
+    }
     // Rebuild patterns if custom patterns changed
     const newPatterns = this.buildPatterns(config.customPatterns);
     this.patterns.length = 0;

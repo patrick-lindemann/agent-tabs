@@ -68,6 +68,7 @@ export function applyProgramStatus(
   if (report.state === 'clear') {
     instance.programState = undefined;
     instance.statusMessage = undefined;
+    instance.lastNotification = undefined;
     return;
   }
 

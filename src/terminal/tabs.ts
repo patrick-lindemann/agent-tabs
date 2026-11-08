@@ -312,6 +312,7 @@ export class Tabs {
 
     instance.exited = true;
     instance.programState = undefined;
+    instance.statusMessage = undefined;
     instance.needsInput = false;
     if (exitCode !== 0 && !this.isInView(instance)) {
       instance.unseen = 'error';

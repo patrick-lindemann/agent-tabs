@@ -172,6 +172,14 @@ describe('status details', () => {
     expect(t.status).toBe('working');
   });
 
+  it('forgets an earlier notification when the agent clears its status', () => {
+    const t = tab('codex');
+    t.output(status('state=working') + notify('Approval requested: rm -rf build'));
+    t.output(status('state=clear'));
+    t.output(status('state=blocked:kind=question'));
+    expect(t.text).toBe('Needs input');
+  });
+
   it('forgets the status when the agent clears it', () => {
     const t = tab('pi');
     t.output(status('state=blocked:kind=question'));

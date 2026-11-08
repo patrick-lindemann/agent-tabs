@@ -123,6 +123,14 @@ describe('timing', () => {
     expect(changes).toEqual([]);
   });
 
+  it('clears a shown prompt when turned off', () => {
+    const d = detector();
+    d.onData('tab', 'Continue?');
+    vi.advanceTimersByTime(DELAY);
+    d.updateConfig({ enabled: false, showDelay: DELAY, customPatterns: [] });
+    expect(changes.at(-1)).toEqual(['tab', false]);
+  });
+
   it('applies new settings', () => {
     const d = detector();
     d.updateConfig({ enabled: true, showDelay: DELAY, customPatterns: ['ready\\$ $'] });

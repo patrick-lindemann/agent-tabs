@@ -55,7 +55,8 @@ describe('program status reports', () => {
     ['a child clear', 'state=clear:id=ses_1'],
     ['a control character in the message', `state=done:msg=${msg('a\x1b[31mb')}`],
     ['a C1 control in the message', `state=done:msg=${msg('a\u009bb')}`],
-    ['an oversized message', `state=done:msg=${'A'.repeat(2733)}`]
+    ['an oversized message', `state=done:msg=${'A'.repeat(2733)}`],
+    ['a message that is not base64', 'state=done:msg=not base64!']
   ])('drops a report with %s', (_, body) => {
     expect(reports(scan(status(body)))).toEqual([]);
   });
