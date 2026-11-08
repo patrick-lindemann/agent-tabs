@@ -135,15 +135,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Trusted publishing: the Marketplace accepts this workflow file
+  # (publish.yml) in the production environment instead of a stored token
   marketplace:
     needs: [version, release]
     if: github.event_name == 'push' && needs.version.outputs.exists == 'false' && needs.release.result == 'success'
     runs-on: ubuntu-latest
-    environment: marketplace
+    environment: production
     permissions:
       contents: read
-    env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -161,24 +162,16 @@ jobs:
           pattern: vsix-*
           merge-multiple: true
       - name: Publish platform packages
-        if: env.VSCE_PAT != ''
         shell: bash
         run: |
           shopt -s nullglob
           packages=(vsix-artifacts/*.vsix)
-          if (( ${#packages[@]} == 0 )); then
-            echo "No VSIX packages were downloaded" >&2
+          if (( ${#packages[@]} != 5 )); then
+            echo "Expected 5 platform packages, found ${#packages[@]}" >&2
             exit 1
           fi
-
           pre_release=()
           if [[ "${{ contains(needs.version.outputs.tag, '-') }}" == "true" ]]; then
             pre_release+=(--pre-release)
           fi
-          for package in "${packages[@]}"; do
-            echo "Publishing $package"
-            npm run publish:marketplace -- --packagePath "$package" "${pre_release[@]}"
-          done
-      - name: Skip publishing without VSCE_PAT
-        if: env.VSCE_PAT == ''
-        run: echo "::notice::VSCE_PAT is not set; skipping VS Code Marketplace publishing."
+          npm run publish:marketplace -- --oidc --packagePath "${packages[@]}" "${pre_release[@]}"
