@@ -136,7 +136,7 @@ function agentOf(word: string): AgentId | undefined {
 }
 
 /**
- * Resolves `sideMates.profiles`, a table of names and command lines, in
+ * Resolves `agentTabs.profiles`, a table of names and command lines, in
  * the order of the settings. Invalid entries are skipped and described in
  * `problems`.
  *

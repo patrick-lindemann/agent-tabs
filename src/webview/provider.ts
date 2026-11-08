@@ -77,11 +77,11 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   /**
    * VS Code renders a webview view as an overlay outside the view's element,
    * so `focusedView` is not set while the terminal has focus. The webview
-   * reports focus itself and the `sideMates.focused` context key scopes
+   * reports focus itself and the `agentTabs.focused` context key scopes
    * the tab keybindings, e.g. so Cmd+W closes a tab instead of the editor.
    */
   handleFocus(focused: boolean): void {
-    void vscode.commands.executeCommand('setContext', 'sideMates.focused', focused);
+    void vscode.commands.executeCommand('setContext', 'agentTabs.focused', focused);
   }
 
   handleNewTab(): void {
@@ -166,7 +166,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   /**
    * Closes tabs the user asked to close. Closing ends the agent's process, so
    * tabs whose agent is working or waiting for an answer ask first, unless
-   * `sideMates.confirmClose` is off.
+   * `agentTabs.confirmClose` is off.
    */
   async requestClose(ids: string[]): Promise<boolean> {
     const { state } = this.tabs;
@@ -237,7 +237,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   // --- Helpers ---
 
   private async focusView(): Promise<void> {
-    await vscode.commands.executeCommand('sideMates.terminalView.focus');
+    await vscode.commands.executeCommand('agentTabs.terminalView.focus');
   }
 
   private post(message: ExtensionMessage): void {

@@ -95,13 +95,13 @@ export class PromptDetector {
 
     for (const pattern of customPatterns) {
       if (!isSafeCustomPattern(pattern)) {
-        console.warn('SideMates: rejected unsafe prompt pattern');
+        console.warn('Agent Tabs: rejected unsafe prompt pattern');
         continue;
       }
       try {
         patterns.push(new RegExp(pattern));
       } catch {
-        console.warn('SideMates: rejected invalid prompt pattern');
+        console.warn('Agent Tabs: rejected invalid prompt pattern');
       }
     }
 

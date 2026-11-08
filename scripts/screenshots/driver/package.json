@@ -1,7 +1,7 @@
 {
   "name": "screenshot-driver",
-  "displayName": "SideMates screenshot driver",
-  "publisher": "sidemates",
+  "displayName": "Agent Tabs screenshot driver",
+  "publisher": "screenshots",
   "version": "0.0.1",
   "license": "MIT",
   "engines": {

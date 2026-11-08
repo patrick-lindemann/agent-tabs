@@ -1,1 +1,1 @@
-Screenshot driver for SideMates; not published.
+Screenshot driver for Agent Tabs; not published.

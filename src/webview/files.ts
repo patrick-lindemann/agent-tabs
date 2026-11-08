@@ -49,6 +49,6 @@ export async function openFile(
     }
   } catch (error) {
     // A path-like word that is no file is common; no notification for it
-    console.warn(`[SideMates] Failed to open file: ${filePath}`, error);
+    console.warn(`[Agent Tabs] Failed to open file: ${filePath}`, error);
   }
 }

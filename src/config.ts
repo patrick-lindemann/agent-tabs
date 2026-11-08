@@ -15,7 +15,7 @@ export class ConfigManager {
     // Listen for configuration changes and invalidate cache
     this.disposables.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('sideMates')) {
+        if (e.affectsConfiguration('agentTabs')) {
           this.invalidateCache();
         }
       })
@@ -30,12 +30,12 @@ export class ConfigManager {
       return this.cachedConfig;
     }
 
-    const config = vscode.workspace.getConfiguration('sideMates');
+    const config = vscode.workspace.getConfiguration('agentTabs');
     const programStatus = config.get<boolean>('programStatus', true);
     const { profiles, problems } = resolveProfiles(config.get('profiles'), programStatus);
     if (problems.length > 0) {
       void vscode.window.showWarningMessage(
-        `SideMates: check sideMates.profiles: ${problems.join('; ')}.`
+        `Agent Tabs: check agentTabs.profiles: ${problems.join('; ')}.`
       );
     }
 
@@ -77,7 +77,7 @@ export class ConfigManager {
 
 /** Settings of the pattern-based prompt detector, read fresh on each change */
 export function promptConfig(): PromptDetectorConfig {
-  const config = vscode.workspace.getConfiguration('sideMates');
+  const config = vscode.workspace.getConfiguration('agentTabs');
   return {
     enabled: config.get<boolean>('promptNotification', true),
     showDelay: config.get<number>('promptNotificationDelay', 300),

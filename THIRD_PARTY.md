@@ -1,6 +1,6 @@
 # Third-party notices
 
-SideMates bundles or includes the components below. Source links and license texts are provided for each component.
+Agent Tabs bundles or includes the components below. Source links and license texts are provided for each component.
 
 ## xterm.js (@xterm/xterm, @xterm/addon-fit, @xterm/addon-web-links)
 

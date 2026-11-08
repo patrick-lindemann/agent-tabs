@@ -1,6 +1,6 @@
 {
   "name": "agent-terminal",
-  "displayName": "SideMates: Terminal Agents for VS Code",
+  "displayName": "Agent Tabs: Coding Agents in the Sidebar",
   "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
   "version": "2.0.0",
   "publisher": "patrick-lindemann",
@@ -55,17 +55,17 @@
     "viewsContainers": {
       "secondarySidebar": [
         {
-          "id": "sideMatesContainer",
-          "title": "SideMates",
+          "id": "agentTabsContainer",
+          "title": "Agent Tabs",
           "icon": "$(terminal)"
         }
       ]
     },
     "views": {
-      "sideMatesContainer": [
+      "agentTabsContainer": [
         {
           "type": "webview",
-          "id": "sideMates.terminalView",
+          "id": "agentTabs.terminalView",
           "name": "Terminal",
           "visibility": "visible"
         }
@@ -73,198 +73,198 @@
     },
     "commands": [
       {
-        "command": "sideMates.newTab",
+        "command": "agentTabs.newTab",
         "title": "New Terminal Tab",
-        "category": "SideMates",
+        "category": "Agent Tabs",
         "icon": "$(add)"
       },
       {
-        "command": "sideMates.newTabWithProfile",
+        "command": "agentTabs.newTabWithProfile",
         "title": "Use Profile…",
-        "category": "SideMates",
+        "category": "Agent Tabs",
         "icon": "$(chevron-down)"
       },
       {
-        "command": "sideMates.newTabWithCommand",
+        "command": "agentTabs.newTabWithCommand",
         "title": "New Terminal Tab with Custom Command…",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.closeTab",
+        "command": "agentTabs.closeTab",
         "title": "Close Terminal Tab",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.nextTab",
+        "command": "agentTabs.nextTab",
         "title": "Next Terminal Tab",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.previousTab",
+        "command": "agentTabs.previousTab",
         "title": "Previous Terminal Tab",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.switchTab",
+        "command": "agentTabs.switchTab",
         "title": "Switch Tab…",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "title": "Switch to Tab at Position",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.closeTabFromMenu",
+        "command": "agentTabs.closeTabFromMenu",
         "title": "Close",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.closeOtherTabs",
+        "command": "agentTabs.closeOtherTabs",
         "title": "Close Others",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       },
       {
-        "command": "sideMates.manageProfiles",
+        "command": "agentTabs.manageProfiles",
         "title": "Manage Profiles",
-        "category": "SideMates"
+        "category": "Agent Tabs"
       }
     ],
     "keybindings": [
       {
-        "command": "sideMates.newTab",
+        "command": "agentTabs.newTab",
         "key": "ctrl+shift+t",
         "mac": "cmd+t",
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.closeTab",
+        "command": "agentTabs.closeTab",
         "key": "ctrl+shift+w",
         "mac": "cmd+w",
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.nextTab",
+        "command": "agentTabs.nextTab",
         "key": "ctrl+pagedown",
         "mac": "cmd+alt+right",
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.previousTab",
+        "command": "agentTabs.previousTab",
         "key": "ctrl+pageup",
         "mac": "cmd+alt+left",
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchTab",
+        "command": "agentTabs.switchTab",
         "key": "ctrl+tab",
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+1",
         "mac": "cmd+1",
         "args": 1,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+2",
         "mac": "cmd+2",
         "args": 2,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+3",
         "mac": "cmd+3",
         "args": 3,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+4",
         "mac": "cmd+4",
         "args": 4,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+5",
         "mac": "cmd+5",
         "args": 5,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+6",
         "mac": "cmd+6",
         "args": 6,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+7",
         "mac": "cmd+7",
         "args": 7,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+8",
         "mac": "cmd+8",
         "args": 8,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "sideMates.switchToTabAt",
+        "command": "agentTabs.switchToTabAt",
         "key": "alt+9",
         "mac": "cmd+9",
         "args": 9,
-        "when": "sideMates.focused || focusedView == 'sideMates.terminalView'"
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       }
     ],
     "menus": {
       "webview/context": [
         {
-          "command": "sideMates.closeTabFromMenu",
-          "when": "webviewId == 'sideMates.terminalView' && webviewSection == 'tab'",
+          "command": "agentTabs.closeTabFromMenu",
+          "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
           "group": "2_close@1"
         },
         {
-          "command": "sideMates.closeOtherTabs",
-          "when": "webviewId == 'sideMates.terminalView' && webviewSection == 'tab'",
+          "command": "agentTabs.closeOtherTabs",
+          "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
           "group": "2_close@2"
         }
       ],
       "commandPalette": [
         {
-          "command": "sideMates.closeTabFromMenu",
+          "command": "agentTabs.closeTabFromMenu",
           "when": "false"
         },
         {
-          "command": "sideMates.closeOtherTabs",
+          "command": "agentTabs.closeOtherTabs",
           "when": "false"
         },
         {
-          "command": "sideMates.switchToTabAt",
+          "command": "agentTabs.switchToTabAt",
           "when": "false"
         }
       ]
     },
     "configuration": {
-      "title": "SideMates",
+      "title": "Agent Tabs",
       "properties": {
-        "sideMates.profiles": {
+        "agentTabs.profiles": {
           "type": "object",
           "default": {},
           "additionalProperties": {
             "type": "string"
           },
-          "markdownDescription": "Profiles for new tabs: a name and the command line it runs, in the order listed here. The first one opens with `+`; `⌄` lists all of them. Write arguments as in a shell, with quotes where needed. To set environment variables for one profile, put them before the command with `env`, e.g. `env NAME=value command` (macOS and Linux); `#sideMates.env#` sets them for all profiles. A known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nWhen empty, there is a profile for each known agent that is installed.",
+          "markdownDescription": "Profiles for new tabs: a name and the command line it runs, in the order listed here. The first one opens with `+`; `⌄` lists all of them. Write arguments as in a shell, with quotes where needed. To set environment variables for one profile, put them before the command with `env`, e.g. `env NAME=value command` (macOS and Linux); `#agentTabs.env#` sets them for all profiles. A known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nWhen empty, there is a profile for each known agent that is installed.",
           "order": 0
         },
-        "sideMates.onExit": {
+        "agentTabs.onExit": {
           "type": "string",
           "enum": [
             "auto",
@@ -282,51 +282,51 @@
           "description": "What happens when the terminal's process exits (e.g. after /exit)",
           "order": 1
         },
-        "sideMates.confirmClose": {
+        "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
           "description": "Ask before closing a tab whose agent is working or waiting for input, since closing ends its session.",
           "order": 2
         },
-        "sideMates.autoTabTitles": {
+        "agentTabs.autoTabTitles": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the profile's name.",
           "order": 3
         },
-        "sideMates.tabTitleWords": {
+        "agentTabs.tabTitleWords": {
           "type": "integer",
           "default": 4,
           "minimum": 1,
           "maximum": 12,
-          "markdownDescription": "Maximum number of words in a tab's name with `#sideMates.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages.",
+          "markdownDescription": "Maximum number of words in a tab's name with `#agentTabs.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages.",
           "order": 4
         },
-        "sideMates.monochromeIcons": {
+        "agentTabs.monochromeIcons": {
           "type": "boolean",
           "default": false,
           "description": "Show agent logos in the text color instead of their brand colors.",
           "order": 5
         },
-        "sideMates.programStatus": {
+        "agentTabs.programStatus": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show agent status (working, needs input, done, error) on tabs. Agents such as pi, Claude Code and Codex report it through the [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status). Other programs fall back to `#sideMates.promptNotification#`.",
+          "markdownDescription": "Show agent status (working, needs input, done, error) on tabs. Agents such as pi, Claude Code and Codex report it through the [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status). Other programs fall back to `#agentTabs.promptNotification#`.",
           "order": 6
         },
-        "sideMates.statusColors": {
+        "agentTabs.statusColors": {
           "type": "boolean",
           "default": true,
           "description": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color.",
           "order": 7
         },
-        "sideMates.promptNotification": {
+        "agentTabs.promptNotification": {
           "type": "boolean",
           "default": true,
           "description": "Show notification indicator on tab when terminal is waiting for user input",
           "order": 8
         },
-        "sideMates.promptNotificationDelay": {
+        "agentTabs.promptNotificationDelay": {
           "type": "number",
           "default": 300,
           "minimum": 100,
@@ -334,7 +334,7 @@
           "description": "Delay in milliseconds before showing the notification after output stops",
           "order": 9
         },
-        "sideMates.promptPatterns": {
+        "agentTabs.promptPatterns": {
           "type": "array",
           "items": {
             "type": "string"
@@ -343,25 +343,25 @@
           "description": "Additional regex patterns to detect when terminal is waiting for input (e.g., '^mybot> $'). Built-in patterns detect most CLI AI tools automatically.",
           "order": 10
         },
-        "sideMates.directMode": {
+        "agentTabs.directMode": {
           "type": "boolean",
           "default": true,
           "description": "Run command directly without shell wrapper (cleaner output, but no shell features)",
           "order": 11
         },
-        "sideMates.shell": {
+        "agentTabs.shell": {
           "type": "string",
           "default": "",
           "description": "Custom shell path (empty = system default)",
           "order": 12
         },
-        "sideMates.autoRun": {
+        "agentTabs.autoRun": {
           "type": "boolean",
           "default": true,
           "description": "With directMode off: run the profile's command in the shell when a tab opens",
           "order": 13
         },
-        "sideMates.env": {
+        "agentTabs.env": {
           "type": "object",
           "default": {},
           "description": "Additional environment variables",

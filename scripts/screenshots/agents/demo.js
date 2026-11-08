@@ -2,11 +2,11 @@
 // session and reports its status and title the way the real agent does
 // (see test/unit/agents.ts). Nothing is sent to any service.
 //   node demo.js <agent>
-// The scene each agent shows is set by SIDEMATES_DEMO_<AGENT>, e.g.
-// SIDEMATES_DEMO_CLAUDE=blocked; the default is `working`.
+// The scene each agent shows is set by AGENT_TABS_DEMO_<AGENT>, e.g.
+// AGENT_TABS_DEMO_CLAUDE=blocked; the default is `working`.
 
 const agent = process.argv[2];
-const scene = process.env[`SIDEMATES_DEMO_${agent.toUpperCase()}`] ?? 'working';
+const scene = process.env[`AGENT_TABS_DEMO_${agent.toUpperCase()}`] ?? 'working';
 const out = (text) => process.stdout.write(text);
 const ESC = '\x1b';
 const status = (body) => out(`${ESC}]7501;${body}${ESC}\\`);
@@ -117,7 +117,7 @@ const scenes = {
           `${gray('›')} ${dim('Ask Codex to do anything')}`
         );
       },
-      Number(process.env.SIDEMATES_DEMO_DELAY ?? 6000)
+      Number(process.env.AGENT_TABS_DEMO_DELAY ?? 6000)
     );
   },
 

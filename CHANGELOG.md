@@ -1,25 +1,25 @@
 # Changelog
 
-All notable changes to SideMates will be documented in this file.
+All notable changes to Agent Tabs will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [2.0.0] - 2026-11-08
 
-Agent Terminal is now **SideMates**.
+Agent Terminal is now **Agent Tabs**.
 
 ### Breaking
 
-- Settings are renamed from `agentTerminal.*` to `sideMates.*` and are not carried over; set your profiles again under `sideMates.profiles`
-- Command IDs are renamed from `agentTerminal.*` to `sideMates.*`; custom keybindings need the new IDs
-- `sideMates.profiles` only accepts a table of names and command lines; the list format from 1.2 is no longer read
+- Settings are renamed from `agentTerminal.*` to `agentTabs.*` and are not carried over; set your profiles again under `agentTabs.profiles`
+- Command IDs are renamed from `agentTerminal.*` to `agentTabs.*`; custom keybindings need the new IDs
+- `agentTabs.profiles` only accepts a table of names and command lines; the list format from 1.2 is no longer read
 
 ### Added
 
 - Agents recognized in a profile's command line, also behind a wrapper such as tmux: Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, Cursor, GitHub Copilot, Grok Build, Hermes Agent and Devin; they get their logo and status support
-- Agent logos in Use Profile… and on tabs, in brand colors or the text color (`sideMates.monochromeIcons`)
-- Manage Profiles opens `sideMates.profiles` in the Settings editor
+- Agent logos in Use Profile… and on tabs, in brand colors or the text color (`agentTabs.monochromeIcons`)
+- Manage Profiles opens `agentTabs.profiles` in the Settings editor
 - Without any profile, there is one for each known agent that is installed
 - A profile whose command or agent is not installed shows an error naming the missing command; Use Profile… marks it as not installed
 - Tab names from Codex thread names, OpenCode session titles and Gemini CLI's current thought
@@ -28,7 +28,7 @@ Agent Terminal is now **SideMates**.
 
 - `+` and `…` in the view title bar are replaced by a `+ ⌄` split button at the end of the tab strip, like the one in VS Code's terminal panel
 - Use Profile… marks the first profile with `(default)`
-- Needs input shows `!` and failed `✕`; with `sideMates.statusColors`, the tab's name also turns yellow, green or red
+- Needs input shows `!` and failed `✕`; with `agentTabs.statusColors`, the tab's name also turns yellow, green or red
 - Tab names keep the title's case and spaces: `Refactor API client` instead of `refactor-api-client`
 - A tab shows its agent's logo while idle and a status icon while there is a status
 - Settings are grouped by topic in the Settings editor
@@ -41,7 +41,7 @@ Agent Terminal is now **SideMates**.
 - Codex and OpenCode tab names no longer contain status words or the folder name
 - With `bash -c "codex"`, the status options are no longer passed to the shell
 - A failed exit no longer shows the message of an old question
-- Turning off `sideMates.promptNotification` clears prompts already shown
+- Turning off `agentTabs.promptNotification` clears prompts already shown
 
 ## [1.2.0] - 2026-11-06
 

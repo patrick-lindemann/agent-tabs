@@ -1,16 +1,16 @@
-# SideMates
+# Agent Tabs
 
 **Your coding agents, side by side with your code.**
 
-SideMates runs Claude Code, Codex, Gemini CLI, pi and other CLI coding agents in tabs in VS Code's secondary sidebar. Keep the editor in front of you, start a few agents on different tasks, and see at a glance which one is working, which one has a question, and which one is done.
+Agent Tabs runs Claude Code, Codex, Gemini CLI, pi and other CLI coding agents in tabs in VS Code's secondary sidebar. Keep the editor in front of you, start a few agents on different tasks, and see at a glance which one is working, which one has a question, and which one is done.
 
-![SideMates with four agents in the secondary sidebar](media/screenshots/overview.png)
+![Agent Tabs with four agents in the secondary sidebar](media/screenshots/overview.png)
 
 ## Features
 
 ### See what every agent is doing
 
-Each tab shows its agent's status: working, needs input, done or failed. A result that comes in while you're in another tab stays marked until you look at it, and the view's badge counts the tabs waiting for you. Agents report their status themselves through the [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status); for the others, SideMates recognizes their prompts.
+Each tab shows its agent's status: working, needs input, done or failed. A result that comes in while you're in another tab stays marked until you look at it, and the view's badge counts the tabs waiting for you. Agents report their status themselves through the [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status); for the others, Agent Tabs recognizes their prompts.
 
 ![Tabs with the status of each agent and pi asking a question](media/screenshots/tabs.png)
 
@@ -20,7 +20,7 @@ Tabs take their name from the agent's session: Claude Code's conversation summar
 
 ### Every agent, one place
 
-Open any agent from the `+ ⌄` menu, with its logo. SideMates finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue`, `env MODEL=fast pi` or `tmux new-session codex` all work, and Custom Command runs anything else with completion for its flags.
+Open any agent from the `+ ⌄` menu, with its logo. Agent Tabs finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue`, `env MODEL=fast pi` or `tmux new-session codex` all work, and Custom Command runs anything else with completion for its flags.
 
 ![The profile menu with installed agents](media/screenshots/profiles.png)
 
@@ -48,7 +48,7 @@ An agent is recognized anywhere in a profile's command line, also behind a wrapp
 
 ## Keyboard shortcuts
 
-Active while SideMates has focus.
+Active while Agent Tabs has focus.
 
 | Action | macOS | Windows / Linux |
 | --- | --- | --- |
@@ -66,46 +66,46 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `sideMates.profiles` | installed agents | Profile names and the command lines they run, in menu order. `+` opens the first. |
-| `sideMates.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
-| `sideMates.confirmClose` | `true` | Ask before closing a tab whose agent is working or waiting for input. |
+| `agentTabs.profiles` | installed agents | Profile names and the command lines they run, in menu order. `+` opens the first. |
+| `agentTabs.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
+| `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working or waiting for input. |
 
 **Tab names and icons**
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `sideMates.autoTabTitles` | `true` | Name tabs after the agent's session instead of the profile. |
-| `sideMates.tabTitleWords` | `4` | Words in a tab name (1–12); filler words are dropped. |
-| `sideMates.monochromeIcons` | `false` | Agent logos in the text color instead of brand colors. |
+| `agentTabs.autoTabTitles` | `true` | Name tabs after the agent's session instead of the profile. |
+| `agentTabs.tabTitleWords` | `4` | Words in a tab name (1–12); filler words are dropped. |
+| `agentTabs.monochromeIcons` | `false` | Agent logos in the text color instead of brand colors. |
 
 **Status**
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `sideMates.programStatus` | `true` | Show the status agents report. |
-| `sideMates.statusColors` | `true` | Color status icons and the names of tabs that need you. |
-| `sideMates.promptNotification` | `true` | Mark background tabs whose program shows a prompt, for agents that report no status. |
-| `sideMates.promptNotificationDelay` | `300` | Milliseconds output must be quiet before a prompt counts. |
-| `sideMates.promptPatterns` | `[]` | More regular expressions that match a prompt. |
+| `agentTabs.programStatus` | `true` | Show the status agents report. |
+| `agentTabs.statusColors` | `true` | Color status icons and the names of tabs that need you. |
+| `agentTabs.promptNotification` | `true` | Mark background tabs whose program shows a prompt, for agents that report no status. |
+| `agentTabs.promptNotificationDelay` | `300` | Milliseconds output must be quiet before a prompt counts. |
+| `agentTabs.promptPatterns` | `[]` | More regular expressions that match a prompt. |
 
 **Process**
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `sideMates.directMode` | `true` | Start the command directly. Turn off to run it in a shell, for aliases or shell syntax. |
-| `sideMates.shell` | system shell | Shell to use when `directMode` is off. |
-| `sideMates.autoRun` | `true` | With `directMode` off, run the profile's command when the shell starts. |
-| `sideMates.env` | `{}` | Environment variables for every tab. |
+| `agentTabs.directMode` | `true` | Start the command directly. Turn off to run it in a shell, for aliases or shell syntax. |
+| `agentTabs.shell` | system shell | Shell to use when `directMode` is off. |
+| `agentTabs.autoRun` | `true` | With `directMode` off, run the profile's command when the shell starts. |
+| `agentTabs.env` | `{}` | Environment variables for every tab. |
 
 ## Installation
 
-Install **SideMates** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=patrick-lindemann.agent-terminal), or run:
+Install **Agent Tabs** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=patrick-lindemann.agent-terminal), or run:
 
 ```bash
 code --install-extension patrick-lindemann.agent-terminal
 ```
 
-SideMates opens in the secondary sidebar. You need VS Code 1.106 or later and at least one agent on your `PATH`.
+Agent Tabs opens in the secondary sidebar. You need VS Code 1.106 or later and at least one agent on your `PATH`.
 
 For offline or remote machines, download the `.vsix` for your platform from the [latest release](https://github.com/patrick-lindemann/agent-terminal/releases/latest) and use **Extensions: Install from VSIX…**, or run the installer:
 
@@ -115,9 +115,9 @@ curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-terminal/ma
 
 ## Troubleshooting
 
-- **An agent shows as not installed:** VS Code does not see it on its `PATH`. Start VS Code from a shell where the command works, or add its folder through `sideMates.env`.
-- **An agent needs shell aliases or functions:** turn off `sideMates.directMode`.
-- **The terminal stays blank after a VS Code update:** update SideMates; its terminal module must match VS Code's version.
+- **An agent shows as not installed:** VS Code does not see it on its `PATH`. Start VS Code from a shell where the command works, or add its folder through `agentTabs.env`.
+- **An agent needs shell aliases or functions:** turn off `agentTabs.directMode`.
+- **The terminal stays blank after a VS Code update:** update Agent Tabs; its terminal module must match VS Code's version.
 
 ## Contributing
 
@@ -125,7 +125,7 @@ Issues and pull requests are welcome on [GitHub](https://github.com/patrick-lind
 
 ## Acknowledgements
 
-SideMates started as a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero/claude-terminal-panel). It uses [xterm.js](https://xtermjs.org/), [node-pty](https://github.com/microsoft/node-pty), [stopword](https://github.com/fergiemcdowall/stopword), VS Code Codicons and Lobe Icons; see [THIRD_PARTY.md](THIRD_PARTY.md).
+Agent Tabs started as a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero/claude-terminal-panel). It uses [xterm.js](https://xtermjs.org/), [node-pty](https://github.com/microsoft/node-pty), [stopword](https://github.com/fergiemcdowall/stopword), VS Code Codicons and Lobe Icons; see [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## License
 

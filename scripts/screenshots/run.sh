@@ -6,13 +6,13 @@
 set -eu
 cd "$(dirname "$0")/../.."
 
-image=sidemates-screenshots
+image=agent-tabs-screenshots
 docker build --quiet --tag "$image" scripts/screenshots >/dev/null
 mkdir -p media/screenshots
 docker run --rm --shm-size=2g \
   --volume "$PWD:/work" \
-  --volume sidemates-screenshots-modules:/work/node_modules \
-  --volume sidemates-vscode-test:/work/.vscode-test \
+  --volume agent-tabs-screenshots-modules:/work/node_modules \
+  --volume agent-tabs-vscode-test:/work/.vscode-test \
   --env SHOT_VSCODE="${SHOT_VSCODE:-1.144.0}" \
   --env SHOT_WIDTH="${SHOT_WIDTH:-1440}" \
   --env SHOT_HEIGHT="${SHOT_HEIGHT:-900}" \

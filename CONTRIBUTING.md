@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve SideMates. Changes are developed on `develop`; `main` contains released versions.
+Thanks for helping improve Agent Tabs. Changes are developed on `develop`; `main` contains released versions.
 
 ## Development setup
 

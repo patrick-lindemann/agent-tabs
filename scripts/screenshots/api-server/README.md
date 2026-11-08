@@ -1,3 +1,3 @@
 # api-server
 
-Example service for the SideMates screenshots.
+Example service for the Agent Tabs screenshots.

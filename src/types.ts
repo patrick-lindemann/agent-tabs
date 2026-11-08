@@ -63,7 +63,7 @@ export interface TerminalConfig {
   statusColors: boolean;
   confirmClose: boolean;
   monochromeIcons: boolean;
-  /** Validated `sideMates.profiles`; never empty, the first one opens with + */
+  /** Validated `agentTabs.profiles`; never empty, the first one opens with + */
   profiles: LaunchSpec[];
 }
 

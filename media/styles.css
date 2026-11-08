@@ -221,7 +221,7 @@ body {
   visibility: visible;
 }
 
-/* Theme colors reinforce the icon shapes (sideMates.statusColors) */
+/* Theme colors reinforce the icon shapes (agentTabs.statusColors) */
 #tab-bar.status-colors .tab[data-status="working"] {
   --status-color: var(--vscode-charts-blue, #3794ff);
 }

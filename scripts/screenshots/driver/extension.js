@@ -1,6 +1,6 @@
 // Helper extension in the screenshot VS Code: arranges the window, opens
-// SideMates tabs with the demo agents and captures the virtual display.
-// Installed only in the screenshot container, next to the packaged SideMates.
+// tabs with the demo agents and captures the virtual display.
+// Installed only in the screenshot container, next to the packaged Agent Tabs.
 const { execSync } = require('node:child_process');
 const path = require('node:path');
 const vscode = require('vscode');
@@ -19,7 +19,7 @@ const shot = (name, x = 0, y = 0, w = width, h = height) =>
     `import -window root -crop ${px(w)}x${px(h)}+${px(x)}+${px(y)} +repage ` +
       path.join(env.SHOT_DIR, `${name}.png`)
   );
-const sideMates = () => vscode.workspace.getConfiguration('sideMates');
+const agentTabs = () => vscode.workspace.getConfiguration('agentTabs');
 
 const PROFILES = {
   'Claude Code': 'claude',
@@ -35,13 +35,13 @@ const PROFILES = {
  * keys as a change, so each tab gets a profile list of its agent alone.
  */
 async function openTab(name) {
-  await sideMates().update(
+  await agentTabs().update(
     'profiles',
     { [name]: PROFILES[name] },
     vscode.ConfigurationTarget.Global
   );
   await sleep(300);
-  await vscode.commands.executeCommand('sideMates.newTab');
+  await vscode.commands.executeCommand('agentTabs.newTab');
   await sleep(1200);
 }
 
@@ -57,21 +57,21 @@ async function capture() {
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(file), {
     preview: false
   });
-  // The editor and SideMates side by side, without the explorer
+  // The editor and Agent Tabs side by side, without the explorer
   await vscode.commands.executeCommand('workbench.action.closeSidebar');
 
-  await sideMates().update(
+  await agentTabs().update(
     'profiles',
     { 'Claude Code': 'claude' },
     vscode.ConfigurationTarget.Global
   );
-  await vscode.commands.executeCommand('sideMates.terminalView.focus');
+  await vscode.commands.executeCommand('agentTabs.terminalView.focus');
   await sleep(2500);
   // The view opened the first profile, Claude Code
   for (const name of ['Codex', 'Pi', 'Gemini CLI']) {
     await openTab(name);
   }
-  await sideMates().update('profiles', PROFILES, vscode.ConfigurationTarget.Global);
+  await agentTabs().update('profiles', PROFILES, vscode.ConfigurationTarget.Global);
 
   // Drag the secondary sidebar's edge (SHOT_SIDEBAR_EDGE px from the right
   // by default) so tab names and agent output fit
@@ -85,19 +85,19 @@ async function capture() {
   );
   await sleep(500);
 
-  await vscode.commands.executeCommand('sideMates.switchToTabAt', 1);
-  // Codex finishes in the background meanwhile (SIDEMATES_DEMO_DELAY)
+  await vscode.commands.executeCommand('agentTabs.switchToTabAt', 1);
+  // Codex finishes in the background meanwhile (AGENT_TABS_DEMO_DELAY)
   await sleep(Number(env.SHOT_SETTLE ?? 8000));
   run(`xdotool mousemove ${px(width / 2)} ${px(height - 60)}`);
   await sleep(300);
   shot('overview');
 
   // Close-up of the tabs, with Pi's question in view
-  await vscode.commands.executeCommand('sideMates.switchToTabAt', 3);
+  await vscode.commands.executeCommand('agentTabs.switchToTabAt', 3);
   await sleep(1500);
   shot('tabs', width - sidebar - 4, 40, sidebar + 4, Math.min(440, height - 40));
 
-  void vscode.commands.executeCommand('sideMates.newTabWithProfile');
+  void vscode.commands.executeCommand('agentTabs.newTabWithProfile');
   await sleep(1500);
   shot('profiles', 400, 0, 640, 250);
   await vscode.commands.executeCommand('workbench.action.closeQuickOpen');

@@ -1,24 +1,24 @@
 #!/bin/sh
-# Runs inside the screenshot container (see run.sh): packages SideMates,
+# Runs inside the screenshot container (see run.sh): packages Agent Tabs,
 # installs it with the driver into a clean VS Code and starts it on the
 # virtual display.
 set -eu
 here=/work/scripts/screenshots
 data=/tmp/vscode
-rm -rf "$data" /tmp/sidemates.vsix /tmp/driver.vsix
+rm -rf "$data" /tmp/agent-tabs.vsix /tmp/driver.vsix
 mkdir -p "$data/user/User" "$data/extensions"
 
-npx vsce package --out /tmp/sidemates.vsix >/dev/null
+npx vsce package --out /tmp/agent-tabs.vsix >/dev/null
 (cd "$here/driver" && npx vsce package --allow-missing-repository --skip-license \
   --out /tmp/driver.vsix >/dev/null)
 vscode=$(node -e "require('@vscode/test-electron').downloadAndUnzipVSCode('$SHOT_VSCODE').then(console.log)" | tail -1)
 cli=$(dirname "$vscode")/bin/code
-for extension in /tmp/sidemates.vsix /tmp/driver.vsix; do
+for extension in /tmp/agent-tabs.vsix /tmp/driver.vsix; do
   "$cli" --user-data-dir "$data/user" --extensions-dir "$data/extensions" \
     --install-extension "$extension" >/dev/null
 done
 
-export PATH="$here/agents:$PATH" SIDEMATES_DEMO_PI=blocked
+export PATH="$here/agents:$PATH" AGENT_TABS_DEMO_PI=blocked
 cat > "$data/user/User/settings.json" <<EOF
 {
   "workbench.colorTheme": "Default Dark Modern",
@@ -42,8 +42,8 @@ cat > "$data/user/User/settings.json" <<EOF
   "extensions.autoCheckUpdates": false,
   "security.workspace.trust.enabled": false,
   "git.enabled": false,
-  "sideMates.confirmClose": false,
-  "sideMates.env": { "PATH": "$PATH" }
+  "agentTabs.confirmClose": false,
+  "agentTabs.env": { "PATH": "$PATH" }
 }
 EOF
 
