@@ -3,15 +3,27 @@ name: Build and Release
 on:
   push:
     branches: [main]
+  # Dry runs: check and build every platform package without releasing or
+  # publishing. Release pull requests get one automatically; any branch can
+  # be run by hand (Actions > Build and Release > Run workflow).
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
+# Releases run one at a time; a new dry run of a branch replaces the last one
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'push' && 'release' || format('release-dry-run-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
 
 jobs:
+  # Pull requests already run CI
+  checks:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/ci.yml
+
   version:
     runs-on: ubuntu-latest
     outputs:
@@ -35,8 +47,12 @@ jobs:
           fi
 
   build:
-    needs: version
-    if: needs.version.outputs.exists == 'false'
+    needs: [checks, version]
+    # A dry run builds even when the version was already released
+    if: >-
+      !cancelled() && needs.version.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.checks.result) &&
+      (needs.version.outputs.exists == 'false' || github.event_name != 'push')
     permissions:
       contents: read
     strategy:
@@ -87,6 +103,7 @@ jobs:
 
   release:
     needs: [version, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,7 +137,7 @@ jobs:
 
   marketplace:
     needs: [version, release]
-    if: needs.version.outputs.exists == 'false' && needs.release.result == 'success'
+    if: github.event_name == 'push' && needs.version.outputs.exists == 'false' && needs.release.result == 'success'
     runs-on: ubuntu-latest
     environment: marketplace
     permissions:

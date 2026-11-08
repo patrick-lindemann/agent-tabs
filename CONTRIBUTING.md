@@ -48,6 +48,22 @@ Biome is used for linting and formatting; use `npm run lint:fix` or `npm run for
 
 Keep changes focused, add or update tests where appropriate, and ensure the checks above pass. Open pull requests against `develop`.
 
+## Continuous integration
+
+The **CI** workflow (lint, format, typecheck, build, unit and integration tests) runs on every push to `develop` and on every pull request.
+
+The **Build and Release** workflow runs CI again, then builds the package for every platform. It runs in three ways:
+
+- A push to `main`, i.e. a merged release pull request, releases and publishes.
+- A pull request to `main` is a dry run: it builds every platform package and uploads them as artifacts, without releasing or publishing.
+- **Actions → Build and Release → Run workflow** does the same dry run for any branch, e.g. to try a workflow change before opening a pull request.
+
+Lint the workflow files after changing them:
+
+```bash
+docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:latest
+```
+
 ## Releases
 
 A release is made by bumping the version on `develop`, updating `CHANGELOG.md`, and opening a pull request from `develop` to `main`. Merge it with a merge commit (not squash or rebase). The Build and Release workflow then:
