@@ -33,6 +33,7 @@ Agent Terminal is now **Agent Tabs**.
 - Tab names keep the title's case and spaces: `Refactor API client` instead of `refactor-api-client`
 - A tab shows its agent's logo while idle and a status icon while there is a status
 - Settings are grouped by topic in the Settings editor
+- Releases run the tests first and are published to the Marketplace with trusted publishing
 
 ### Fixed
 
@@ -43,6 +44,7 @@ Agent Terminal is now **Agent Tabs**.
 - With `bash -c "codex"`, the status options are no longer passed to the shell
 - A failed exit no longer shows the message of an old question
 - Turning off `agentTabs.promptNotification` clears prompts already shown
+- Releases include the Windows package again
 
 ## [1.2.0] - 2026-11-06
 
