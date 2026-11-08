@@ -2,7 +2,7 @@
   "name": "agent-tabs",
   "displayName": "Agent Tabs: Coding Agents in the Sidebar",
   "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "publisher": "patrick-lindemann",
   "license": "MIT",
   "icon": "media/icon.png",

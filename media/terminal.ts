@@ -34,15 +34,21 @@ export class Terminals {
     element.style.display = 'none';
     this.container.appendChild(element);
 
+    // Webviews cannot open windows, so the extension opens links, like
+    // VS Code's terminal does: URLs in the output and OSC 8 hyperlinks
+    const openLink = (_event: MouseEvent, url: string) => {
+      if (/^https?:\/\//i.test(url)) this.post({ type: 'openLink', url });
+    };
     const terminal = new Terminal({
       ...this.options(),
       letterSpacing: 0,
       theme: this.theme.getTheme(),
-      allowProposedApi: true
+      allowProposedApi: true,
+      linkHandler: { activate: openLink, allowNonHttpProtocols: false }
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new WebLinksAddon());
+    terminal.loadAddon(new WebLinksAddon(openLink));
     terminal.open(element);
     terminal.registerLinkProvider(new FileLinkProvider(terminal, id, this.post));
 

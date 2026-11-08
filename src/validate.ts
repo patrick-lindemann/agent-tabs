@@ -34,6 +34,8 @@ export function isWebviewMessage(value: unknown): value is WebviewMessage {
         (value.line === undefined || isLineNumber(value.line)) &&
         (value.column === undefined || isLineNumber(value.column))
       );
+    case 'openLink':
+      return isString(value.url, 32_000) && /^https?:\/\//i.test(value.url);
     case 'focus':
       return typeof value.focused === 'boolean';
     case 'newTab':

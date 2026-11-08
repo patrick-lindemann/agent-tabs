@@ -13,6 +13,7 @@ describe('webview message validation', () => {
       { type: 'closeTab', id: 'tab' },
       { type: 'switchTab', id: 'tab' },
       { type: 'openFile', id: 'tab', path: 'a.ts', line: 3, column: 2 },
+      { type: 'openLink', url: 'https://example.com/a?b=1' },
       { type: 'focus', focused: true }
     ];
     expect(valid.every(isWebviewMessage)).toBe(true);
@@ -23,5 +24,9 @@ describe('webview message validation', () => {
     expect(isWebviewMessage({ type: 'resize', id: '', cols: 80, rows: 24 })).toBe(false);
     expect(isWebviewMessage({ type: 'newTab', extra: true })).toBe(false);
     expect(isWebviewMessage({ type: 'openFile', id: 'tab', path: 'a.ts', line: 3 })).toBe(true);
+    expect(isWebviewMessage({ type: 'openLink', url: 'http://localhost:3000' })).toBe(true);
+    for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'vscode://x', 42]) {
+      expect(isWebviewMessage({ type: 'openLink', url }), String(url)).toBe(false);
+    }
   });
 });

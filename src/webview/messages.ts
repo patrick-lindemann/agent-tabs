@@ -15,6 +15,7 @@ export interface MessageHandlerContext {
   handleCloseTab(id: string): void;
   handleSwitchTab(id: string): void;
   handleOpenFile(id: string, path: string, line?: number, column?: number): void;
+  handleOpenLink(url: string): void;
   handleFocus(focused: boolean): void;
 }
 
@@ -55,6 +56,9 @@ const messageHandlers: MessageHandlerMap = {
   },
   openFile: (message, ctx) => {
     ctx.handleOpenFile(message.id, message.path, message.line, message.column);
+  },
+  openLink: (message, ctx) => {
+    ctx.handleOpenLink(message.url);
   },
   focus: (message, ctx) => {
     ctx.handleFocus(message.focused);
