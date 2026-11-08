@@ -1,31 +1,40 @@
-.vscode/**
-.vscode-test/**
+# The package holds the bundled extension (dist/), the webview (media/),
+# node-pty's runtime files, the PNG icons and the documents users see.
+
+# Sources and build configuration
 src/**
-node_modules/**
-.gitignore
-*.map
-*.ts
 media/**/*.ts
 media/tsconfig.json
+media/**/*.svg
+media/screenshots/**
 scripts/**
-tsconfig.json
-CONTRIBUTING.md
-.editorconfig
+*.map
+*.ts
+tsconfig*.json
 biome.json
+.editorconfig
+
+# Tests
+test/**
+coverage/**
+out/**
+vitest.config.mts
+.vscode-test/**
+.vscode-test.mjs
+
+# Repository and editor files
 .github/**
+.vscode/**
 .claude/**
 .pi/**
-*.vsix
-install.sh
+.gitignore
 AGENTS.md
-test/
-coverage/
-.vscode-test*
-vitest.config.mts
-tsconfig.tests.json
-out/
+CONTRIBUTING.md
+install.sh
+*.vsix
 
-node_modules/node-pty/**
+# Dependencies: only node-pty's runtime files; everything else is bundled
+node_modules/**
 !node_modules/node-pty/package.json
 !node_modules/node-pty/lib/conpty_console_list_agent.js
 !node_modules/node-pty/lib/eventEmitter2.js
@@ -50,7 +59,3 @@ node_modules/node-pty/**
 !node_modules/node-pty/build/Release/*.exe
 !node_modules/node-pty/build/Release/*/*.dll
 !node_modules/node-pty/build/Release/*/*.exe
-!LICENSE.md
-!THIRD_PARTY.md
-media/**/*.svg
-media/screenshots/**

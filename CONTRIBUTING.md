@@ -32,15 +32,9 @@ npm run test:integration
 
 This needs Docker. The first run builds a small image and downloads VS Code into a Docker volume. To run them in a visible window on your machine instead, use `npm run test:integration:visible` (on headless Linux, through `xvfb-run -a`). The **Extension Tests** launch configuration debugs them in a visible window.
 
-## Icons and screenshots
+## Icons
 
-The Marketplace does not accept SVG files in a package, so every SVG in `media/` has a PNG next to it. After changing an SVG, run `npm run icons` and commit the PNG files.
-
-The README screenshots are taken in Docker with a clean VS Code, the packaged extension and demo agents (`scripts/screenshots/agents/demo.js`) that report their status like the real ones, in the example workspace `scripts/screenshots/api-server`:
-
-```bash
-npm run screenshots   # writes media/screenshots/*.png
-```
+The Marketplace does not accept SVG files in a package, so `npm run icons` renders the extension icon and the agent logos in `media/` as PNG files. Packaging runs it, and the PNG files are not committed. Each agent logo has an SVG in its brand colors (`<agent>.svg`) and, if those are colored, one in the text color (`<agent>-mono.svg`); the light and dark PNG files for the profile menu are made from the text-color version.
 
 Biome is used for linting and formatting; use `npm run lint:fix` or `npm run format` to apply fixes. Markdown is not formatted by Biome.
 
@@ -52,7 +46,7 @@ Keep changes focused, add or update tests where appropriate, and ensure the chec
 
 The **CI** workflow (lint, format, typecheck, build, unit and integration tests) runs on every push to `develop` and on every pull request.
 
-The **Build and Release** workflow runs CI again, then builds the package for every platform. It runs in three ways:
+The **Build and Release** workflow (`publish.yml`) runs CI again, then builds the package for every platform. It runs in three ways:
 
 - A push to `main`, i.e. a merged release pull request, releases and publishes.
 - A pull request to `main` is a dry run: it builds every platform package and uploads them as artifacts, without releasing or publishing.
@@ -70,7 +64,7 @@ A release is made by bumping the version on `develop`, updating `CHANGELOG.md`, 
 
 1. Builds platform VSIX files for Linux x64/arm64, macOS x64/arm64, and Windows x64.
 2. Creates GitHub release `v<package.json version>` with those VSIX files.
-3. Publishes the platform packages to the VS Code Marketplace when the `marketplace` environment has a `VSCE_PAT` secret with Marketplace Manage scope.
+3. Publishes the platform packages to the VS Code Marketplace with trusted publishing: the Marketplace accepts `publish.yml` in the `production` environment, which only `main` may use, so no token is stored. Renaming the workflow file or the environment needs the same change in the Marketplace's trusted publishing policy.
 
 The Electron version used to rebuild native modules is single-sourced in `package.json` under `config.electronVersion`. Update that value when preparing a release for a new VS Code Electron version; the rebuild script reads it automatically.
 

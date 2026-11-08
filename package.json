@@ -371,7 +371,7 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run typecheck && npm run compile",
+    "vscode:prepublish": "npm run typecheck && npm run compile && npm run icons",
     "compile": "npm run compile:extension && npm run copy:xterm-css && npm run compile:media",
     "compile:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:node-pty --format=cjs --platform=node",
     "compile:media": "esbuild media/main.ts --bundle --outfile=media/main.js --format=iife --platform=browser --loader:.svg=text",
@@ -394,8 +394,7 @@
     "test:integration": "sh scripts/headless.sh",
     "test:integration:visible": "npm run compile:tests && vscode-test",
     "compile:tests": "npm run compile && tsc -p tsconfig.tests.json",
-    "icons": "node scripts/icons.js",
-    "screenshots": "sh scripts/screenshots/run.sh"
+    "icons": "node scripts/icons.js"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
