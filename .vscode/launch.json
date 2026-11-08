@@ -16,7 +16,7 @@
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "testConfiguration": "${workspaceFolder}/.vscode-test.mjs",
-      "preLaunchTask": "npm: test:integration"
+      "preLaunchTask": "npm: compile:tests"
     }
   ]
 }

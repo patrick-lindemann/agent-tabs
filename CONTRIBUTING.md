@@ -24,13 +24,13 @@ npm run compile
 npm test
 ```
 
-Integration tests require a display on Linux and launch a downloaded VS Code instance:
+Integration tests launch a downloaded VS Code. By default they run in Docker on a virtual display, so no window opens and nothing takes focus:
 
 ```bash
 npm run test:integration
 ```
 
-The integration test command compiles first. In headless Linux environments, run it through `xvfb-run -a`.
+This needs Docker. The first run builds a small image and downloads VS Code into a Docker volume. To run them in a visible window on your machine instead, use `npm run test:integration:visible` (on headless Linux, through `xvfb-run -a`). The **Extension Tests** launch configuration debugs them in a visible window.
 
 Biome is used for linting and formatting; use `npm run lint:fix` or `npm run format` to apply fixes. Markdown is not formatted by Biome.
 

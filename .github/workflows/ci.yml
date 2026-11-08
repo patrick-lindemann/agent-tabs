@@ -44,4 +44,4 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Run integration tests
-        run: xvfb-run -a npm run test:integration
+        run: xvfb-run -a npm run test:integration:visible
