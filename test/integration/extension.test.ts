@@ -2,25 +2,50 @@ import * as assert from 'node:assert';
 import { suite, test } from 'mocha';
 import * as vscode from 'vscode';
 
+const EXTENSION_ID = 'patrick-lindemann.agent-terminal';
+
 suite('SideMates extension', () => {
-  test('activates and contributes the terminal view and commands', async () => {
-    const extension = vscode.extensions.getExtension('patrick-lindemann.agent-terminal');
+  test('activates and contributes the terminal view', async () => {
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension, 'extension should be discovered');
     await extension.activate();
-    const commands = await vscode.commands.getCommands(true);
-    assert.ok(commands.includes('agentTerminal.newTab'));
-    assert.ok(commands.includes('agentTerminal.closeTab'));
-    const view = vscode.extensions.all
-      .flatMap((item) => item.packageJSON?.contributes?.views?.agentTerminalContainer ?? [])
-      .find((item: { id?: string }) => item.id === 'agentTerminal.terminalView');
-    assert.ok(view);
+    assert.ok(extension.isActive);
+    const views = extension.packageJSON.contributes.views.agentTerminalContainer as Array<{
+      id: string;
+    }>;
+    assert.ok(views.some((view) => view.id === 'agentTerminal.terminalView'));
   });
 
-  test('reads configuration defaults and executes navigation commands', async () => {
+  test('registers every command it contributes', async () => {
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+    const contributed = (
+      extension.packageJSON.contributes.commands as Array<{ command: string }>
+    ).map((item) => item.command);
+    const registered = new Set(await vscode.commands.getCommands(true));
+    const missing = contributed.filter((command) => !registered.has(command));
+    assert.deepStrictEqual(missing, [], 'contributed commands without a handler');
+  });
+
+  // Switching itself is unit tested in tabs.test.ts; here no process starts,
+  // so the commands must not fail without tabs or a resolved view
+  test('runs tab navigation without tabs', async () => {
+    for (const command of [
+      'agentTerminal.nextTab',
+      'agentTerminal.previousTab',
+      'agentTerminal.closeTab'
+    ]) {
+      await vscode.commands.executeCommand(command);
+    }
+    await vscode.commands.executeCommand('agentTerminal.switchToTabAt', 1);
+  });
+
+  test('reads its configuration defaults', () => {
     const config = vscode.workspace.getConfiguration('agentTerminal');
     assert.strictEqual(config.get('autoRun'), true);
     assert.strictEqual(config.get('directMode'), true);
-    await vscode.commands.executeCommand('agentTerminal.nextTab');
-    await vscode.commands.executeCommand('agentTerminal.previousTab');
+    assert.strictEqual(config.get('programStatus'), true);
+    assert.strictEqual(config.get('onExit'), 'auto');
   });
 });

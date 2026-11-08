@@ -66,6 +66,24 @@ Open VS Code Settings (`Ctrl+,` / `Cmd+,`) and search for `agentTerminal`.
 
 When `agentTerminal.profiles` is empty, SideMates creates profiles for recognized agents installed on the machine. A profile is a name mapped to a command line, for example `{ "Claude": "claude" }`.
 
+## Tab status
+
+Tabs show whether an agent is working, needs input, or finished or failed while you were in another tab. Agents report this through the [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status). For agents that don't, SideMates guesses from prompt text such as `(y/n)` or `Esc to cancel` in background tabs (`agentTerminal.promptNotification`).
+
+| Agent | Status | Tab title |
+| --- | --- | --- |
+| Claude Code | Reported (2.1.295+, not inside tmux) | Conversation summary |
+| Codex | Reported (0.163+) | Thread name |
+| Pi | Reported (1.1+) | Session name (`/name`) |
+| OpenCode | Reported | Session title |
+| Grok Build | Reported (1.0.52+) | — |
+| Devin | Reported | — |
+| Hermes Agent | Reported (when released) | Session title |
+| Gemini CLI | Guessed from prompts | Current thought, if shown in the title |
+| GitHub Copilot | Guessed from prompts | — |
+| Cursor | Guessed from prompts | — |
+| Antigravity | Guessed from prompts | Your `title.sh` output |
+
 ## Keyboard shortcuts
 
 These commands apply when SideMates has focus. On macOS use the **mac** key; Windows/Linux is shown otherwise.
