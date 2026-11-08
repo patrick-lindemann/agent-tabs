@@ -15,6 +15,11 @@ interface AgentDefinition {
    * finished turn apart from a cancelled one.
    */
   statusArgs?: string[];
+  /**
+   * Reports `idle` instead of `done` when a turn completes. Other agents
+   * report `idle` after `working` only when the user cancels.
+   */
+  idleWhenDone?: boolean;
 }
 
 /**
@@ -37,7 +42,7 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
   },
   antigravity: { label: 'Antigravity', command: 'agy' },
   gemini: { label: 'Gemini CLI', command: 'gemini' },
-  opencode: { label: 'OpenCode', command: 'opencode' },
+  opencode: { label: 'OpenCode', command: 'opencode', idleWhenDone: true },
   pi: { label: 'Pi', command: 'pi' },
   cursor: { label: 'Cursor', command: 'agent', aliases: ['cursor-agent'] },
   copilot: { label: 'GitHub Copilot', command: 'copilot' },
@@ -47,6 +52,11 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
 };
 
 const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
+
+/** Whether an agent reports `idle` instead of `done` when a turn completes */
+export function idleWhenDone(agent: AgentId | undefined): boolean {
+  return agent !== undefined && AGENTS[agent].idleWhenDone === true;
+}
 
 function isAgentId(value: unknown): value is AgentId {
   return typeof value === 'string' && Object.hasOwn(AGENTS, value);
@@ -115,7 +125,9 @@ function launchFromWords(
   const agent = index >= 0 ? agentOf(words[index]) : undefined;
   const statusArgs = agent && programStatus ? (AGENTS[agent].statusArgs ?? []) : [];
   const all = [...words];
-  if (statusArgs.length > 0 && !/\s/.test(words[index])) {
+  // A shell's `-c` takes one command string; words after it are not its arguments
+  const shellCommand = index > 0 && /^-\w*c$/.test(words[index - 1]);
+  if (statusArgs.length > 0 && !/\s/.test(words[index]) && !shellCommand) {
     all.splice(index + 1, 0, ...statusArgs);
   }
   return { label, command: all[0], args: all.slice(1), env: {}, agent, commandLine };
@@ -316,12 +328,37 @@ export function shortTitle(text: string, maxWords: number): string | undefined {
  *
  * - pi: `π - <session name> - <folder>`; only a named session gives a label.
  * - Claude Code: `<spinner or ✳> <summary of the conversation>`.
+ * - Gemini CLI: `<glyph>  <state or current thought> (<folder>)`, padded to
+ *   80 characters; only a thought gives a label.
+ * - Codex: `<activity> | <thread name> | <project>`, with `[ ! ] Action
+ *   Required` as the activity while it waits; only a named thread gives a
+ *   label.
+ * - OpenCode: `OC | <session title>`.
  * - Others: the title without leading status glyphs.
  */
 export function labelFromTitle(title: string, launch: LaunchSpec): string | undefined {
   let label: string | undefined;
   if (launch.agent === 'pi') {
-    label = /^π - (.+) - [^-]+$/.exec(title)?.[1];
+    // The folder may contain hyphens, e.g. `agent-terminal`, but not ` - `
+    label = /^π - (.+) - (?:(?! - ).)+$/.exec(title)?.[1];
+  } else if (launch.agent === 'gemini') {
+    label = title
+      .trim()
+      .replace(/^[^\p{L}\p{N}]+/u, '')
+      .replace(/ \([^()]*\)$/, '');
+    if (/^(?:Ready|Working…|Action Required|Gemini CLI)$/.test(label)) label = undefined;
+  } else if (launch.agent === 'codex') {
+    const parts = title
+      .replace(/^[^\p{L}\p{N}]+/u, '')
+      .split(' | ')
+      .map((part) => part.trim());
+    if (/^(?:Ready|Working|Waiting|Thinking|Starting|Action Required)$/.test(parts[0])) {
+      parts.shift();
+    }
+    // The last part is the project folder
+    label = parts.length > 1 ? parts.slice(0, -1).join(' | ') : undefined;
+  } else if (launch.agent === 'opencode') {
+    label = /^OC \| (.+)$/i.exec(title)?.[1];
   } else {
     label = title.replace(/^[^\p{L}\p{N}]+/u, '');
   }
