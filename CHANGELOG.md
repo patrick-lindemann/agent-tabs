@@ -5,6 +5,12 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The Marketplace offers Agent Tabs for Linux, Windows and Intel Macs, not only for Apple Silicon Macs
+
 ## [2.0.0] - 2026-11-08
 
 Agent Terminal is now **Agent Tabs**.

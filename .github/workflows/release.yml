@@ -9,6 +9,13 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: >-
+          Publish the packages of the existing GitHub release to the
+          Marketplace (main only), e.g. after a failed publish
+        type: boolean
+        default: false
 
 # Releases run one at a time; a new dry run of a branch replaces the last one
 concurrency:
@@ -139,7 +146,13 @@ jobs:
   # (release.yml) in the production environment instead of a stored token
   marketplace:
     needs: [version, release]
-    if: github.event_name == 'push' && needs.version.outputs.exists == 'false' && needs.release.result == 'success'
+    # After a new release, or by hand for the existing release of main
+    if: >-
+      !cancelled() &&
+      ((github.event_name == 'push' && needs.version.outputs.exists == 'false' &&
+        needs.release.result == 'success') ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish &&
+        github.ref == 'refs/heads/main' && needs.version.outputs.exists == 'true'))
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -156,11 +169,20 @@ jobs:
       - name: Install publishing tool
         run: npm ci --ignore-scripts
       - name: Download all artifacts
+        if: github.event_name == 'push'
         uses: actions/download-artifact@v5
         with:
           path: vsix-artifacts
           pattern: vsix-*
           merge-multiple: true
+      - name: Download the packages of the release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release download "${{ needs.version.outputs.tag }}"
+          --repo "$GITHUB_REPOSITORY" --pattern '*.vsix' --dir vsix-artifacts
+      # One platform at a time; see scripts/publish.sh
       - name: Publish platform packages
         shell: bash
         run: |
@@ -174,4 +196,4 @@ jobs:
           if [[ "${{ contains(needs.version.outputs.tag, '-') }}" == "true" ]]; then
             pre_release+=(--pre-release)
           fi
-          npm run publish:marketplace -- --oidc --packagePath "${packages[@]}" "${pre_release[@]}"
+          sh scripts/publish.sh "${pre_release[@]}" "${packages[@]}"
