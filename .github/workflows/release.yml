@@ -182,7 +182,7 @@ jobs:
         run: >-
           gh release download "${{ needs.version.outputs.tag }}"
           --repo "$GITHUB_REPOSITORY" --pattern '*.vsix' --dir vsix-artifacts
-      # One platform at a time; see scripts/publish.sh
+      # All at once, the rest one at a time if any upload is dropped; see scripts/publish.sh
       - name: Publish platform packages
         shell: bash
         run: |
