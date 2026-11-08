@@ -92,10 +92,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development, testing, and release ins
 
 ## Acknowledgements
 
-SideMates started as a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero/claude-terminal-panel) (MIT), with thanks to its author. It uses [xterm.js](https://xtermjs.org/), [node-pty](https://github.com/microsoft/node-pty), [stopword](https://github.com/fergiemcdowall/stopword), VS Code Codicons, and Lobe Icons. See [ThirdPartyNotices.txt](ThirdPartyNotices.txt) for bundled logos and library notices.
+SideMates started as a fork of [Nolikzero/claude-terminal-panel](https://github.com/Nolikzero/claude-terminal-panel) (MIT), with thanks to its author. It uses [xterm.js](https://xtermjs.org/), [node-pty](https://github.com/microsoft/node-pty), [stopword](https://github.com/fergiemcdowall/stopword), VS Code Codicons, and Lobe Icons. See [THIRD_PARTY.md](THIRD_PARTY.md) for bundled logos and library notices.
 
 Older `claudeTerminal.*` settings are not migrated; copy them to the corresponding `agentTerminal.*` settings if needed.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE.md)

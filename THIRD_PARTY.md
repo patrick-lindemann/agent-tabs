@@ -1509,7 +1509,7 @@ Source: [https://github.com/microsoft/vscode-codicons](https://github.com/micros
 ```text
 Codicons
 Copyright (c) Microsoft Corporation
-The icons in media/main.ts for done (check) and for profiles without a known
+The icons in media/icons.ts for done (check) and for profiles without a known
 agent (sparkle-filled) are Codicons, inlined as SVG paths without changes. License: Creative Commons
 Attribution 4.0 International, https://creativecommons.org/licenses/by/4.0/
 ```
