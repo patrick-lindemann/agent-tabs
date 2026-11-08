@@ -52,3 +52,5 @@ node_modules/node-pty/**
 !node_modules/node-pty/build/Release/*/*.exe
 !LICENSE.md
 !THIRD_PARTY.md
+media/**/*.svg
+media/screenshots/**

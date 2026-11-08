@@ -393,11 +393,13 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "sh scripts/headless.sh",
     "test:integration:visible": "npm run compile:tests && vscode-test",
-    "compile:tests": "npm run compile && tsc -p tsconfig.tests.json"
+    "compile:tests": "npm run compile && tsc -p tsconfig.tests.json",
+    "icons": "node scripts/icons.js"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
     "@electron/rebuild": "^4.0.2",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.0.0",
     "@types/stopword": "^2.0.3",
     "@types/vscode": "^1.106.0",
