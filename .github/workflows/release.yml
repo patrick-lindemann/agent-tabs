@@ -136,7 +136,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Trusted publishing: the Marketplace accepts this workflow file
-  # (publish.yml) in the production environment instead of a stored token
+  # (release.yml) in the production environment instead of a stored token
   marketplace:
     needs: [version, release]
     if: github.event_name == 'push' && needs.version.outputs.exists == 'false' && needs.release.result == 'success'

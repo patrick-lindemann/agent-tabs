@@ -11,5 +11,5 @@
   and `npm test` locally before pushing.
 - Merging to `main` also publishes platform VSIX files to the VS Code Marketplace
   after the GitHub Release succeeds, through trusted publishing: the
-  Marketplace policy names the workflow file `publish.yml` and the `production`
+  Marketplace policy names the workflow file `release.yml` and the `production`
   environment, so keep both names.

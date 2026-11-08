@@ -46,7 +46,7 @@ Keep changes focused, add or update tests where appropriate, and ensure the chec
 
 The **CI** workflow (lint, format, typecheck, build, unit and integration tests) runs on every push to `develop` and on every pull request.
 
-The **Build and Release** workflow (`publish.yml`) runs CI again, then builds the package for every platform. It runs in three ways:
+The **Build and Release** workflow (`release.yml`) runs CI again, then builds the package for every platform. It runs in three ways:
 
 - A push to `main`, i.e. a merged release pull request, releases and publishes.
 - A pull request to `main` is a dry run: it builds every platform package and uploads them as artifacts, without releasing or publishing.
@@ -64,7 +64,7 @@ A release is made by bumping the version on `develop`, updating `CHANGELOG.md`, 
 
 1. Builds platform VSIX files for Linux x64/arm64, macOS x64/arm64, and Windows x64.
 2. Creates GitHub release `v<package.json version>` with those VSIX files.
-3. Publishes the platform packages to the VS Code Marketplace with trusted publishing: the Marketplace accepts `publish.yml` in the `production` environment, which only `main` may use, so no token is stored. Renaming the workflow file or the environment needs the same change in the Marketplace's trusted publishing policy.
+3. Publishes the platform packages to the VS Code Marketplace with trusted publishing: the Marketplace accepts `release.yml` in the `production` environment, which only `main` may use, so no token is stored. Renaming the workflow file or the environment needs the same change in the Marketplace's trusted publishing policy.
 
 The Electron version used to rebuild native modules is single-sourced in `package.json` under `config.electronVersion`. Update that value when preparing a release for a new VS Code Electron version; the rebuild script reads it automatically.
 
