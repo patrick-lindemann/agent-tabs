@@ -32,7 +32,7 @@ function start(): void {
     }
   });
 
-  // Reports focus for the `agentTerminal.focused` context key. When the view
+  // Reports focus for the `sideMates.focused` context key. When the view
   // gains focus, e.g. after Switch Tab… or a tab shortcut, keyboard input
   // goes to the active terminal instead of the page.
   window.addEventListener('focus', () => {

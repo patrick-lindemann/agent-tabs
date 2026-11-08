@@ -3,7 +3,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  fromLegacyProfiles,
   isInstalled,
   labelFromTitle,
   launchForCommand,
@@ -168,37 +167,10 @@ describe('resolving the profiles setting', () => {
     }
   });
 
-  it('reads the list format from 1.2', () => {
-    const { profiles } = resolveProfiles([{ id: 'pi', args: ['--name', 'a b'] }], false);
-    expect(profiles[0]).toMatchObject({ label: 'Pi', command: 'pi', args: ['--name', 'a b'] });
-  });
-});
-
-describe('converting profiles from 1.2', () => {
-  it.each([
-    [[{ id: 'pi', args: ['--name', 'a b'] }], { Pi: "pi --name 'a b'" }],
-    [[{ id: 'claude', label: 'Work' }], { Work: 'claude' }],
-    [[{ id: 'mine', command: 'htop' }], { mine: 'htop' }],
-    [[{ command: '/bin/zsh' }], { '/bin/zsh': '/bin/zsh' }],
-    [[{ id: 'codex', args: ["it's"] }], { Codex: `codex 'it'\\''s'` }],
-    [[null, 'x', { id: 'unknown' }], {}]
-  ])('converts %j', (list, table) => {
-    expect(fromLegacyProfiles(list)).toEqual(table);
-  });
-
-  it('turns environment variables into an env prefix', () => {
-    const table = fromLegacyProfiles([{ id: 'claude', env: { A: '1', B: 'x y' } }]);
-    if (process.platform === 'win32') {
-      expect(table).toEqual({ 'Claude Code': 'claude' });
-    } else {
-      expect(table).toEqual({ 'Claude Code': "env A=1 'B=x y' claude" });
-    }
-  });
-
-  it('round-trips through splitCommandLine', () => {
-    const args = ['--name', `it's "quoted" $HOME`];
-    const [line] = Object.values(fromLegacyProfiles([{ id: 'pi', args }]));
-    expect(splitCommandLine(line)).toEqual(['pi', ...args]);
+  it('rejects a list', () => {
+    expect(resolveProfiles([{ id: 'pi' }], false).problems).toEqual([
+      'it must map names to command lines'
+    ]);
   });
 });
 

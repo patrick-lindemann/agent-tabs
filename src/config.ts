@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { fromLegacyProfiles, resolveProfiles } from './profiles';
+import { resolveProfiles } from './profiles';
 import type { PromptDetectorConfig } from './terminal/prompt';
 import type { OnExitAction, TerminalConfig } from './types';
 
@@ -15,7 +15,7 @@ export class ConfigManager {
     // Listen for configuration changes and invalidate cache
     this.disposables.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('agentTerminal')) {
+        if (e.affectsConfiguration('sideMates')) {
           this.invalidateCache();
         }
       })
@@ -30,12 +30,12 @@ export class ConfigManager {
       return this.cachedConfig;
     }
 
-    const config = vscode.workspace.getConfiguration('agentTerminal');
+    const config = vscode.workspace.getConfiguration('sideMates');
     const programStatus = config.get<boolean>('programStatus', true);
     const { profiles, problems } = resolveProfiles(config.get('profiles'), programStatus);
     if (problems.length > 0) {
       void vscode.window.showWarningMessage(
-        `SideMates: check agentTerminal.profiles: ${problems.join('; ')}.`
+        `SideMates: check sideMates.profiles: ${problems.join('; ')}.`
       );
     }
 
@@ -58,24 +58,6 @@ export class ConfigManager {
   }
 
   /**
-   * Rewrites `agentTerminal.profiles` from 1.2, a list of objects, as the
-   * table of names and command lines that the Settings editor can edit.
-   */
-  async migrateProfiles(): Promise<void> {
-    const config = vscode.workspace.getConfiguration('agentTerminal');
-    const inspected = config.inspect('profiles');
-    const scopes = [
-      [inspected?.globalValue, vscode.ConfigurationTarget.Global],
-      [inspected?.workspaceValue, vscode.ConfigurationTarget.Workspace]
-    ] as const;
-    for (const [value, target] of scopes) {
-      if (Array.isArray(value)) {
-        await config.update('profiles', fromLegacyProfiles(value), target);
-      }
-    }
-  }
-
-  /**
    * Invalidates the cached configuration.
    */
   invalidateCache(): void {
@@ -95,7 +77,7 @@ export class ConfigManager {
 
 /** Settings of the pattern-based prompt detector, read fresh on each change */
 export function promptConfig(): PromptDetectorConfig {
-  const config = vscode.workspace.getConfiguration('agentTerminal');
+  const config = vscode.workspace.getConfiguration('sideMates');
   return {
     enabled: config.get<boolean>('promptNotification', true),
     showDelay: config.get<number>('promptNotificationDelay', 300),

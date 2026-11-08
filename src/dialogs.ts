@@ -45,7 +45,7 @@ export async function pickProfile(
 }
 
 /**
- * The agent's logo; in its brand colors unless `agentTerminal.monochromeIcons`
+ * The agent's logo; in its brand colors unless `sideMates.monochromeIcons`
  * is set. Logos without brand colors follow the theme.
  */
 function profileIcon(
@@ -56,7 +56,7 @@ function profileIcon(
   if (!profile.agent) {
     return new vscode.ThemeIcon('sparkle-filled');
   }
-  const icon = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.svg`);
+  const icon = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.png`);
   if (!monochrome && BRAND_COLORED.has(profile.agent)) {
     return icon(profile.agent);
   }
@@ -64,12 +64,12 @@ function profileIcon(
 }
 
 /**
- * Opens `agentTerminal.profiles` in the Settings editor. Without own
+ * Opens `sideMates.profiles` in the Settings editor. Without own
  * profiles, the ones in use are written first, so there is something to
  * edit.
  */
 export async function manageProfiles(profiles: LaunchSpec[]): Promise<void> {
-  const config = vscode.workspace.getConfiguration('agentTerminal');
+  const config = vscode.workspace.getConfiguration('sideMates');
   const inspected = config.inspect<Record<string, string>>('profiles');
   const isSet = [
     inspected?.globalValue,
@@ -83,7 +83,7 @@ export async function manageProfiles(profiles: LaunchSpec[]): Promise<void> {
       vscode.ConfigurationTarget.Global
     );
   }
-  await vscode.commands.executeCommand('workbench.action.openSettings', 'agentTerminal.profiles');
+  await vscode.commands.executeCommand('workbench.action.openSettings', 'sideMates.profiles');
 }
 
 export interface TabEntry {
@@ -111,7 +111,7 @@ export interface BusyTab {
 
 /**
  * Asks before closing tabs whose agent is working or waiting for an answer.
- * "Don't Ask Again" turns off `agentTerminal.confirmClose`.
+ * "Don't Ask Again" turns off `sideMates.confirmClose`.
  */
 export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
   const [first] = busy;
@@ -133,7 +133,7 @@ export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
   );
   if (choice === dontAsk) {
     await vscode.workspace
-      .getConfiguration('agentTerminal')
+      .getConfiguration('sideMates')
       .update('confirmClose', false, vscode.ConfigurationTarget.Global);
   }
   return choice !== undefined;

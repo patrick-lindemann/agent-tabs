@@ -58,10 +58,6 @@ export function idleWhenDone(agent: AgentId | undefined): boolean {
   return agent !== undefined && AGENTS[agent].idleWhenDone === true;
 }
 
-function isAgentId(value: unknown): value is AgentId {
-  return typeof value === 'string' && Object.hasOwn(AGENTS, value);
-}
-
 /**
  * Splits a command line into words like a POSIX shell: quotes group words and
  * a backslash escapes the next character, except on Windows, where it
@@ -140,9 +136,9 @@ function agentOf(word: string): AgentId | undefined {
 }
 
 /**
- * Resolves `agentTerminal.profiles`, a table of names and command lines, in
+ * Resolves `sideMates.profiles`, a table of names and command lines, in
  * the order of the settings. Invalid entries are skipped and described in
- * `problems`. A list from 1.2 is read as well.
+ * `problems`.
  *
  * Without any profile, there is one for each known agent that is installed,
  * or for all of them when none is found.
@@ -153,9 +149,12 @@ export function resolveProfiles(
 ): { profiles: LaunchSpec[]; problems: string[] } {
   const problems: string[] = [];
   const profiles: LaunchSpec[] = [];
-  const table = Array.isArray(setting) ? fromLegacyProfiles(setting) : setting;
+  const table = setting;
 
-  if (table !== undefined && (typeof table !== 'object' || table === null)) {
+  if (
+    table !== undefined &&
+    (typeof table !== 'object' || table === null || Array.isArray(table))
+  ) {
     problems.push('it must map names to command lines');
   } else {
     for (const [name, line] of Object.entries(table ?? {})) {
@@ -180,41 +179,6 @@ export function resolveProfiles(
     }
   }
   return { profiles, problems };
-}
-
-/**
- * Converts `agentTerminal.profiles` from 1.2, a list of `{ id, label,
- * command, args, env }`, into the table of names and command lines.
- * Environment variables become an `env` prefix, except on Windows.
- */
-export function fromLegacyProfiles(list: unknown[]): Record<string, string> {
-  const table: Record<string, string> = {};
-  for (const entry of list) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const { id, label, command, args, env } = entry as Record<string, unknown>;
-    const agent = isAgentId(id) ? id : undefined;
-    const executable = typeof command === 'string' ? command : agent && AGENTS[agent].command;
-    if (!executable) continue;
-    const name =
-      typeof label === 'string'
-        ? label
-        : agent
-          ? AGENTS[agent].label
-          : typeof id === 'string'
-            ? id
-            : executable;
-    const variables =
-      typeof env === 'object' && env !== null && process.platform !== 'win32'
-        ? Object.entries(env).map(([key, value]) => `${key}=${String(value)}`)
-        : [];
-    const words = [
-      ...(variables.length > 0 ? ['env', ...variables] : []),
-      executable,
-      ...(Array.isArray(args) ? args.map(String) : [])
-    ];
-    table[name] = words.map(quoteWord).join(' ');
-  }
-  return table;
 }
 
 /**

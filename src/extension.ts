@@ -11,7 +11,7 @@ export function activate(context: vscode.ExtensionContext) {
   terminalProvider = new ViewProvider(context.extensionUri);
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('agentTerminal.terminalView', terminalProvider, {
+    vscode.window.registerWebviewViewProvider('sideMates.terminalView', terminalProvider, {
       webviewOptions: {
         retainContextWhenHidden: true
       }
@@ -20,60 +20,60 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Multi-tab commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('agentTerminal.newTab', () => {
+    vscode.commands.registerCommand('sideMates.newTab', () => {
       void terminalProvider?.createTerminal();
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('agentTerminal.newTabWithCommand', () => {
+    vscode.commands.registerCommand('sideMates.newTabWithCommand', () => {
       void terminalProvider?.promptAndCreateTerminal();
     }),
-    vscode.commands.registerCommand('agentTerminal.newTabWithProfile', () => {
+    vscode.commands.registerCommand('sideMates.newTabWithProfile', () => {
       void terminalProvider?.pickProfileAndCreateTerminal();
     }),
-    vscode.commands.registerCommand('agentTerminal.manageProfiles', () => {
+    vscode.commands.registerCommand('sideMates.manageProfiles', () => {
       void terminalProvider?.manageProfiles();
     }),
-    vscode.commands.registerCommand('agentTerminal.switchTab', () => {
+    vscode.commands.registerCommand('sideMates.switchTab', () => {
       void terminalProvider?.pickTerminal();
     }),
-    vscode.commands.registerCommand('agentTerminal.switchToTabAt', (position: number) => {
+    vscode.commands.registerCommand('sideMates.switchToTabAt', (position: number) => {
       terminalProvider?.switchToTerminalAt(position);
     })
   );
 
   // Tab context menu; VS Code passes the tab's data-vscode-context
   context.subscriptions.push(
-    vscode.commands.registerCommand('agentTerminal.closeTabFromMenu', (tab: TabContext) => {
+    vscode.commands.registerCommand('sideMates.closeTabFromMenu', (tab: TabContext) => {
       void terminalProvider?.requestClose([tab.terminalId]);
     }),
-    vscode.commands.registerCommand('agentTerminal.closeOtherTabs', (tab: TabContext) => {
+    vscode.commands.registerCommand('sideMates.closeOtherTabs', (tab: TabContext) => {
       void terminalProvider?.closeOtherTerminals(tab.terminalId);
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('agentTerminal.closeTab', () => {
+    vscode.commands.registerCommand('sideMates.closeTab', () => {
       terminalProvider?.closeActiveTerminal();
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('agentTerminal.nextTab', () => {
+    vscode.commands.registerCommand('sideMates.nextTab', () => {
       terminalProvider?.switchToNextTerminal();
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('agentTerminal.previousTab', () => {
+    vscode.commands.registerCommand('sideMates.previousTab', () => {
       terminalProvider?.switchToPreviousTerminal();
     })
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('agentTerminal')) {
+      if (e.affectsConfiguration('sideMates')) {
         terminalProvider?.updateConfig();
       }
     })

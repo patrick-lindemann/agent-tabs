@@ -29,10 +29,6 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
       isAttached: () => !this.disposed && this.view !== undefined
     });
 
-    void this.config.migrateProfiles().catch((error: unknown) => {
-      console.error('SideMates: could not convert agentTerminal.profiles', error);
-    });
-
     // Pre-load help for the custom command picker (missing commands are handled gracefully)
     const profileCommands = this.config.getConfig().profiles.map((p) => p.command);
     this.picker.preloadCommands([
@@ -81,11 +77,11 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   /**
    * VS Code renders a webview view as an overlay outside the view's element,
    * so `focusedView` is not set while the terminal has focus. The webview
-   * reports focus itself and the `agentTerminal.focused` context key scopes
+   * reports focus itself and the `sideMates.focused` context key scopes
    * the tab keybindings, e.g. so Cmd+W closes a tab instead of the editor.
    */
   handleFocus(focused: boolean): void {
-    void vscode.commands.executeCommand('setContext', 'agentTerminal.focused', focused);
+    void vscode.commands.executeCommand('setContext', 'sideMates.focused', focused);
   }
 
   handleNewTab(): void {
@@ -170,7 +166,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   /**
    * Closes tabs the user asked to close. Closing ends the agent's process, so
    * tabs whose agent is working or waiting for an answer ask first, unless
-   * `agentTerminal.confirmClose` is off.
+   * `sideMates.confirmClose` is off.
    */
   async requestClose(ids: string[]): Promise<boolean> {
     const { state } = this.tabs;
@@ -241,7 +237,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   // --- Helpers ---
 
   private async focusView(): Promise<void> {
-    await vscode.commands.executeCommand('agentTerminal.terminalView.focus');
+    await vscode.commands.executeCommand('sideMates.terminalView.focus');
   }
 
   private post(message: ExtensionMessage): void {

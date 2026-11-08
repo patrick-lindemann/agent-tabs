@@ -208,7 +208,7 @@ export class Tabs {
 
   /**
    * Restarts a tab with its own command and working directory, after its
-   * process exited (Enter, or `agentTerminal.onExit: restart`).
+   * process exited (Enter, or `sideMates.onExit: restart`).
    */
   private restart(id: string): void {
     const instance = this.state.get(id);
