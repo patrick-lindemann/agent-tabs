@@ -5,34 +5,43 @@ All notable changes to SideMates will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2026-11-08
 
-### Changed
+Agent Terminal is now **SideMates**.
 
-- Renamed the display name to SideMates: Terminal Agents for VS Code.
-- Reworked the README and added contributor documentation for Marketplace and GitHub releases.
-- Standardized linting and formatting on Biome.
-- Added and documented unit and integration test workflows.
-- Refactored extension internals and prepared Marketplace publishing.
+### Breaking
 
-## [1.2.0]
+- Settings are renamed from `agentTerminal.*` to `sideMates.*` and are not carried over; set your profiles again under `sideMates.profiles`
+- Command IDs are renamed from `agentTerminal.*` to `sideMates.*`; custom keybindings need the new IDs
+- `sideMates.profiles` only accepts a table of names and command lines; the list format from 1.2 is no longer read
 
 ### Added
 
-- Agents recognized in a profile's command line, also behind a wrapper such as tmux: Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, Pi, Cursor, GitHub Copilot, Grok Build, Hermes Agent and Devin; they get their logo and status support
-- Agent logos in Use Profile… and on tabs, in brand colors or the text color (`agentTerminal.monochromeIcons`)
-- Manage Profiles opens `agentTerminal.profiles` in the Settings editor
+- Agents recognized in a profile's command line, also behind a wrapper such as tmux: Claude Code, Codex, Antigravity, Gemini CLI, OpenCode, pi, Cursor, GitHub Copilot, Grok Build, Hermes Agent and Devin; they get their logo and status support
+- Agent logos in Use Profile… and on tabs, in brand colors or the text color (`sideMates.monochromeIcons`)
+- Manage Profiles opens `sideMates.profiles` in the Settings editor
 - Without any profile, there is one for each known agent that is installed
-- A profile whose command or agent is not installed shows an error naming the missing command instead of a spawn error; Use Profile… marks it as not installed
+- A profile whose command or agent is not installed shows an error naming the missing command; Use Profile… marks it as not installed
+- Tab names from Codex thread names, OpenCode session titles and Gemini CLI's current thought
 
 ### Changed
 
-- `agentTerminal.profiles` is a table of names and command lines, editable in the Settings editor and in its order; the list from 1.2 is converted on the first start
-- `+` and `…` in the view title bar are replaced by a `+ ⌄` split button at the end of the tab strip, like the one in VS Code's terminal panel: `+` opens the first profile, `⌄` (Use Profile…) lists the profiles, Custom Command and Manage Profiles
+- `+` and `…` in the view title bar are replaced by a `+ ⌄` split button at the end of the tab strip, like the one in VS Code's terminal panel
 - Use Profile… marks the first profile with `(default)`
-- Needs input shows `!` and failed `✕`, without the triangle and circle around them; with `agentTerminal.statusColors`, the tab's name also turns yellow, green or red
+- Needs input shows `!` and failed `✕`; with `sideMates.statusColors`, the tab's name also turns yellow, green or red
 - Tab names keep the title's case and spaces: `Refactor API client` instead of `refactor-api-client`
-- A tab shows its agent's logo while idle; a status icon takes its place while there is a status. Profiles without a known agent show a filled sparkle
+- A tab shows its agent's logo while idle and a status icon while there is a status
+- Settings are grouped by topic in the Settings editor
+
+### Fixed
+
+- A cancelled turn no longer shows as done
+- A bell, notification and status report in the same output are applied in the order the agent wrote them
+- pi sessions in folders with hyphens get their name as tab title
+- Codex and OpenCode tab names no longer contain status words or the folder name
+- With `bash -c "codex"`, the status options are no longer passed to the shell
+- A failed exit no longer shows the message of an old question
+- Turning off `sideMates.promptNotification` clears prompts already shown
 
 ## [1.2.0] - 2026-11-06
 
