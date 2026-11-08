@@ -1,7 +1,7 @@
 {
   "name": "agent-terminal",
   "displayName": "SideMates: Terminal Agents for VS Code",
-  "description": "A dedicated terminal in the secondary sidebar for running CLI coding agents such as pi",
+  "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
   "version": "1.2.0",
   "publisher": "patrick-lindemann",
   "license": "MIT",
@@ -394,7 +394,8 @@
     "test:integration": "sh scripts/headless.sh",
     "test:integration:visible": "npm run compile:tests && vscode-test",
     "compile:tests": "npm run compile && tsc -p tsconfig.tests.json",
-    "icons": "node scripts/icons.js"
+    "icons": "node scripts/icons.js",
+    "screenshots": "sh scripts/screenshots/run.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",

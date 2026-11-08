@@ -32,6 +32,16 @@ npm run test:integration
 
 This needs Docker. The first run builds a small image and downloads VS Code into a Docker volume. To run them in a visible window on your machine instead, use `npm run test:integration:visible` (on headless Linux, through `xvfb-run -a`). The **Extension Tests** launch configuration debugs them in a visible window.
 
+## Icons and screenshots
+
+The Marketplace does not accept SVG files in a package, so every SVG in `media/` has a PNG next to it. After changing an SVG, run `npm run icons` and commit the PNG files.
+
+The README screenshots are taken in Docker with a clean VS Code, the packaged extension and demo agents (`scripts/screenshots/agents/demo.js`) that report their status like the real ones, in the example workspace `scripts/screenshots/api-server`:
+
+```bash
+npm run screenshots   # writes media/screenshots/*.png
+```
+
 Biome is used for linting and formatting; use `npm run lint:fix` or `npm run format` to apply fixes. Markdown is not formatted by Biome.
 
 ## Pull requests

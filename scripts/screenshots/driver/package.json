@@ -1,0 +1,14 @@
+{
+  "name": "screenshot-driver",
+  "displayName": "SideMates screenshot driver",
+  "publisher": "sidemates",
+  "version": "0.0.1",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.106.0"
+  },
+  "main": "extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ]
+}
