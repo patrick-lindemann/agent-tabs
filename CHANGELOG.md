@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The Marketplace offers Agent Tabs for Linux, Windows and Intel Macs, not only for Apple Silicon Macs
+- Clicking a web link in a terminal opens it in the browser
 
 ## [2.0.0] - 2026-11-08
 

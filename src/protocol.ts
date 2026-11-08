@@ -35,6 +35,7 @@ export type WebviewMessage =
   | { type: 'closeTab'; id: string }
   | { type: 'switchTab'; id: string }
   | { type: 'openFile'; id: string; path: string; line?: number; column?: number }
+  | { type: 'openLink'; url: string }
   | { type: 'focus'; focused: boolean };
 
 export type ExtensionMessage =

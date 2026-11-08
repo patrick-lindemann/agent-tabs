@@ -108,6 +108,11 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     void openFile(path, this.tabs.state.get(id)?.cwd, line, column);
   }
 
+  /** A web link clicked in a terminal; webviews cannot open windows themselves */
+  handleOpenLink(url: string): void {
+    void vscode.env.openExternal(vscode.Uri.parse(url));
+  }
+
   // --- Commands ---
 
   createTerminal(launch?: LaunchSpec): Promise<string> {
