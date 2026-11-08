@@ -84,9 +84,9 @@ export const TRANSCRIPTS: AgentTranscript[] = [
     done: notify('Agent turn complete') + status('state=done:app=codex'),
     cancelled: status('state=idle:app=codex'),
     titles: [
-      ['Ready | agent-terminal', undefined],
-      ['⠋ Working | Fix login | agent-terminal', 'Fix login'],
-      ['[ ! ] Action Required | Fix login | agent-terminal', 'Fix login']
+      ['Ready | agent-tabs', undefined],
+      ['⠋ Working | Fix login | agent-tabs', 'Fix login'],
+      ['[ ! ] Action Required | Fix login | agent-tabs', 'Fix login']
     ]
   },
   {
@@ -96,15 +96,15 @@ export const TRANSCRIPTS: AgentTranscript[] = [
       'pi packages/tui/src/program-status.ts (1.1+): reports after the probe, app=pi; ' +
       'interactive-mode.ts title `π - <session> - <folder>`',
     queries: true,
-    start: query + status('state=idle:app=pi') + title('π - agent-terminal'),
+    start: query + status('state=idle:app=pi') + title('π - agent-tabs'),
     working: `${status('state=working:app=pi')}${ESC}]9;4;3${BEL}${SCREEN}`,
     blocked: status(`state=blocked:kind=question:app=pi:msg=${msg('Which branch?')}`),
     done: `${status('state=done:app=pi')}${ESC}]9;4;0${BEL}`,
     cancelled: status('state=idle:app=pi'),
     error: status('state=error:app=pi'),
     titles: [
-      ['π - Fix tests - agent-terminal', 'Fix tests'],
-      ['π - agent-terminal', undefined]
+      ['π - Fix tests - agent-tabs', 'Fix tests'],
+      ['π - agent-tabs', undefined]
     ]
   },
   {
@@ -188,16 +188,16 @@ export const SILENT_AGENTS: SilentAgent[] = [
     agent: 'gemini',
     command: 'gemini',
     source: 'gemini-cli packages/cli/src/utils/windowTitle.ts; OSC 7501 only in unmerged PR #29918',
-    working: title('✦  Working… (agent-terminal)'.padEnd(80)) + SCREEN,
+    working: title('✦  Working… (agent-tabs)'.padEnd(80)) + SCREEN,
     prompt:
-      title('✋  Action Required (agent-terminal)'.padEnd(80)) +
+      title('✋  Action Required (agent-tabs)'.padEnd(80)) +
       'Apply this change?\r\n● 1. Yes, allow once\r\n  2. No (esc to cancel)',
     titles: [
-      ['◇  Ready (agent-terminal)'.padEnd(80), undefined],
-      ['✦  Working… (agent-terminal)'.padEnd(80), undefined],
-      ['✋  Action Required (agent-terminal)'.padEnd(80), undefined],
-      ['✦  Planning the refactor (agent-terminal)'.padEnd(80), 'Planning the refactor'],
-      ['Gemini CLI (agent-terminal)'.padEnd(80), undefined]
+      ['◇  Ready (agent-tabs)'.padEnd(80), undefined],
+      ['✦  Working… (agent-tabs)'.padEnd(80), undefined],
+      ['✋  Action Required (agent-tabs)'.padEnd(80), undefined],
+      ['✦  Planning the refactor (agent-tabs)'.padEnd(80), 'Planning the refactor'],
+      ['Gemini CLI (agent-tabs)'.padEnd(80), undefined]
     ]
   },
   {

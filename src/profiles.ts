@@ -303,7 +303,7 @@ export function shortTitle(text: string, maxWords: number): string | undefined {
 export function labelFromTitle(title: string, launch: LaunchSpec): string | undefined {
   let label: string | undefined;
   if (launch.agent === 'pi') {
-    // The folder may contain hyphens, e.g. `agent-terminal`, but not ` - `
+    // The folder may contain hyphens, e.g. `agent-tabs`, but not ` - `
     label = /^π - (.+) - (?:(?! - ).)+$/.exec(title)?.[1];
   } else if (launch.agent === 'gemini') {
     label = title

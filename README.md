@@ -99,18 +99,18 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 
 ## Installation
 
-Install **Agent Tabs** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=patrick-lindemann.agent-terminal), or run:
+Install **Agent Tabs** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=patrick-lindemann.agent-tabs), or run:
 
 ```bash
-code --install-extension patrick-lindemann.agent-terminal
+code --install-extension patrick-lindemann.agent-tabs
 ```
 
 Agent Tabs opens in the secondary sidebar. You need VS Code 1.106 or later and at least one agent on your `PATH`.
 
-For offline or remote machines, download the `.vsix` for your platform from the [latest release](https://github.com/patrick-lindemann/agent-terminal/releases/latest) and use **Extensions: Install from VSIX…**, or run the installer:
+For offline or remote machines, download the `.vsix` for your platform from the [latest release](https://github.com/patrick-lindemann/agent-tabs/releases/latest) and use **Extensions: Install from VSIX…**, or run the installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-terminal/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-tabs/main/install.sh | sh
 ```
 
 ## Troubleshooting
@@ -121,7 +121,7 @@ curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-terminal/ma
 
 ## Contributing
 
-Issues and pull requests are welcome on [GitHub](https://github.com/patrick-lindemann/agent-terminal). See [CONTRIBUTING.md](CONTRIBUTING.md) for development and testing.
+Issues and pull requests are welcome on [GitHub](https://github.com/patrick-lindemann/agent-tabs). See [CONTRIBUTING.md](CONTRIBUTING.md) for development and testing.
 
 ## Acknowledgements
 

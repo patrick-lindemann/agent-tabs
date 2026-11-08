@@ -11,6 +11,7 @@ Agent Terminal is now **Agent Tabs**.
 
 ### Breaking
 
+- The extension ID is now `patrick-lindemann.agent-tabs` and the repository `patrick-lindemann/agent-tabs`
 - Settings are renamed from `agentTerminal.*` to `agentTabs.*` and are not carried over; set your profiles again under `agentTabs.profiles`
 - Command IDs are renamed from `agentTerminal.*` to `agentTabs.*`; custom keybindings need the new IDs
 - `agentTabs.profiles` only accepts a table of names and command lines; the list format from 1.2 is no longer read

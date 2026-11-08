@@ -1,5 +1,5 @@
 {
-  "name": "agent-terminal",
+  "name": "agent-tabs",
   "displayName": "Agent Tabs: Coding Agents in the Sidebar",
   "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
   "version": "2.0.0",
@@ -8,7 +8,7 @@
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/patrick-lindemann/agent-terminal"
+    "url": "https://github.com/patrick-lindemann/agent-tabs"
   },
   "galleryBanner": {
     "color": "#1f2937",
@@ -20,9 +20,9 @@
     "electronVersion": "43.8.3"
   },
   "bugs": {
-    "url": "https://github.com/patrick-lindemann/agent-terminal/issues"
+    "url": "https://github.com/patrick-lindemann/agent-tabs/issues"
   },
-  "homepage": "https://github.com/patrick-lindemann/agent-terminal#readme",
+  "homepage": "https://github.com/patrick-lindemann/agent-tabs#readme",
   "engines": {
     "vscode": "^1.106.0"
   },

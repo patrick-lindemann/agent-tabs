@@ -2,7 +2,7 @@ import * as assert from 'node:assert';
 import { suite, test } from 'mocha';
 import * as vscode from 'vscode';
 
-const EXTENSION_ID = 'patrick-lindemann.agent-terminal';
+const EXTENSION_ID = 'patrick-lindemann.agent-tabs';
 
 suite('Agent Tabs extension', () => {
   test('activates and contributes the terminal view', async () => {

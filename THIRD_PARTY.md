@@ -1498,7 +1498,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 The logos are trademarks of their owners. They only identify the agent a
-tab runs; Agent Terminal is not affiliated with or endorsed by them.
+tab runs; Agent Tabs is not affiliated with or endorsed by them.
 
 ```
 
