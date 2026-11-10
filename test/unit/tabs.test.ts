@@ -1112,6 +1112,45 @@ describe('reopening closed tabs', () => {
     expect(args(pty())).toEqual([]);
   });
 
+  it.each([
+    ['claude', ['doctor']],
+    ['claude', ['mcp', 'list']],
+    ['pi', ['install', 'npm:x']],
+    ['agent', ['login']]
+  ])('adds nothing in front of a subcommand: %s %s', async (command, rest) => {
+    installed.add('agent');
+    try {
+      const { tabs, pty, instance } = setup();
+      const id = await tabs.create(launchForCommand(command, rest, true));
+      expect(instance(id).conversation).toBeUndefined();
+      expect(args(pty())).toEqual(rest);
+    } finally {
+      installed.delete('agent');
+    }
+  });
+
+  it('adds nothing to a command that only mentions an agent', async () => {
+    const { tabs, pty } = setup();
+    await tabs.create(launchForCommand('tmux', ['new', '-s', 'claude'], true));
+    expect(args(pty())).toEqual(['new', '-s', 'claude']);
+  });
+
+  it.each([
+    ['npx', ['@openai/codex']],
+    ['ssh', ['devbox', 'claude']]
+  ])('starts %s %s without looking for the agent here', async (command, rest) => {
+    installed.add(command);
+    installed.delete('claude');
+    try {
+      const { tabs, pty } = setup();
+      await tabs.create(launchForCommand(command, rest, false));
+      expect(pty()?.file).toBe(command);
+    } finally {
+      installed.delete(command);
+      installed.add('claude');
+    }
+  });
+
   it('adds the arguments after an agent behind a wrapper', async () => {
     const { tabs, pty, instance } = setup();
     const [profile] = resolveProfiles(

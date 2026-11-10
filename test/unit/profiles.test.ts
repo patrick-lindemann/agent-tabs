@@ -61,11 +61,25 @@ describe('recognizing agents', () => {
     ['env FOO=bar claude', 'claude'],
     ['tmux new-session -- claude', 'claude'],
     ['npx @openai/codex', 'codex'],
+    ['npx -y @openai/codex@latest', 'codex'],
+    ['bunx @google/gemini-cli', 'gemini'],
+    ['pnpm dlx @anthropic-ai/claude-code', 'claude'],
     ['npx pi', 'pi'],
+    ['ssh -p 2222 devbox claude --continue', 'claude'],
+    ['tmux new -s work claude', 'claude'],
+    ['abduco -A work pi', 'pi'],
+    ['nohup env A=1 codex', 'codex'],
     ['"/opt/cursor/cursor-agent" --x', 'cursor'],
     ['bash -lc "claude --continue"', 'claude'],
     ['claudette', undefined],
-    ['zsh', undefined]
+    ['zsh', undefined],
+    // Only the program a command line runs counts, not any word naming an agent
+    ['tmux new -s claude', undefined],
+    ['tmux attach -t claude', undefined],
+    ['docker run --name codex img', undefined],
+    ['git log --author pi', undefined],
+    ['python -m agent', undefined],
+    ['env -S "claude"', undefined]
   ] as Array<[string, AgentId | undefined]>)('reads %s as %s', (line, agent) => {
     expect(resolveProfiles([{ name: 'P', command: line }], false).profiles[0].agent).toBe(agent);
   });
@@ -101,6 +115,19 @@ describe('status arguments', () => {
       ...CODEX_STATUS_ARGS,
       'resume'
     ]);
+  });
+
+  it.each(['tmux new -s codex', 'docker run --name codex img'])(
+    'adds nothing to a command that only mentions codex: %s',
+    (line) => {
+      const [profile] = resolveProfiles([{ name: 'P', command: line }], true).profiles;
+      expect([profile.command, ...profile.args]).toEqual(splitCommandLine(line));
+    }
+  );
+
+  it('adds them after codex run by npx', () => {
+    const [profile] = resolveProfiles([{ name: 'P', command: 'npx @openai/codex' }], true).profiles;
+    expect(profile.args).toEqual(['@openai/codex', ...CODEX_STATUS_ARGS]);
   });
 
   it.each(['bash -c "codex --full-auto"', 'bash -lc codex'])(
@@ -256,6 +283,10 @@ describe('finding commands', () => {
     for (const [name, mode] of [
       ['claude', 0o755],
       ['tmux', 0o755],
+      ['npx', 0o755],
+      ['ssh', 0o755],
+      ['env', 0o755],
+      ['bash', 0o755],
       ['notes', 0o644]
     ] as const) {
       fs.writeFileSync(path.join(dir, name), '#!/bin/sh\n', { mode });
@@ -278,6 +309,17 @@ describe('finding commands', () => {
     expect(missingCommand(launchForCommand('screen', [], false), dir)).toBe('screen');
     expect(missingCommand(launchForCommand('tmux', ['new-session', 'pi'], false), dir)).toBe('pi');
     expect(missingCommand(launchForCommand('tmux', ['ls'], false), dir)).toBeUndefined();
+    expect(missingCommand(launchForCommand('env', ['A=1', 'htop'], false), dir)).toBe('htop');
+  });
+
+  it.skipIf(process.platform === 'win32')('does not look for programs that run elsewhere', () => {
+    const launch = (line: string) =>
+      resolveProfiles([{ name: 'P', command: line }], false).profiles[0];
+    expect(missingCommand(launch('npx @openai/codex'), dir)).toBeUndefined();
+    expect(missingCommand(launch('ssh devbox pi'), dir)).toBeUndefined();
+    expect(missingCommand(launch('bash -lc "cd x && pi"'), dir)).toBeUndefined();
+    expect(missingCommand(launch('bash -lc "pi --continue"'), dir)).toBe('pi');
+    expect(missingCommand(launch('tmux new -s pi'), dir)).toBeUndefined();
   });
 });
 

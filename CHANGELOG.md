@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A session that is still starting when the view closes keeps running for the next view
 - Cancelling the folder choice in a multi-root workspace no longer opens the tab in the first folder
 - No extra tab opens when one was opened while the last window's tabs were restored
+- A profile that runs its agent through `npx`, `bunx`, `pnpm dlx` or `ssh <host>` starts, instead of reporting the agent as not installed when it is not on the local PATH
+- Only the program a command line runs counts as its agent: `tmux new -s claude`, `docker run --name codex img` or `git log --author pi` no longer get an agent's arguments, and `python -m agent` is not taken for Cursor
+- No conversation arguments are added in front of a subcommand, e.g. `claude doctor`, `pi install` or `agent login`
+- The example in the description of `agentTabs.profiles` has the `name` every profile needs
 
 ## [3.1.0] - 2026-11-10
 
