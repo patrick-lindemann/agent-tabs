@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { migrateProfileSettings } from './dialogs';
 import { ViewProvider } from './webview/provider';
 
 let terminalProvider: ViewProvider | undefined;
@@ -9,7 +8,6 @@ interface TabContext {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  void migrateProfileSettings();
   terminalProvider = new ViewProvider(context.extensionUri);
 
   context.subscriptions.push(

@@ -6,7 +6,6 @@ import {
   isInstalled,
   labelFromTitle,
   launchForCommand,
-  migrateProfiles,
   missingCommand,
   resolveProfiles,
   shortTitle,
@@ -172,19 +171,12 @@ describe('resolving the profiles setting', () => {
     ]);
   });
 
-  it('still reads the table of names and command lines from 2.0', () => {
-    const { profiles, problems } = resolveProfiles({ B: 'pi', A: 'claude' }, false);
-    expect(problems).toEqual([]);
-    expect(profiles.map((p) => [p.label, p.commandLine])).toEqual([
-      ['B', 'pi'],
-      ['A', 'claude']
-    ]);
-    expect(migrateProfiles({ B: 'pi' })).toEqual([{ name: 'B', command: 'pi' }]);
-    expect(migrateProfiles([{ command: 'pi' }])).toBeUndefined();
-  });
-
   it('rejects a setting that is not a list', () => {
-    expect(resolveProfiles('claude', false).problems).toEqual(['it must be a list of profiles']);
+    for (const setting of ['claude', { Claude: 'claude' }]) {
+      expect(resolveProfiles(setting, false).problems).toEqual([
+        'it must be a list of profiles, e.g. [{ "command": "claude" }]'
+      ]);
+    }
   });
 
   it('offers every agent when none is configured or installed', () => {

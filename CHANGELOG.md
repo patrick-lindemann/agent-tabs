@@ -7,13 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- `agentTabs.profiles` is a list again: each profile has a `command` and optionally a `name`, `env` and `multiplexer`, e.g. `[{ "command": "claude --continue" }, { "name": "Pi fast", "command": "pi", "env": { "MODEL": "fast" } }]`. A profile without a name is named after its agent or program. The table of names and command lines from 2.0 is no longer read; write your profiles as a list again
+
 ### Added
 
 - `agentTabs.multiplexer` runs tabs in tmux (3.2 or later) or abduco sessions that keep running when the window closes or loses its connection to a remote; the next window of the workspace attaches to them again, also from another computer. Status works inside tmux too. Only sessions Agent Tabs started are touched, and those whose agent exited are cleaned up. Profiles can choose their own with `multiplexer`, or `none`
-
-### Changed
-
-- `agentTabs.profiles` is a list again: each profile has a `command` and optionally a `name` and `env`, e.g. `[{ "command": "claude --continue" }, { "name": "Pi fast", "command": "pi", "env": { "MODEL": "fast" } }]`. A profile without a name is named after its agent or program. Tables of names and command lines from 2.0 are converted on startup
 
 ### Fixed
 

@@ -150,25 +150,10 @@ export function multiplexerSetting(value: unknown): MultiplexerId | 'none' {
 }
 
 /**
- * Converts the table of names and command lines from 2.0 into the list of
- * profiles, or returns undefined for anything else.
- */
-export function migrateProfiles(setting: unknown): ProfileSetting[] | undefined {
-  if (typeof setting !== 'object' || setting === null || Array.isArray(setting)) {
-    return undefined;
-  }
-  return Object.entries(setting).map(([name, command]) => ({
-    name,
-    command: typeof command === 'string' ? command : ''
-  }));
-}
-
-/**
  * Resolves `agentTabs.profiles`, a list of profiles with a command line and
  * optionally a name, environment variables and a multiplexer, in the order of the setting.
  * Without a name, a profile is named after its agent or program. Invalid
- * entries are skipped and described in `problems`. The table format from 2.0
- * is still read.
+ * entries are skipped and described in `problems`.
  *
  * Without any profile, there is one for each known agent that is installed,
  * or for all of them when none is found.
@@ -179,12 +164,12 @@ export function resolveProfiles(
 ): { profiles: LaunchSpec[]; problems: string[] } {
   const problems: string[] = [];
   const profiles: LaunchSpec[] = [];
-  const list = Array.isArray(setting) ? setting : migrateProfiles(setting);
+  const list = Array.isArray(setting) ? setting : [];
 
-  if (setting !== undefined && list === undefined) {
-    problems.push('it must be a list of profiles');
+  if (setting !== undefined && !Array.isArray(setting)) {
+    problems.push('it must be a list of profiles, e.g. [{ "command": "claude" }]');
   }
-  for (const [index, entry] of (list ?? []).entries()) {
+  for (const [index, entry] of list.entries()) {
     const { command, name, env, multiplexer } = (
       typeof entry === 'object' && entry !== null ? entry : {}
     ) as Record<string, unknown>;
