@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The tabs of the last window open again when VS Code starts, in their order and with the same tab active, like editor tabs: Claude Code, pi and Cursor continue their conversation once a message was sent, other tabs start their profile again in their folder. Turn it off with `agentTabs.restoreTabs`
 
+### Fixed
+
+- A new pi tab no longer shows pi's warning that no project session has the tab's conversation ID; the ID is new on purpose
+
 ## [3.1.0] - 2026-11-10
 
 ### Added

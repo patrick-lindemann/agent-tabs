@@ -5,6 +5,7 @@ import {
   missingCommand,
   newConversation,
   reportsStatus,
+  startNotice,
   withConversation
 } from '../profiles';
 import type {
@@ -24,6 +25,7 @@ import {
   type SessionEntry,
   type Tap
 } from './multiplexer';
+import { NoticeFilter } from './notice';
 import { PromptDetector } from './prompt';
 import { PtyManager } from './pty';
 import { isTerminalReport } from './signals';
@@ -76,6 +78,8 @@ export class Tabs {
   private readonly status = new StatusTracker();
   /** Raw output of tabs whose multiplexer hides status signals from the client */
   private readonly taps = new Map<string, Tap>();
+  /** Hide a notice a tab's program prints when it starts */
+  private readonly notices = new Map<string, NoticeFilter>();
   private seenTimer: ReturnType<typeof setTimeout> | undefined;
   /** Tab IDs, most recently shown first */
   private recent: string[] = [];
@@ -308,6 +312,7 @@ export class Tabs {
     this.endSession(instance);
     this.prompt.removeTerminal(id);
     this.status.forget(id);
+    this.notices.delete(id);
     this.state.delete(id);
     this.recent = this.recent.filter((other) => other !== id);
     this.host.post({ type: 'removeTab', id });
@@ -456,6 +461,7 @@ export class Tabs {
     this.disposeTaps();
     this.prompt.dispose();
     this.status.clear();
+    this.notices.clear();
     this.state.clear();
     this.recent = [];
     this.savedOpen = undefined;
@@ -506,6 +512,12 @@ export class Tabs {
       const id = newConversation(instance.launch);
       if (id) instance.conversation = { id, started: false };
     }
+    this.notices.delete(instance.id);
+    const { conversation } = instance;
+    const notice = conversation?.started
+      ? undefined
+      : conversation && startNotice(instance.launch, conversation.id);
+    if (notice) this.notices.set(instance.id, new NoticeFilter(notice));
     const searchPath = this.pty.getSearchPath(config, instance.launch);
     const multiplexer = this.multiplexerFor(instance);
     if (multiplexer && !isInstalled(multiplexer.command, searchPath)) {
@@ -686,7 +698,11 @@ export class Tabs {
     this.host.post({ type: 'output', id, data });
   }
 
-  private handleData(id: string, data: string): void {
+  private handleData(id: string, received: string): void {
+    const notice = this.notices.get(id);
+    const data = notice ? notice.filter(received) : received;
+    if (notice?.finished) this.notices.delete(id);
+    if (!data) return;
     // With a tap, the client's output is the multiplexer's drawing
     if (!this.taps.has(id)) {
       this.trackSignals(id, data);

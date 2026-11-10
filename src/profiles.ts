@@ -33,6 +33,11 @@ interface AgentDefinition {
     start: (id: string) => string[];
     resume: (id: string) => string[];
     conflicts: string[];
+    /**
+     * A line the agent prints when it starts a conversation with a new ID,
+     * which the tab hides since the ID is new on purpose
+     */
+    startNotice?: (id: string) => string;
   };
 }
 
@@ -83,6 +88,8 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
     conversation: {
       start: (id) => ['--session-id', id],
       resume: (id) => ['--session-id', id],
+      startNotice: (id) =>
+        `Warning: No project session found with id '${id}'; creating a new session with that id.`,
       conflicts: [
         '--session-id',
         '--session',
@@ -214,6 +221,18 @@ export function newConversation(launch: LaunchSpec): string | undefined {
     conversation.conflicts.some((flag) => arg === flag || arg.startsWith(`${flag}=`))
   );
   return conflict ? undefined : randomUUID();
+}
+
+/**
+ * Matches the line an agent prints when it starts the conversation with a
+ * new ID, with its colors and line break, e.g. pi's warning that no session
+ * has the ID yet
+ */
+export function startNotice(launch: LaunchSpec, id: string): RegExp | undefined {
+  const notice = launch.agent && AGENTS[launch.agent].conversation?.startNotice?.(id);
+  if (!notice) return undefined;
+  const escaped = notice.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:\\x1b\\[[0-9;]*m)*${escaped}(?:\\x1b\\[[0-9;]*m)*\\r?\\n?`);
 }
 
 /**

@@ -1173,3 +1173,33 @@ describe('restoring the tabs of the last window', () => {
     ]);
   });
 });
+
+describe("pi's notice about a new session ID", () => {
+  const PI = launchForCommand('pi', [], true);
+  const notice = (id: string) =>
+    `\x1b[33mWarning: No project session found with id '${id}'; creating a new session with that id.\x1b[39m\r\n`;
+
+  it('hides the notice when a new pi tab starts its conversation', async () => {
+    const { tabs, pty, instance, output } = setup();
+    const id = await tabs.create(PI);
+    const conversation = instance(id).conversation?.id ?? '';
+    pty().emit(`${notice(conversation)}\x1b[?1049hscreen`);
+    expect(output(id)).toBe('\x1b[?1049hscreen');
+  });
+
+  it('keeps other output, and the notice for another ID', async () => {
+    const { tabs, pty, output } = setup();
+    const id = await tabs.create(PI);
+    pty().emit(`hello\r\n${notice('other')}`);
+    expect(output(id)).toBe(`hello\r\n${notice('other')}`);
+  });
+
+  it('stops looking once the program shows its screen', async () => {
+    const { tabs, pty, instance, output } = setup();
+    const id = await tabs.create(PI);
+    const conversation = instance(id).conversation?.id ?? '';
+    pty().emit('\x1b[?1049h');
+    pty().emit(notice(conversation));
+    expect(output(id)).toBe(`\x1b[?1049h${notice(conversation)}`);
+  });
+});
