@@ -47,6 +47,22 @@
     "Chat",
     "Other"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode, the profiles, shell, environment variables and prompt patterns come from your user settings only, since workspace settings could run any program.",
+      "restrictedConfigurations": [
+        "agentTabs.profiles",
+        "agentTabs.defaultProfile",
+        "agentTabs.multiplexer",
+        "agentTabs.shell",
+        "agentTabs.env",
+        "agentTabs.autoRun",
+        "agentTabs.directMode",
+        "agentTabs.promptPatterns"
+      ]
+    }
+  },
   "activationEvents": [
     "onStartupFinished"
   ],

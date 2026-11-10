@@ -28,13 +28,21 @@ const DEFAULT_PROMPT_PATTERNS: RegExp[] = [
   /esc to cancel/i
 ];
 
-// Keep workspace-configured expressions bounded and reject common sources of
-// catastrophic backtracking. Built-in patterns remain unrestricted.
-function isSafeCustomPattern(pattern: string): boolean {
+/**
+ * Keeps configured expressions bounded and rejects the sources of
+ * catastrophic backtracking, which would freeze the extension host for
+ * every extension: repeating a group, e.g. `(a|aa)+`, more than one
+ * unbounded quantifier, e.g. `a+b+`, and backreferences. Built-in patterns
+ * remain unrestricted.
+ */
+export function isSafeCustomPattern(pattern: string): boolean {
   if (pattern.length === 0 || pattern.length > 200) return false;
-  if (/\\(?:1[0-9]|[2-9][0-9])/.test(pattern)) return false;
-  if (/([+*])[^)]*\1/.test(pattern)) return false;
-  if (/\([^)]*[+*][^)]*\)[+*]/.test(pattern)) return false;
+  // Escaped characters cannot repeat anything
+  const plain = pattern.replace(/\\./g, 'x');
+  if (/\\[1-9k]/.test(pattern)) return false;
+  // A group that repeats, e.g. `(a|aa)+` or `(ab){2,}`
+  if (/\)[+*{]/.test(plain)) return false;
+  if ((plain.match(/[+*]|\{\d*,\}/g) ?? []).length > 1) return false;
   return true;
 }
 

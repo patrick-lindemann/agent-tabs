@@ -25,11 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No conversation arguments are added in front of a subcommand, e.g. `claude doctor`, `pi install` or `agent login`
 - The example in the description of `agentTabs.profiles` has the `name` every profile needs
 - With `agentTabs.programStatus` off, or before an agent first reports its status, Enter sends a message: closing the tab no longer asks about an unsent message, and the tab can be reopened with its conversation
+- Custom Command keeps quoted words together, e.g. `claude --append-system-prompt "be brief"`
+- The warning about invalid profiles appears once, not again after every change to an Agent Tabs setting
+- Agents installed while VS Code runs get a profile, when none is configured, once the window has focus again
+- An invalid `agentTabs.onExit` or `agentTabs.tabTitleWords` falls back to the default
 - A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
 ### Security
 
 - A profile's environment variables, e.g. API keys, no longer appear on tmux's command line, where every user of the machine could read them with `ps`; the session reads them from a file only the user can read, and deletes it
+- Custom Command runs only `--help` of a command, without a shell and only when it is installed, to suggest its flags, and no longer runs the help of every profile when the window opens. It no longer tries `-h` or `help`, which mean something else for some programs
+- In Restricted Mode, the profiles, shell, environment variables and prompt patterns of an untrusted workspace's settings are ignored, as declared to VS Code
+- Prompt patterns that could freeze the extension host, e.g. `(a|aa)+$`, are rejected: a group may not repeat, only one quantifier may be unbounded, and backreferences are not allowed
 - The open and closed tabs kept in the workspace state and the tags of multiplexer sessions no longer contain a profile's environment variables. A restored or reopened tab runs its profile as it is now, so changes to its command line, environment or multiplexer apply
 
 ## [3.1.0] - 2026-11-10

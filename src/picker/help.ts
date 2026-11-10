@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { isInstalled } from '../profiles';
 import type { ParsedHelp } from '../types';
 import { CommandHelpParser } from './parser';
 
@@ -21,7 +22,11 @@ export class HelpExecutor {
   private parser = new CommandHelpParser();
   private options: Required<HelpExecutorOptions>;
 
-  constructor(options: HelpExecutorOptions = {}) {
+  constructor(
+    options: HelpExecutorOptions = {},
+    private readonly spawnHelp: typeof spawn = spawn,
+    private readonly isInstalled: (command: string) => boolean = (command) => isInstalled(command)
+  ) {
     this.options = {
       timeout: options.timeout ?? 5000,
       debounceMs: options.debounceMs ?? 300,
@@ -77,70 +82,63 @@ export class HelpExecutor {
     this.debounceTimers.set(command, timer);
   }
 
+  /**
+   * Runs `<command> --help` without a shell, so the input is never read
+   * as shell code, and only for a program found on the PATH. Other help
+   * conventions, e.g. `-h` or `help`, are not tried: they mean something
+   * else for some programs, e.g. `shutdown -h`. The run counts once: when
+   * it closes, fails or times out.
+   */
   private executeHelp(command: string): Promise<ParsedHelp> {
+    const unsupported = (reason: string): ParsedHelp => ({
+      command,
+      flags: [],
+      parseErrors: [reason]
+    });
+    if (!this.isInstalled(command)) {
+      return Promise.resolve(unsupported('Command not found'));
+    }
     return new Promise((resolve) => {
-      const helpFlags = ['--help', '-h', 'help'];
-      let flagIndex = 0;
-
-      const tryNextFlag = (): void => {
-        if (flagIndex >= helpFlags.length) {
-          resolve({
-            command,
-            flags: [],
-            parseErrors: ['Command does not support --help']
-          });
-          return;
-        }
-
-        const flag = helpFlags[flagIndex++];
-        let stdout = '';
-        let stderr = '';
-        let proc: ChildProcess | null = null;
-
-        const timeoutId = setTimeout(() => {
-          if (proc) {
-            proc.kill('SIGTERM');
-          }
-          tryNextFlag();
-        }, this.options.timeout);
-
-        try {
-          proc = spawn(command, [flag], {
-            shell: true,
-            env: { ...process.env, LANG: 'C', LC_ALL: 'C' }
-          });
-        } catch {
-          clearTimeout(timeoutId);
-          tryNextFlag();
-          return;
-        }
-
-        proc.stdout?.on('data', (data: Buffer) => {
-          stdout += data.toString();
-        });
-
-        proc.stderr?.on('data', (data: Buffer) => {
-          stderr += data.toString();
-        });
-
-        proc.on('error', () => {
-          clearTimeout(timeoutId);
-          tryNextFlag();
-        });
-
-        proc.on('close', () => {
-          clearTimeout(timeoutId);
-          // Some commands output help to stderr, some exit with non-zero
-          const output = stdout || stderr;
-          if (output && output.length > 50) {
-            resolve(this.parser.parse(command, output));
-          } else {
-            tryNextFlag();
-          }
-        });
+      let settled = false;
+      let stdout = '';
+      let stderr = '';
+      let proc: ChildProcess | undefined;
+      const settle = (result: ParsedHelp) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(result);
       };
+      const timeoutId = setTimeout(() => {
+        proc?.kill();
+        settle(unsupported('Help timed out'));
+      }, this.options.timeout);
 
-      tryNextFlag();
+      try {
+        proc = this.spawnHelp(command, ['--help'], {
+          env: { ...process.env, LANG: 'C', LC_ALL: 'C' },
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+      } catch {
+        settle(unsupported('Command could not start'));
+        return;
+      }
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+      proc.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+      proc.on('error', () => settle(unsupported('Command could not start')));
+      proc.on('close', () => {
+        // Some commands write help to stderr, some exit with non-zero
+        const output = stdout || stderr;
+        settle(
+          output.length > 50
+            ? this.parser.parse(command, output)
+            : unsupported('Command does not support --help')
+        );
+      });
     });
   }
 
@@ -154,14 +152,6 @@ export class HelpExecutor {
     }
 
     this.cache.set(command, { result, timestamp: Date.now() });
-  }
-
-  preloadCommonCommands(commands: string[]): void {
-    for (const cmd of commands) {
-      this.getHelp(cmd).catch(() => {
-        // Fire and forget
-      });
-    }
   }
 
   clearCache(): void {

@@ -37,6 +37,15 @@ describe('command picker input', () => {
     });
   });
 
+  it('keeps quoted words together', () => {
+    expect(parseInput('claude --append-system-prompt "be brief" --mo')).toEqual({
+      command: 'claude',
+      existingArgs: ['--append-system-prompt', 'be brief'],
+      partial: '--mo'
+    });
+    expect(parseInput('claude "open').command).toBe('claude');
+  });
+
   it.each([
     ['<path>', true, 'all'],
     ['<dir>', true, 'directories'],

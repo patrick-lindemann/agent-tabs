@@ -61,12 +61,6 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         set: (tabs) => void workspaceState.update(OPEN_TABS_KEY, tabs)
       }
     );
-
-    // Pre-load help for the custom command picker (missing commands are handled gracefully)
-    const profileCommands = this.config.getConfig().profiles.map((p) => p.command);
-    this.picker.preloadCommands([
-      ...new Set([...profileCommands, 'gemini', 'aider', 'gh', 'interpreter', 'opencode'])
-    ]);
   }
 
   // --- WebviewViewProvider ---

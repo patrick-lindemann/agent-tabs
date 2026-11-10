@@ -151,12 +151,25 @@ describe('custom patterns', () => {
     ['too long', `a{${'1'.repeat(200)}}`],
     ['nested quantifiers', '(a+)+$'],
     ['repeated quantifiers', 'a+b+$'],
-    ['a high backreference', '(a)\\12']
+    ['a high backreference', '(a)\\12'],
+    ['a backreference', '(a)\\1'],
+    ['a repeated alternation', '(a|aa)+$'],
+    ['a repeated group with a count', '(ab){2,}$'],
+    ['two unbounded counts', 'a{1,}b{1,}$']
   ])('rejects a %s pattern', (_, pattern) => {
     const d = detector([pattern]);
     expect(console.warn).toHaveBeenCalledTimes(1);
     d.dispose();
   });
+
+  it.each(['mybot: $', '^\\[y/N\\]\\s*$', 'Approve\\?\\s*$', '(?:yes|no)\\?$', 'a\\+b+$'])(
+    'accepts the simple pattern %s',
+    (pattern) => {
+      const d = detector([pattern]);
+      expect(console.warn).not.toHaveBeenCalled();
+      d.dispose();
+    }
+  );
 
   it('keeps working after rejecting a pattern', () => {
     expect(waits('ready>', ['[', '^ready>$'])).toBe(true);
