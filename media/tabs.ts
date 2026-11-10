@@ -1,4 +1,4 @@
-import { AGENT_ICONS, CLOSE_ICON, IDLE_ICON, STATUS_ICONS } from './icons';
+import { AGENT_ICONS, CLOSE_ICON, IDLE_ICON, STATUS_ICONS, TERMINAL_ICON } from './icons';
 import type { TabInfo, WebviewOutgoingMessage } from './types';
 
 /**
@@ -145,7 +145,9 @@ export class TabBar {
       ? STATUS_ICONS[tab.status]
       : tab.agent
         ? AGENT_ICONS[tab.agent][monochromeIcons ? 'mono' : 'color']
-        : IDLE_ICON;
+        : tab.terminal
+          ? TERMINAL_ICON
+          : IDLE_ICON;
     status.className = logo ? 'tab-status tab-logo' : 'tab-status';
     if (html !== element.statusHtml) {
       status.innerHTML = html;

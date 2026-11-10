@@ -10,7 +10,8 @@ import {
   missingCommand,
   resolveProfiles,
   shortTitle,
-  splitCommandLine
+  splitCommandLine,
+  terminalLaunch
 } from '../../src/profiles';
 import type { AgentId } from '../../src/types';
 
@@ -92,6 +93,26 @@ describe('recognizing agents', () => {
       args: ['--debug']
     });
     expect(launchForCommand('/usr/bin/htop', [], false)).toMatchObject({ label: 'htop' });
+  });
+});
+
+describe('the plain terminal', () => {
+  it('starts a POSIX shell as a login shell on macOS, like VS Code', () => {
+    expect(terminalLaunch('/bin/zsh', 'darwin')).toMatchObject({
+      label: 'zsh',
+      command: '/bin/zsh',
+      args: ['-l'],
+      terminal: true
+    });
+    expect(terminalLaunch('/bin/bash', 'linux').args).toEqual([]);
+    expect(terminalLaunch('C:\\Windows\\System32\\cmd.exe', 'win32')).toMatchObject({
+      label: 'cmd',
+      args: []
+    });
+  });
+
+  it('has no agent', () => {
+    expect(terminalLaunch('/bin/zsh').agent).toBeUndefined();
   });
 });
 

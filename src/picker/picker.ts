@@ -18,7 +18,7 @@ export interface CommandInputResult {
 }
 
 /**
- * Custom Command: a quick pick for a command line that suggests the
+ * Custom Command…: a quick pick for a command line that suggests the
  * command's flags from its `--help` and paths for flags that take one.
  */
 export class CommandInputPicker {

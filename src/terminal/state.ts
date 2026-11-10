@@ -116,6 +116,7 @@ export class TerminalStateManager {
       label: this.getLabel(t, autoTitles, titleWords),
       description: this.getFullLabel(t, true),
       agent: t.launch.agent,
+      terminal: t.launch.terminal,
       isActive: t.isActive,
       accentColor: this.getAccentColor(t.workspaceFolderIndex),
       status: this.getStatus(t),

@@ -504,6 +504,26 @@ export function isInstalled(command: string, searchPath = process.env.PATH ?? ''
 }
 
 /**
+ * A plain shell, as VS Code's terminal opens it: `shell` is VS Code's
+ * default shell. On macOS, POSIX shells start as login shells, as there.
+ */
+export function terminalLaunch(
+  shell: string,
+  platform: NodeJS.Platform = process.platform
+): LaunchSpec {
+  const name = programName(shell);
+  const login = platform === 'darwin' && /^(?:bash|zsh|fish|sh|ksh|dash)$/.test(name);
+  return {
+    label: name,
+    command: shell,
+    args: login ? ['-l'] : [],
+    env: {},
+    commandLine: shell,
+    terminal: true
+  };
+}
+
+/**
  * Launches a custom command as given. A known agent in it, e.g.
  * `/usr/local/bin/codex`, gets its logo, title format and status arguments.
  */

@@ -19,6 +19,8 @@ export interface TabInfo {
   label: string;
   description: string;
   agent?: AgentId;
+  /** A shell, shown with the terminal icon */
+  terminal?: boolean;
   isActive: boolean;
   accentColor?: string;
   status?: TabStatus;

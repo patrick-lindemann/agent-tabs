@@ -61,6 +61,8 @@ export interface LaunchSpec {
   commandLine: string;
   /** The profile's own `multiplexer`, over `agentTabs.multiplexer` */
   multiplexer?: MultiplexerId | 'none';
+  /** VS Code's default shell, from the Terminal entry of the profile menu */
+  terminal?: boolean;
   /**
    * The name of the profile in `agentTabs.profiles` it comes from, so a
    * restored tab runs the profile as it is now; none for a custom command

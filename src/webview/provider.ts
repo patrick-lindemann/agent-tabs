@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ConfigManager } from '../config';
 import { confirmClose, manageProfiles, pickProfile, pickTab } from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
-import { launchForCommand } from '../profiles';
+import { launchForCommand, terminalLaunch } from '../profiles';
 import { Tabs } from '../terminal/tabs';
 import type { ClosedTab, ExtensionMessage, LaunchSpec, OpenTab, TerminalInstance } from '../types';
 import { openFile } from './files';
@@ -176,6 +176,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     const choice = await pickProfile(
       config.profiles,
       config.defaultProfile,
+      // The shell of VS Code's own terminal, or the one Agent Tabs is set to
+      terminalLaunch(vscode.env.shell || config.shell || this.tabs.pty.defaultShell()),
       config.monochromeIcons,
       (profile) => this.tabs.pty.getSearchPath(config, profile),
       this.extensionUri

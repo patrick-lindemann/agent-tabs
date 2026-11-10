@@ -9,13 +9,15 @@ const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi',
 export type ProfileChoice = { profile: LaunchSpec } | 'custom' | 'manage' | undefined;
 
 /**
- * Use Profile…: the profiles in their configured order with their logos and
- * Custom Command, then Manage Profiles. VS Code's native view menus
- * cannot follow a setting's order or list user-defined profiles.
+ * Use Profile…: the profiles in their configured order with their logos,
+ * then a plain terminal with VS Code's default shell and Custom Command…,
+ * then Manage Profiles. VS Code's native view menus cannot follow a
+ * setting's order or list user-defined profiles.
  */
 export async function pickProfile(
   profiles: LaunchSpec[],
   defaultProfile: LaunchSpec,
+  terminal: LaunchSpec,
   monochrome: boolean,
   searchPath: (profile: LaunchSpec) => string,
   extensionUri: vscode.Uri
@@ -34,7 +36,14 @@ export async function pickProfile(
       iconPath: profileIcon(profile, monochrome, extensionUri),
       choice: { profile }
     })),
-    { label: 'Custom Command', iconPath: new vscode.ThemeIcon('terminal'), choice: 'custom' },
+    { label: '', kind: vscode.QuickPickItemKind.Separator },
+    {
+      label: 'Terminal',
+      description: terminal.commandLine,
+      iconPath: new vscode.ThemeIcon('terminal'),
+      choice: { profile: terminal }
+    },
+    { label: 'Custom Command…', iconPath: new vscode.ThemeIcon('edit'), choice: 'custom' },
     { label: '', kind: vscode.QuickPickItemKind.Separator },
     { label: 'Manage Profiles', choice: 'manage' }
   ];
