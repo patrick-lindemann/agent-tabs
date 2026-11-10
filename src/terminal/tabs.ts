@@ -97,7 +97,7 @@ export class Tabs {
   async create(launch?: LaunchSpec): Promise<string> {
     const { path: cwd, folderIndex } = await this.pty.selectWorkingDirectory();
     return this.open({
-      launch: launch ?? this.config.getConfig().profiles[0],
+      launch: launch ?? this.config.getConfig().defaultProfile,
       cwd,
       workspaceFolderIndex: folderIndex
     });

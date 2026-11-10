@@ -65,8 +65,10 @@ export interface TerminalConfig {
   statusColors: boolean;
   confirmClose: boolean;
   monochromeIcons: boolean;
-  /** Validated `agentTabs.profiles`; never empty, the first one opens with + */
+  /** Validated `agentTabs.profiles`, in menu order; never empty */
   profiles: LaunchSpec[];
+  /** The profile + opens, from `agentTabs.defaultProfile`; one of `profiles` */
+  defaultProfile: LaunchSpec;
   /** Multiplexer for profiles without their own */
   multiplexer: MultiplexerId | 'none';
 }

@@ -14,17 +14,18 @@ export type ProfileChoice = { profile: LaunchSpec } | 'custom' | 'manage' | unde
  */
 export async function pickProfile(
   profiles: LaunchSpec[],
+  defaultProfile: LaunchSpec,
   monochrome: boolean,
   searchPath: (profile: LaunchSpec) => string,
   extensionUri: vscode.Uri
 ): Promise<ProfileChoice> {
   type Item = vscode.QuickPickItem & { choice?: ProfileChoice };
   const items: Item[] = [
-    ...profiles.map((profile, index) => ({
+    ...profiles.map((profile) => ({
       label: profile.label,
       description: [
         profile.commandLine,
-        index === 0 ? '(default)' : undefined,
+        profile === defaultProfile ? '(default)' : undefined,
         missingCommand(profile, searchPath(profile)) ? '· not installed' : undefined
       ]
         .filter(Boolean)

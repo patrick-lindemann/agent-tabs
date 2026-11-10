@@ -151,6 +151,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     const config = this.config.getConfig();
     const choice = await pickProfile(
       config.profiles,
+      config.defaultProfile,
       config.monochromeIcons,
       (profile) => this.tabs.pty.getSearchPath(config, profile),
       this.extensionUri
@@ -170,7 +171,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   async promptAndCreateTerminal(): Promise<void> {
     const config = this.config.getConfig();
-    const result = await this.picker.promptForCommand(config.profiles[0].command);
+    const result = await this.picker.promptForCommand(config.defaultProfile.command);
     if (!result.cancelled && result.command) {
       await this.createTerminal(
         launchForCommand(result.command, result.args, config.programStatus)

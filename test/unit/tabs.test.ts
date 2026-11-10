@@ -114,6 +114,7 @@ vi.mock('node:fs', async (original) => {
 });
 
 const WORKSPACE = '/work/project';
+const CLAUDE = launchForCommand('claude', [], true);
 
 function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
   return {
@@ -128,7 +129,8 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     statusColors: true,
     confirmClose: true,
     monochromeIcons: false,
-    profiles: [launchForCommand('claude', [], true)],
+    profiles: [CLAUDE],
+    defaultProfile: CLAUDE,
     multiplexer: 'none',
     ...overrides
   };
@@ -986,7 +988,10 @@ describe('reopening closed tabs', () => {
 
   it('adds the arguments after an agent behind a wrapper', async () => {
     const { tabs, pty, instance } = setup();
-    const [profile] = resolveProfiles([{ command: 'env A=1 pi --model x' }], false).profiles;
+    const [profile] = resolveProfiles(
+      [{ name: 'Pi', command: 'env A=1 pi --model x' }],
+      false
+    ).profiles;
     const id = await tabs.create(profile);
     const conversation = instance(id).conversation?.id;
     expect([pty().file, ...args(pty())]).toEqual([

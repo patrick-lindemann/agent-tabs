@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { multiplexerSetting, resolveProfiles } from './profiles';
+import { defaultProfile, multiplexerSetting, resolveProfiles } from './profiles';
 import type { PromptDetectorConfig } from './terminal/prompt';
 import type { OnExitAction, TerminalConfig } from './types';
 
@@ -33,6 +33,8 @@ export class ConfigManager {
     const config = vscode.workspace.getConfiguration('agentTabs');
     const programStatus = config.get<boolean>('programStatus', true);
     const { profiles, problems } = resolveProfiles(config.get('profiles'), programStatus);
+    const fallback = defaultProfile(profiles, config.get('defaultProfile'));
+    if (fallback.problem) problems.push(fallback.problem);
     if (problems.length > 0) {
       void vscode.window.showWarningMessage(
         `Agent Tabs: check agentTabs.profiles: ${problems.join('; ')}.`
@@ -52,6 +54,7 @@ export class ConfigManager {
       confirmClose: config.get<boolean>('confirmClose', true),
       monochromeIcons: config.get<boolean>('monochromeIcons', false),
       profiles,
+      defaultProfile: fallback.profile,
       multiplexer: multiplexerSetting(config.get('multiplexer'))
     };
 
