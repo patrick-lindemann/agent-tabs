@@ -27,6 +27,7 @@ vitest.config.mts
 .vscode/**
 .claude/**
 .pi/**
+specs/**
 .gitignore
 AGENTS.md
 CONTRIBUTING.md
