@@ -988,7 +988,10 @@ describe('reopening closed tabs', () => {
 
   it('adds the arguments after an agent behind a wrapper', async () => {
     const { tabs, pty, instance } = setup();
-    const [profile] = resolveProfiles([{ command: 'env A=1 pi --model x' }], false).profiles;
+    const [profile] = resolveProfiles(
+      [{ name: 'Pi', command: 'env A=1 pi --model x' }],
+      false
+    ).profiles;
     const id = await tabs.create(profile);
     const conversation = instance(id).conversation?.id;
     expect([pty().file, ...args(pty())]).toEqual([

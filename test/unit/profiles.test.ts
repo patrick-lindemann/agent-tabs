@@ -67,7 +67,7 @@ describe('recognizing agents', () => {
     ['claudette', undefined],
     ['zsh', undefined]
   ] as Array<[string, AgentId | undefined]>)('reads %s as %s', (line, agent) => {
-    expect(resolveProfiles([{ command: line }], false).profiles[0].agent).toBe(agent);
+    expect(resolveProfiles([{ name: 'P', command: line }], false).profiles[0].agent).toBe(agent);
   });
 
   it('labels a custom command with the agent name or the executable', () => {
@@ -90,7 +90,10 @@ describe('status arguments', () => {
   });
 
   it('adds them after codex inside a wrapper', () => {
-    const [profile] = resolveProfiles([{ command: 'env A=1 codex resume' }], true).profiles;
+    const [profile] = resolveProfiles(
+      [{ name: 'P', command: 'env A=1 codex resume' }],
+      true
+    ).profiles;
     expect([profile.command, ...profile.args]).toEqual([
       'env',
       'A=1',
@@ -103,7 +106,7 @@ describe('status arguments', () => {
   it.each(['bash -c "codex --full-auto"', 'bash -lc codex'])(
     'leaves a shell command string alone: %s',
     (line) => {
-      const [profile] = resolveProfiles([{ command: line }], true).profiles;
+      const [profile] = resolveProfiles([{ name: 'P', command: line }], true).profiles;
       expect(profile.agent).toBe('codex');
       expect([profile.command, ...profile.args]).toEqual(splitCommandLine(line));
     }
@@ -131,20 +134,29 @@ describe('resolving the profiles setting', () => {
     ]);
   });
 
-  it('names a profile without a name after its agent or program', () => {
-    const { profiles } = resolveProfiles(
+  it('needs a unique name for each profile', () => {
+    const { profiles, problems } = resolveProfiles(
       [
-        { command: 'env A=1 claude' },
-        { command: '/usr/bin/htop -d 5' },
-        { name: ' ', command: 'pi' }
+        { command: 'claude' },
+        { name: ' ', command: 'pi' },
+        { name: 'Pi', command: 'pi' },
+        { name: ' Pi ', command: 'pi --model fast' }
       ],
       false
     );
-    expect(profiles.map((p) => p.label)).toEqual(['Claude Code', 'htop', 'Pi']);
+    expect(profiles.map((p) => p.label)).toEqual(['Pi']);
+    expect(problems).toEqual([
+      'profile 1 needs a name',
+      'profile 2 needs a name',
+      'the name of profile 4, "Pi", is already taken'
+    ]);
   });
 
   it('keeps the environment of a profile', () => {
-    const [profile] = resolveProfiles([{ command: 'pi', env: { MODEL: 'fast' } }], false).profiles;
+    const [profile] = resolveProfiles(
+      [{ name: 'P', command: 'pi', env: { MODEL: 'fast' } }],
+      false
+    ).profiles;
     expect(profile.env).toEqual({ MODEL: 'fast' });
   });
 
@@ -152,11 +164,11 @@ describe('resolving the profiles setting', () => {
     const { profiles, problems } = resolveProfiles(
       [
         { name: 'Empty', command: '' },
-        { command: 3 },
+        { name: 'Number', command: 3 },
         'pi',
-        { command: "pi 'x" },
+        { name: 'Quote', command: "pi 'x" },
         { name: 4, command: 'pi' },
-        { command: 'pi', env: { A: 1 } },
+        { name: 'Env', command: 'pi', env: { A: 1 } },
         { name: 'Good', command: 'pi' }
       ],
       false
@@ -167,7 +179,7 @@ describe('resolving the profiles setting', () => {
       'profile 2 needs a command',
       'profile 3 needs a command',
       'the command of profile 4 has an unclosed quote',
-      'the name of profile 5 must be text',
+      'profile 5 needs a name',
       'the env of profile 6 must map names to text'
     ]);
   });
@@ -175,7 +187,7 @@ describe('resolving the profiles setting', () => {
   it('rejects a setting that is not a list', () => {
     for (const setting of ['claude', { Claude: 'claude' }]) {
       expect(resolveProfiles(setting, false).problems).toEqual([
-        'it must be a list of profiles, e.g. [{ "command": "claude" }]'
+        'it must be a list of profiles, e.g. [{ "name": "Claude", "command": "claude" }]'
       ]);
     }
   });
@@ -206,7 +218,11 @@ describe('resolving the profiles setting', () => {
 
 describe('the default profile', () => {
   const { profiles } = resolveProfiles(
-    [{ command: 'claude' }, { name: 'Pi fast', command: 'pi --model fast' }, { command: 'codex' }],
+    [
+      { name: 'Claude Code', command: 'claude' },
+      { name: 'Pi fast', command: 'pi --model fast' },
+      { name: 'Codex', command: 'codex' }
+    ],
     false
   );
 
@@ -215,13 +231,13 @@ describe('the default profile', () => {
     expect(defaultProfile(profiles, ' ')).toEqual({ profile: profiles[0] });
   });
 
-  it('is found by name, also the default name of a profile without one', () => {
+  it('is found by name', () => {
     expect(defaultProfile(profiles, 'Pi fast').profile).toBe(profiles[1]);
-    expect(defaultProfile(profiles, 'Codex').profile).toBe(profiles[2]);
+    expect(defaultProfile(profiles, ' Codex ').profile).toBe(profiles[2]);
   });
 
-  it('is found by command line', () => {
-    expect(defaultProfile(profiles, 'pi --model fast').profile).toBe(profiles[1]);
+  it('is not found by command line', () => {
+    expect(defaultProfile(profiles, 'pi --model fast').profile).toBe(profiles[0]);
   });
 
   it('falls back to the first profile and says so when not found', () => {

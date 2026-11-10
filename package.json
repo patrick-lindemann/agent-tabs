@@ -313,6 +313,7 @@
           "items": {
             "type": "object",
             "required": [
+              "name",
               "command"
             ],
             "additionalProperties": false,
@@ -324,7 +325,8 @@
               },
               "name": {
                 "type": "string",
-                "markdownDescription": "Name in the menu and on new tabs. Defaults to the agent's name, e.g. `Claude Code`, or the program's name."
+                "minLength": 1,
+                "markdownDescription": "Name in the menu, on new tabs and in `#agentTabs.defaultProfile#`; unique among the profiles."
               },
               "env": {
                 "type": "object",
@@ -351,7 +353,7 @@
           "type": "string",
           "default": "",
           "scope": "machine-overridable",
-          "markdownDescription": "The profile `+` opens, by its `name` or, for a profile without a name, its `command`, e.g. `Claude Code` or `pi --model fast`. Empty opens the first profile of `#agentTabs.profiles#`."
+          "markdownDescription": "The `name` of the profile `+` opens, e.g. `Claude Code`. Empty opens the first profile of `#agentTabs.profiles#`."
         },
         "agentTabs.multiplexer": {
           "type": "string",

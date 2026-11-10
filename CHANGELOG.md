@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `agentTabs.defaultProfile` picks the profile `+` opens by its name, or its command line, instead of the first one in the list; it can differ per machine, e.g. on a remote
+- `agentTabs.defaultProfile` picks the profile `+` opens by its name, instead of the first one in the list; it can differ per machine, e.g. on a remote
+
+### Changed
+
+- Profiles need a `name` again, unique among them, since `agentTabs.defaultProfile` refers to it: `[{ "name": "Claude Code", "command": "claude" }]`. A profile without one is skipped with a warning
 
 ## [3.0.0] - 2026-11-10
 

@@ -262,8 +262,8 @@ export function multiplexerSetting(value: unknown): MultiplexerId | 'none' {
 }
 
 /**
- * The profile `agentTabs.defaultProfile` names, by its name or else its
- * command line; the first profile when unset or not found.
+ * The profile `agentTabs.defaultProfile` names; the first profile when unset
+ * or not found.
  */
 export function defaultProfile(
   profiles: LaunchSpec[],
@@ -271,9 +271,7 @@ export function defaultProfile(
 ): { profile: LaunchSpec; problem?: string } {
   const name = typeof setting === 'string' ? setting.trim() : '';
   if (!name) return { profile: profiles[0] };
-  const profile =
-    profiles.find((candidate) => candidate.label === name) ??
-    profiles.find((candidate) => candidate.commandLine === name);
+  const profile = profiles.find((candidate) => candidate.label === name);
   if (profile) return { profile };
   return {
     profile: profiles[0],
@@ -282,10 +280,10 @@ export function defaultProfile(
 }
 
 /**
- * Resolves `agentTabs.profiles`, a list of profiles with a command line and
- * optionally a name, environment variables and a multiplexer, in the order of the setting.
- * Without a name, a profile is named after its agent or program. Invalid
- * entries are skipped and described in `problems`.
+ * Resolves `agentTabs.profiles`, a list of profiles with a unique name, a
+ * command line and optionally environment variables and a multiplexer, in
+ * the order of the setting. Invalid entries are skipped and described in
+ * `problems`.
  *
  * Without any profile, there is one for each known agent that is installed,
  * or for all of them when none is found.
@@ -299,7 +297,9 @@ export function resolveProfiles(
   const list = Array.isArray(setting) ? setting : [];
 
   if (setting !== undefined && !Array.isArray(setting)) {
-    problems.push('it must be a list of profiles, e.g. [{ "command": "claude" }]');
+    problems.push(
+      'it must be a list of profiles, e.g. [{ "name": "Claude", "command": "claude" }]'
+    );
   }
   for (const [index, entry] of list.entries()) {
     const { command, name, env, multiplexer } = (
@@ -311,8 +311,10 @@ export function resolveProfiles(
       problems.push(`${position} needs a command`);
     } else if (!words?.length) {
       problems.push(`the command of ${position} has an unclosed quote`);
-    } else if (name !== undefined && typeof name !== 'string') {
-      problems.push(`the name of ${position} must be text`);
+    } else if (typeof name !== 'string' || !name.trim()) {
+      problems.push(`${position} needs a name`);
+    } else if (profiles.some((profile) => profile.label === name.trim())) {
+      problems.push(`the name of ${position}, "${name.trim()}", is already taken`);
     } else if (
       env !== undefined &&
       (typeof env !== 'object' ||
@@ -330,8 +332,7 @@ export function resolveProfiles(
         `the multiplexer of ${position} must be ${[...MULTIPLEXER_IDS, 'none'].join(', ')}`
       );
     } else {
-      const launch = launchFromWords(name?.trim() ?? '', words, command.trim(), programStatus);
-      launch.label ||= defaultLabel(launch);
+      const launch = launchFromWords(name.trim(), words, command.trim(), programStatus);
       launch.env = { ...(env as Record<string, string> | undefined) };
       if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
