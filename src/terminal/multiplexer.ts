@@ -210,9 +210,12 @@ export class ControlModeParser {
  * status queries or OSC 9 notifications. A control client (`tmux -C`) reads
  * the program's raw output for them and answers queries with
  * `send-keys -H`. A new session holds its program back until the control
- * client is attached, so it sees the program's first query. The pane
- * stays after its program exits (`remain-on-exit`) so its exit code can be
- * read; a hook detaches the clients then.
+ * client is attached, so it sees the program's first query. When the
+ * program exits, the session's shell stores its exit code in the session
+ * and detaches the clients; tmux itself can take seconds to notice that a
+ * pane's program exited. The pane stays (`remain-on-exit`) until the
+ * extension ends the session, and a hook detaches the clients in case the
+ * shell could not.
  *
  * Needs tmux 3.2 or later.
  */
@@ -222,6 +225,8 @@ export class Tmux implements Multiplexer {
   static readonly SOCKET = 'agent-tabs';
   /** Session option with the session's tag */
   static readonly TAG = '@agent-tabs';
+  /** Session option with the program's exit code, once it exited */
+  static readonly EXIT = '@agent-tabs-exit';
 
   constructor(
     private readonly execute: Run = run,
@@ -252,11 +257,23 @@ export class Tmux implements Multiplexer {
 
   /**
    * The session runs `sh`, which waits for the control client's signal on
-   * the session's channel, then becomes the program.
+   * the session's channel, runs the program, then stores its exit code and
+   * detaches the clients. `sh` keeps running through Ctrl+C, which the
+   * program handles.
    */
   newSession(options: SessionOptions): string[] {
     const { session, command, args, env, cwd, cols, rows } = options;
-    const hold = `"$0" -L ${Tmux.SOCKET} wait-for "$1"; shift; exec "$@"`;
+    const tmux = `"$0" -L ${Tmux.SOCKET}`;
+    const hold = [
+      'trap : INT QUIT',
+      `${tmux} wait-for "$1"`,
+      'session=$1',
+      'shift',
+      '"$@"',
+      'code=$?',
+      `${tmux} set-option -t "=$session:" ${Tmux.EXIT} "$code" ";" detach-client -s "=$session"`,
+      'exit "$code"'
+    ].join('; ');
     const target = paneTarget(session);
     return [
       'new-session',
@@ -372,14 +389,15 @@ export class Tmux implements Multiplexer {
   async list(): Promise<SessionEntry[]> {
     // tmux prints control characters such as tabs as `_`; the tag is base64
     // and session names have no spaces
-    const format = `#{session_attached} #{pane_dead} #{${Tmux.TAG}} #{session_name}`;
+    const format = `#{session_attached} #{pane_dead} #{${Tmux.EXIT}} #{${Tmux.TAG}} #{session_name}`;
     const output = await this.tmux(['list-sessions', '-F', format]).catch(() => '');
     const entries: SessionEntry[] = [];
     for (const line of output.split('\n')) {
-      const [attached, dead, encoded, name] = line.split(' ');
+      const [attached, dead, exit, encoded, name] = line.split(' ');
       const tag = encoded ? decodeTag(encoded) : undefined;
       if (name && tag) {
-        entries.push({ name, tag, ended: dead === '1', attached: Number(attached) > 0 });
+        const ended = dead === '1' || exit !== '';
+        entries.push({ name, tag, ended, attached: Number(attached) > 0 });
       }
     }
     return entries;
@@ -390,16 +408,20 @@ export class Tmux implements Multiplexer {
     return this.deadPaneStatus(session);
   }
 
-  /** The exit code of a session whose program ended, or undefined while it runs */
+  /**
+   * The exit code of a session whose program ended, or undefined while it
+   * runs: the one the session's shell stored, else the dead pane's.
+   */
   private async deadPaneStatus(session: string): Promise<number | undefined> {
     const output = await this.tmux([
       'display-message',
       '-p',
       '-t',
       paneTarget(session),
-      '#{pane_dead} #{pane_dead_status} #{pane_dead_signal}'
+      `#{${Tmux.EXIT}} #{pane_dead} #{pane_dead_status} #{pane_dead_signal}`
     ]);
-    const [dead, status, signal] = output.trim().split(' ');
+    const [exit, dead, status, signal] = output.replace(/\n$/, '').split(' ');
+    if (exit) return Number(exit);
     if (dead !== '1') return undefined;
     if (status) return Number(status);
     return signal ? 128 + Number(signal) : 1;

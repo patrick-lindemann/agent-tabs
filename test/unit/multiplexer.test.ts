@@ -141,7 +141,7 @@ describe('tmux sessions', () => {
   });
 
   it('attaches to a running session without starting or releasing it', async () => {
-    const { calls, execute } = fakeRun([['display-message', '0  \n']]);
+    const { calls, execute } = fakeRun([['display-message', ' 0  \n']]);
     const control = fakeControl();
     const tmux = new Tmux(execute, () => control.child as never);
     const result = await tmux.open(OPTIONS, () => {});
@@ -151,7 +151,7 @@ describe('tmux sessions', () => {
   });
 
   it('feeds the control client output to the tap', async () => {
-    const { execute } = fakeRun([['display-message', '0  ']]);
+    const { execute } = fakeRun([['display-message', ' 0  ']]);
     const control = fakeControl();
     const tmux = new Tmux(execute, () => control.child as never);
     const out: string[] = [];
@@ -161,15 +161,17 @@ describe('tmux sessions', () => {
   });
 
   it('reports the exit code of a program that ended', async () => {
-    const tmux = new Tmux(fakeRun([['display-message', '1 3 \n']]).execute);
+    const tmux = new Tmux(fakeRun([['display-message', '3 0  \n']]).execute);
     await expect(tmux.open(OPTIONS, () => {})).resolves.toEqual({ exitCode: 3 });
     await expect(tmux.ended('s', 0)).resolves.toBe(3);
-    const signalled = new Tmux(fakeRun([['display-message', '1  9\n']]).execute);
+    const dead = new Tmux(fakeRun([['display-message', ' 1 5 \n']]).execute);
+    await expect(dead.ended('s', 0)).resolves.toBe(5);
+    const signalled = new Tmux(fakeRun([['display-message', ' 1  9\n']]).execute);
     await expect(signalled.ended('s', 0)).resolves.toBe(137);
   });
 
   it('tells a detached client from an ended session', async () => {
-    const running = new Tmux(fakeRun([['display-message', '0  \n']]).execute);
+    const running = new Tmux(fakeRun([['display-message', ' 0  \n']]).execute);
     await expect(running.ended('s', 0)).resolves.toBeUndefined();
     const gone = new Tmux(fakeRun([['has-session', new Error('no session')]]).execute);
     await expect(gone.ended('s', 4)).resolves.toBe(4);
@@ -187,16 +189,18 @@ describe('tmux sessions', () => {
   it('lists only tagged sessions', async () => {
     const tag = encodeTag(TAG);
     const listing = [
-      `0 0 ${tag} agent-tabs-1`,
-      `1 1 ${tag} agent-tabs-2`,
-      '0 0  mine',
-      '0 0 bm90IGEgdGFn forged',
+      `0 0  ${tag} agent-tabs-1`,
+      `1 1  ${tag} agent-tabs-2`,
+      `0 0 0 ${tag} agent-tabs-3`,
+      '0 0   mine',
+      '0 0  bm90IGEgdGFn forged',
       ''
     ].join('\n');
     const tmux = new Tmux(fakeRun([['list-sessions', listing]]).execute);
     await expect(tmux.list()).resolves.toEqual([
       { name: 'agent-tabs-1', tag: TAG, ended: false, attached: false },
-      { name: 'agent-tabs-2', tag: TAG, ended: true, attached: true }
+      { name: 'agent-tabs-2', tag: TAG, ended: true, attached: true },
+      { name: 'agent-tabs-3', tag: TAG, ended: true, attached: false }
     ]);
     const noServer = new Tmux(fakeRun([['list-sessions', new Error('no server')]]).execute);
     await expect(noServer.list()).resolves.toEqual([]);
