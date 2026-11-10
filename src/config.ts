@@ -53,6 +53,7 @@ export class ConfigManager {
       statusColors: config.get<boolean>('statusColors', true),
       confirmClose: config.get<boolean>('confirmClose', true),
       monochromeIcons: config.get<boolean>('monochromeIcons', false),
+      restoreTabs: config.get<boolean>('restoreTabs', true),
       profiles,
       defaultProfile: fallback.profile,
       multiplexer: multiplexerSetting(config.get('multiplexer'))

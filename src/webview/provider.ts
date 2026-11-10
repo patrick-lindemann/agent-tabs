@@ -4,13 +4,16 @@ import { confirmClose, manageProfiles, pickProfile, pickTab } from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
 import { Tabs } from '../terminal/tabs';
-import type { ClosedTab, ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
+import type { ClosedTab, ExtensionMessage, LaunchSpec, OpenTab, TerminalInstance } from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
 import { dispatchMessage, type MessageHandlerContext } from './messages';
 
 /** Workspace state key of the closed tabs that can be reopened */
 const CLOSED_TABS_KEY = 'agentTabs.closedTabs';
+
+/** Workspace state key of the open tabs, which the next window opens again */
+const OPEN_TABS_KEY = 'agentTabs.openTabs';
 
 /**
  * Identifies the workspace in the tags of its multiplexer sessions: the
@@ -51,6 +54,10 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
       workspaceState && {
         get: () => workspaceState.get<ClosedTab[]>(CLOSED_TABS_KEY, []),
         set: (tabs) => void workspaceState.update(CLOSED_TABS_KEY, tabs)
+      },
+      workspaceState && {
+        get: () => workspaceState.get<OpenTab[]>(OPEN_TABS_KEY, []),
+        set: (tabs) => void workspaceState.update(OPEN_TABS_KEY, tabs)
       }
     );
 

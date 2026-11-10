@@ -16,6 +16,7 @@ import type {
   ExtensionMessage,
   IPty,
   OnExitAction,
+  OpenTab,
   TerminalConfig
 } from '../../src/types';
 import { status } from './agents';
@@ -129,6 +130,7 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     statusColors: true,
     confirmClose: true,
     monochromeIcons: false,
+    restoreTabs: true,
     profiles: [CLAUDE],
     defaultProfile: CLAUDE,
     multiplexer: 'none',
@@ -156,7 +158,14 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
       closed.tabs = tabs;
     }
   };
-  const tabs = new Tabs(manager, host, WORKSPACE, closed);
+  const open = {
+    tabs: [] as OpenTab[],
+    get: () => open.tabs,
+    set: (tabs: OpenTab[]) => {
+      open.tabs = tabs;
+    }
+  };
+  const tabs = new Tabs(manager, host, WORKSPACE, closed, open);
   const output = (id: string) =>
     posted
       .filter((m): m is Extract<ExtensionMessage, { type: 'output' }> => m.type === 'output')
@@ -167,6 +176,7 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
     tabs,
     host,
     closed,
+    open,
     posted,
     output,
     setOnExit: (onExit: OnExitAction) => {
@@ -1062,5 +1072,104 @@ describe('asking before closing', () => {
     tabs.input(id, 'x');
     pty().exit(1);
     expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+});
+
+describe('restoring the tabs of the last window', () => {
+  let tmux: FakeMultiplexer;
+  beforeEach(() => {
+    tmux = new FakeMultiplexer();
+    setMultiplexer(tmux, 'tmux');
+    setMultiplexer(noSessions, 'abduco');
+  });
+  afterEach(() => {
+    setMultiplexer(undefined, 'tmux');
+    setMultiplexer(undefined, 'abduco');
+  });
+
+  const working = status('state=working');
+  const PI = launchForCommand('pi', [], true);
+
+  it('keeps the open tabs in order, with the active one and started conversations', async () => {
+    const { tabs, open, pty, instance } = setup();
+    const first = await tabs.create();
+    pty().emit(working);
+    const second = await tabs.create(PI);
+    tabs.switchTo(first);
+    expect(open.tabs).toEqual([
+      expect.objectContaining({
+        launch: CLAUDE,
+        conversation: instance(first).conversation?.id,
+        active: true
+      }),
+      expect.objectContaining({ launch: PI, conversation: undefined, active: undefined })
+    ]);
+    tabs.close(second);
+    expect(open.tabs).toHaveLength(1);
+  });
+
+  it('opens them again in the next window and continues their conversations', async () => {
+    const previous = setup();
+    const first = await previous.tabs.create();
+    previous.pty().emit(working);
+    const conversation = previous.instance(first).conversation?.id;
+    await previous.tabs.create(PI);
+    previous.tabs.switchTo(first);
+
+    const { tabs, open, posted } = setup();
+    open.tabs = previous.open.tabs;
+    spawned.length = 0;
+    await expect(tabs.restore()).resolves.toBe(2);
+    const [claude, pi] = tabs.state.getAll();
+    expect(spawned.map((pty) => [pty.file, ...pty.args])).toEqual([
+      ['claude', '--resume', conversation],
+      ['pi', '--session-id', pi.conversation?.id]
+    ]);
+    expect(pi.conversation?.started).toBe(false);
+    expect(tabs.state.getActiveId()).toBe(claude.id);
+    expect(posted.filter((m) => m.type === 'switchTab').pop()).toEqual({
+      type: 'switchTab',
+      id: claude.id
+    });
+    expect(open.tabs).toEqual(previous.open.tabs);
+  });
+
+  it('restores nothing with restoreTabs off', async () => {
+    const { tabs, open } = setup({ restoreTabs: false });
+    open.tabs = [{ launch: CLAUDE, active: true }];
+    await expect(tabs.restore()).resolves.toBe(0);
+    expect(spawned).toEqual([]);
+  });
+
+  it('does not forget the tabs when the view goes away', async () => {
+    const { tabs, open, host } = setup();
+    await tabs.create();
+    await tabs.create(PI);
+    host.attached = false;
+    tabs.reset();
+    tabs.close('none');
+    expect(open.tabs).toHaveLength(2);
+  });
+
+  it('attaches to a running session in its place, and opens unknown sessions after', async () => {
+    const { tabs, open } = setup();
+    tmux.add('kept', { created: 5, launch: PI });
+    tmux.add('other', { created: 1 });
+    tmux.add('gone', { created: 2 }, { attached: true });
+    open.tabs = [
+      { launch: CLAUDE, conversation: 'abc' },
+      { launch: PI, session: 'kept', active: true },
+      { launch: CLAUDE, session: 'gone' }
+    ];
+    const restored = tabs.restore();
+    await vi.runAllTimersAsync();
+    await expect(restored).resolves.toBe(3);
+    expect(
+      tabs.state.getAll().map((tab) => [tab.launch.label, tab.session?.name, tab.isActive])
+    ).toEqual([
+      ['Claude Code', undefined, false],
+      ['Pi', 'kept', true],
+      ['Claude Code', 'other', false]
+    ]);
   });
 });

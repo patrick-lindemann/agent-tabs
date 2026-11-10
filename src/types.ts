@@ -65,6 +65,8 @@ export interface TerminalConfig {
   statusColors: boolean;
   confirmClose: boolean;
   monochromeIcons: boolean;
+  /** Reopen the tabs of the last window when the view opens */
+  restoreTabs: boolean;
   /** Validated `agentTabs.profiles`, in menu order; never empty */
   profiles: LaunchSpec[];
   /** The profile + opens, from `agentTabs.defaultProfile`; one of `profiles` */
@@ -116,6 +118,19 @@ export interface ClosedTab {
   conversation: string;
   cwd?: string;
   workspaceFolderIndex?: number;
+}
+
+/** An open tab, kept so the next window of the workspace opens it again */
+export interface OpenTab {
+  launch: LaunchSpec;
+  cwd?: string;
+  workspaceFolderIndex?: number;
+  /** The conversation to continue, once a message was sent in it */
+  conversation?: string;
+  /** The multiplexer session the tab showed, to attach to it again */
+  session?: string;
+  /** The tab was the active one */
+  active?: boolean;
 }
 
 /** A multiplexer session that runs a tab's program */
