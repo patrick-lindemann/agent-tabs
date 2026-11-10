@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  defaultProfile,
   isInstalled,
   labelFromTitle,
   launchForCommand,
@@ -200,6 +201,35 @@ describe('resolving the profiles setting', () => {
     } finally {
       process.env.PATH = saved;
     }
+  });
+});
+
+describe('the default profile', () => {
+  const { profiles } = resolveProfiles(
+    [{ command: 'claude' }, { name: 'Pi fast', command: 'pi --model fast' }, { command: 'codex' }],
+    false
+  );
+
+  it('is the first profile when unset', () => {
+    expect(defaultProfile(profiles, undefined)).toEqual({ profile: profiles[0] });
+    expect(defaultProfile(profiles, ' ')).toEqual({ profile: profiles[0] });
+  });
+
+  it('is found by name, also the default name of a profile without one', () => {
+    expect(defaultProfile(profiles, 'Pi fast').profile).toBe(profiles[1]);
+    expect(defaultProfile(profiles, 'Codex').profile).toBe(profiles[2]);
+  });
+
+  it('is found by command line', () => {
+    expect(defaultProfile(profiles, 'pi --model fast').profile).toBe(profiles[1]);
+  });
+
+  it('falls back to the first profile and says so when not found', () => {
+    const { profile, problem } = defaultProfile(profiles, 'Gemini');
+    expect(profile).toBe(profiles[0]);
+    expect(problem).toBe(
+      'the default profile "Gemini" is not one of the profiles, so "Claude Code" is used'
+    );
   });
 });
 

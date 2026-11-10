@@ -75,7 +75,8 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `agentTabs.profiles` | installed agents | Profiles in menu order, each with a `command` line and optionally a `name`, `env` and `multiplexer`. `+` opens the first. In a remote window, profiles come from the remote's settings. |
+| `agentTabs.profiles` | installed agents | Profiles in menu order, each with a `command` line and optionally a `name`, `env` and `multiplexer`. In a remote window, profiles come from the remote's settings. |
+| `agentTabs.defaultProfile` | first profile | The profile `+` opens, by its `name`, e.g. `Claude Code`, or its `command` if it has no name. |
 | `agentTabs.multiplexer` | `none` | Run tabs in `tmux` (3.2+) or `abduco` sessions that outlive the window. |
 | `agentTabs.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
 | `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent. |

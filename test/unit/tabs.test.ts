@@ -114,6 +114,7 @@ vi.mock('node:fs', async (original) => {
 });
 
 const WORKSPACE = '/work/project';
+const CLAUDE = launchForCommand('claude', [], true);
 
 function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
   return {
@@ -128,7 +129,8 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     statusColors: true,
     confirmClose: true,
     monochromeIcons: false,
-    profiles: [launchForCommand('claude', [], true)],
+    profiles: [CLAUDE],
+    defaultProfile: CLAUDE,
     multiplexer: 'none',
     ...overrides
   };

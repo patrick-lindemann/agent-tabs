@@ -5,6 +5,12 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `agentTabs.defaultProfile` picks the profile `+` opens by its name, or its command line, instead of the first one in the list; it can differ per machine, e.g. on a remote
+
 ## [3.0.0] - 2026-11-10
 
 ### Breaking

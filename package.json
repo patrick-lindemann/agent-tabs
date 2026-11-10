@@ -347,6 +347,12 @@
           "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and may have a `name`, `env` and `multiplexer`:\n\n```json\n[\n  { \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed.",
           "order": 0
         },
+        "agentTabs.defaultProfile": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "The profile `+` opens, by its `name` or, for a profile without a name, its `command`, e.g. `Claude Code` or `pi --model fast`. Empty opens the first profile of `#agentTabs.profiles#`."
+        },
         "agentTabs.multiplexer": {
           "type": "string",
           "enum": [

@@ -262,6 +262,26 @@ export function multiplexerSetting(value: unknown): MultiplexerId | 'none' {
 }
 
 /**
+ * The profile `agentTabs.defaultProfile` names, by its name or else its
+ * command line; the first profile when unset or not found.
+ */
+export function defaultProfile(
+  profiles: LaunchSpec[],
+  setting: unknown
+): { profile: LaunchSpec; problem?: string } {
+  const name = typeof setting === 'string' ? setting.trim() : '';
+  if (!name) return { profile: profiles[0] };
+  const profile =
+    profiles.find((candidate) => candidate.label === name) ??
+    profiles.find((candidate) => candidate.commandLine === name);
+  if (profile) return { profile };
+  return {
+    profile: profiles[0],
+    problem: `the default profile "${name}" is not one of the profiles, so "${profiles[0].label}" is used`
+  };
+}
+
+/**
  * Resolves `agentTabs.profiles`, a list of profiles with a command line and
  * optionally a name, environment variables and a multiplexer, in the order of the setting.
  * Without a name, a profile is named after its agent or program. Invalid
