@@ -359,7 +359,7 @@ describe('environment files', () => {
         const { execFileSync } = await import('node:child_process');
         const output = execFileSync(
           'sh',
-          ['-c', '. "$0"; printf "%s|%s|%s" "$A" "$B" "${#B}"', file],
+          ['-c', '. "$0"; printf "%s|%s|%s" "$A" "$B" "$(printf %s "$B" | wc -c | tr -d " ")"', file],
           {
             encoding: 'utf8'
           }
