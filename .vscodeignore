@@ -18,7 +18,7 @@ biome.json
 test/**
 coverage/**
 out/**
-vitest.config.mts
+vitest*.config.mts
 .vscode-test/**
 .vscode-test.mjs
 
@@ -27,6 +27,7 @@ vitest.config.mts
 .vscode/**
 .claude/**
 .pi/**
+specs/**
 .gitignore
 AGENTS.md
 CONTRIBUTING.md

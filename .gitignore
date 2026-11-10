@@ -20,6 +20,9 @@ coverage/
 # Agents
 .claude/
 
+# Specs and reviews, kept locally
+specs/
+
 # Editors
 .idea/
 *.swp

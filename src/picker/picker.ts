@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { splitCommandLine } from '../profiles';
 import type { CommandFlag, PathContext, PathSuggestion } from '../types';
 import { HelpExecutor } from './help';
 import { availableFlags, detectPathContext, insertFlag, insertPath, parseInput } from './input';
@@ -17,7 +18,7 @@ export interface CommandInputResult {
 }
 
 /**
- * Custom Command: a quick pick for a command line that suggests the
+ * Custom Command…: a quick pick for a command line that suggests the
  * command's flags from its `--help` and paths for flags that take one.
  */
 export class CommandInputPicker {
@@ -93,8 +94,11 @@ export class CommandInputPicker {
       quickPick.onDidAccept(() => {
         const [selected] = quickPick.selectedItems;
         if (!selected || selected.isRunCommand) {
-          const parts = quickPick.value.trim().split(/\s+/);
-          resolve({ command: parts[0] || '', args: parts.slice(1), cancelled: false });
+          // Quotes group words, as in a profile's command line
+          const words = splitCommandLine(quickPick.value);
+          // An unclosed quote: the Run item says so
+          if (!words) return;
+          resolve({ command: words[0] ?? '', args: words.slice(1), cancelled: false });
           quickPick.dispose();
           return;
         }
@@ -128,10 +132,6 @@ export class CommandInputPicker {
     });
   }
 
-  preloadCommands(commands: string[]): void {
-    this.help.preloadCommonCommands(commands);
-  }
-
   dispose(): void {
     this.help.dispose();
     this.paths.dispose();
@@ -150,7 +150,12 @@ function buildItems(
   pathActive: boolean
 ): CommandQuickPickItem[] {
   const items: CommandQuickPickItem[] = [];
-  if (value) {
+  if (value && !splitCommandLine(value)) {
+    items.push({
+      label: '$(warning) Close the quote to run this command',
+      alwaysShow: true
+    });
+  } else if (value) {
     items.push({
       label: `$(play) Run: ${value}`,
       description: 'Press Enter to execute this command',

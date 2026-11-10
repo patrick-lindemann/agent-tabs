@@ -7,7 +7,10 @@ import { isAtBottom, trackScroll, viewportOf } from './scroll';
 import { ThemeBuilder } from './theme';
 import type { TerminalEntry, WebviewOutgoingMessage } from './types';
 
-const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
+const IS_MAC = /Mac/i.test(
+  (navigator as Navigator & { userAgentData?: { platform: string } }).userAgentData?.platform ??
+    navigator.userAgent
+);
 
 /** The xterm.js terminals, one per tab, of which only the active one is shown */
 export class Terminals {
@@ -15,7 +18,12 @@ export class Terminals {
   private readonly theme = new ThemeBuilder();
   private readonly container: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
+  private readonly stopWatchingTheme: () => void;
   private activeId: string | undefined;
+  private font: { fontSize: number; fontFamily?: string; lineHeight: number } = {
+    fontSize: 12,
+    lineHeight: 1.2
+  };
 
   constructor(private readonly post: (message: WebviewOutgoingMessage) => void) {
     const container = document.getElementById('terminals-container');
@@ -25,9 +33,43 @@ export class Terminals {
     this.container = container;
     this.resizeObserver = new ResizeObserver(() => this.fitActive());
     this.resizeObserver.observe(container);
+    this.stopWatchingTheme = this.theme.watch(() => this.applyAppearance());
+  }
+
+  /** Uses the terminal font VS Code is configured with */
+  setFont(font: { fontSize: number; fontFamily?: string; lineHeight: number }): void {
+    this.font = font;
+    this.applyAppearance();
+  }
+
+  /**
+   * Applies the current colors and font to every terminal, and tells the
+   * programs that asked for it whether the scheme is light or dark now
+   */
+  private applyAppearance(): void {
+    const theme = this.theme.getTheme();
+    const options = this.options();
+    const report = this.colorSchemeReport();
+    for (const [id, entry] of this.entries) {
+      const { terminal } = entry;
+      const changed = terminal.options.theme?.background !== theme.background;
+      terminal.options.theme = theme;
+      terminal.options.fontSize = options.fontSize;
+      terminal.options.fontFamily = options.fontFamily;
+      terminal.options.lineHeight = options.lineHeight;
+      if (changed && entry.colorSchemeReports) this.post({ type: 'input', id, data: report });
+    }
+    this.fitActive();
+  }
+
+  /** The answer to DSR 996: `CSI ? 997 ; 1 n` for dark, `2` for light */
+  private colorSchemeReport(): string {
+    return `\x1b[?997;${this.theme.isLight() ? 2 : 1}n`;
   }
 
   create(id: string): void {
+    // A view that loaded again is sent the open tabs, which it may know already
+    if (this.entries.has(id)) return;
     const element = document.createElement('div');
     element.className = 'terminal-wrapper';
     element.id = `terminal-${id}`;
@@ -43,7 +85,6 @@ export class Terminals {
       ...this.options(),
       letterSpacing: 0,
       theme: this.theme.getTheme(),
-      allowProposedApi: true,
       linkHandler: { activate: openLink, allowNonHttpProtocols: false }
     });
     const fitAddon = new FitAddon();
@@ -51,13 +92,30 @@ export class Terminals {
     terminal.loadAddon(new WebLinksAddon(openLink));
     terminal.open(element);
     terminal.registerLinkProvider(new FileLinkProvider(terminal, id, this.post));
+    // Programs ask to be told when the color scheme changes (DECSET 2031),
+    // e.g. pi to switch its own theme; xterm.js does not support it
+    const toggleSchemeReports = (enabled: boolean) => (params: (number | number[])[]) => {
+      if (!params.includes(2031)) return false;
+      entry.colorSchemeReports = enabled;
+      // Other modes in the same sequence still apply
+      return params.length === 1;
+    };
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'h' }, toggleSchemeReports(true));
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'l' }, toggleSchemeReports(false));
+    // And query it (DSR 996), answered like a terminal that supports it
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'n' }, (params) => {
+      if (params[0] !== 996) return false;
+      this.post({ type: 'input', id, data: this.colorSchemeReport() });
+      return true;
+    });
 
     const entry: TerminalEntry = {
       terminal,
       fitAddon,
       element,
       isAtBottom: true,
-      lastScrollTop: 0
+      lastScrollTop: 0,
+      colorSchemeReports: false
     };
     terminal.attachCustomKeyEventHandler((event) => this.handleKey(terminal, id, event));
     terminal.onData((data) => {
@@ -142,6 +200,7 @@ export class Terminals {
 
   dispose(): void {
     this.resizeObserver.disconnect();
+    this.stopWatchingTheme();
     for (const entry of this.entries.values()) {
       entry.terminal.dispose();
     }
@@ -150,9 +209,9 @@ export class Terminals {
   private options() {
     return {
       cursorBlink: true,
-      fontSize: 12,
-      fontFamily: this.theme.getFontFamily(),
-      lineHeight: 1.2
+      fontSize: this.font.fontSize,
+      fontFamily: this.font.fontFamily || this.theme.getFontFamily(),
+      lineHeight: this.font.lineHeight
     };
   }
 

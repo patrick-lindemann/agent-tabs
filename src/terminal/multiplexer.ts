@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -35,8 +36,12 @@ export interface SessionTag {
   workspaceFolderIndex?: number;
   /** When the session started, to restore tabs in order */
   created: number;
-  /** The agent's conversation, to reopen the tab after it closes */
-  conversation?: { id: string };
+  /**
+   * The agent's conversation, to reopen the tab after it closes, and whether
+   * a message was sent in it; tags written before 3.2 do not say, and count
+   * as started
+   */
+  conversation?: { id: string; started?: boolean };
 }
 
 /** A session the extension started */
@@ -61,6 +66,32 @@ export interface SessionOptions {
   rows: number;
   /** Stored with a new session */
   tag: SessionTag;
+}
+
+/** A word for `sh` that it reads back unchanged */
+function shWord(word: string): string {
+  return `'${word.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Writes environment variables to a new file only the user can read, as
+ * `sh` commands that export them, so their values, e.g. API keys, do not
+ * appear on a command line where every user sees them in `ps`. Returns
+ * its path, or undefined without variables. Names `sh` cannot export are
+ * skipped.
+ */
+export function writeEnvironmentFile(
+  env: Record<string, string>,
+  folder = os.tmpdir()
+): string | undefined {
+  const lines = Object.entries(env)
+    .filter(([key]) => /^[A-Za-z_]\w*$/.test(key))
+    .map(([key, value]) => `export ${key}=${shWord(value)}\n`);
+  if (lines.length === 0) return undefined;
+  const file = path.join(folder, `agent-tabs-env-${randomBytes(8).toString('hex')}`);
+  // `wx` fails on an existing file or link instead of writing through it
+  fs.writeFileSync(file, lines.join(''), { mode: 0o600, flag: 'wx' });
+  return file;
 }
 
 /** Encodes a tag for storing it in one tmux option or file */
@@ -125,6 +156,8 @@ export interface Multiplexer {
    */
   ended(session: string, clientCode: number): Promise<number | undefined>;
   kill(session: string): Promise<void>;
+  /** Replaces the session's tag, e.g. once its conversation started */
+  updateTag(session: string, tag: SessionTag): Promise<void>;
 }
 
 /** Runs a command and resolves with its output, or rejects when it fails */
@@ -170,7 +203,11 @@ export class ControlModeParser {
   private pending = Buffer.alloc(0);
   private readonly decoder = new StringDecoder('utf8');
 
-  constructor(private readonly onOutput: (data: string) => void) {}
+  /** @param pane Only this pane's output, e.g. `%3`, when given */
+  constructor(
+    private readonly onOutput: (data: string) => void,
+    private readonly pane?: string
+  ) {}
 
   push(chunk: Buffer): void {
     let buffer = Buffer.concat([this.pending, chunk]);
@@ -188,6 +225,8 @@ export class ControlModeParser {
     if (line.subarray(0, prefix.length).toString('latin1') !== prefix) return;
     const space = line.indexOf(0x20, prefix.length);
     if (space === -1) return;
+    const pane = line.subarray(prefix.length - 1, space).toString('latin1');
+    if (this.pane && pane !== this.pane) return;
     const data = line.subarray(space + 1);
     const bytes: number[] = [];
     for (let i = 0; i < data.length; i++) {
@@ -229,24 +268,36 @@ export class Tmux implements Multiplexer {
   static readonly TAG = '@agent-tabs';
   /** Session option with the program's exit code, once it exited */
   static readonly EXIT = '@agent-tabs-exit';
+  /**
+   * Session option with the ID of the program's pane, e.g. `%3`, which
+   * stays the same when the user splits the window or switches panes
+   */
+  static readonly PANE = '@agent-tabs-pane';
 
   constructor(
     private readonly execute: Run = run,
     private readonly spawnControl: (args: string[]) => ChildProcessWithoutNullStreams = (args) =>
-      spawn('tmux', args, { env: clientEnvironment() })
+      spawn('tmux', args, { env: clientEnvironment() }),
+    private readonly envFolder = os.tmpdir()
   ) {}
 
   async open(options: SessionOptions, onData: (data: string) => void): Promise<OpenResult> {
     const { session } = options;
     const created = !(await this.exists(session));
     if (created) {
-      await this.tmux(this.newSession(options));
+      const envFile = writeEnvironmentFile(options.env, this.envFolder);
+      try {
+        await this.tmux(this.newSession(options, envFile));
+      } catch (error) {
+        if (envFile) fs.rmSync(envFile, { force: true });
+        throw error;
+      }
       await this.configureServer();
     } else {
       const exitCode = await this.deadPaneStatus(session);
       if (exitCode !== undefined) return { exitCode };
     }
-    const tap = this.tap(session, created, onData);
+    const tap = this.tap(session, await this.programPane(session), created, onData);
     return {
       client: {
         command: this.command,
@@ -259,18 +310,19 @@ export class Tmux implements Multiplexer {
 
   /**
    * The session runs `sh`, which waits for the control client's signal on
-   * the session's channel, runs the program, then stores its exit code and
-   * detaches the clients. `sh` keeps running through Ctrl+C, which the
-   * program handles.
+   * the session's channel, reads and deletes the file with the environment
+   * variables, runs the program, then stores its exit code and detaches the
+   * clients. `sh` keeps running through Ctrl+C, which the program handles.
    */
-  newSession(options: SessionOptions): string[] {
-    const { session, command, args, env, cwd, cols, rows } = options;
+  newSession(options: SessionOptions, envFile = '-'): string[] {
+    const { session, command, args, cwd, cols, rows } = options;
     const tmux = `"$0" -L ${Tmux.SOCKET}`;
     const hold = [
       'trap : INT QUIT',
       `${tmux} wait-for "$1"`,
       'session=$1',
-      'shift',
+      'if [ "$2" != - ]; then . "$2"; rm -f "$2"; fi',
+      'shift 2',
       '"$@"',
       'code=$?',
       `${tmux} set-option -t "=$session:" ${Tmux.EXIT} "$code" ";" detach-client -s "=$session"`,
@@ -288,13 +340,13 @@ export class Tmux implements Multiplexer {
       String(rows),
       '-c',
       cwd,
-      ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
       '--',
       'sh',
       '-c',
       hold,
       this.command,
       session,
+      envFile,
       command,
       ...args,
       ';',
@@ -303,6 +355,13 @@ export class Tmux implements Multiplexer {
       target,
       Tmux.TAG,
       encodeTag(options.tag),
+      ';',
+      'set-option',
+      '-F',
+      '-t',
+      target,
+      Tmux.PANE,
+      '#{pane_id}',
       ';',
       'set-option',
       '-t',
@@ -344,7 +403,23 @@ export class Tmux implements Multiplexer {
     );
   }
 
-  private tap(session: string, created: boolean, onData: (data: string) => void): Tap {
+  /**
+   * The program's pane: the one stored when the session started, or for
+   * sessions of older versions the active one
+   */
+  private async programPane(session: string): Promise<string> {
+    const pane = await this.tmux(['show-options', '-qv', '-t', paneTarget(session), Tmux.PANE])
+      .then((output) => output.trim())
+      .catch(() => '');
+    return /^%\d+$/.test(pane) ? pane : paneTarget(session);
+  }
+
+  private tap(
+    session: string,
+    pane: string,
+    created: boolean,
+    onData: (data: string) => void
+  ): Tap {
     const control = this.spawnControl([
       '-L',
       Tmux.SOCKET,
@@ -353,7 +428,8 @@ export class Tmux implements Multiplexer {
       '-t',
       `=${session}`
     ]);
-    const parser = new ControlModeParser(onData);
+    // Other panes the user opens in the session are not the program
+    const parser = new ControlModeParser(onData, pane.startsWith('%') ? pane : undefined);
     control.stdout.on('data', (chunk: Buffer) => parser.push(chunk));
     // A failing control client only costs the status reports, but must not
     // leave a new session's program held back
@@ -370,7 +446,7 @@ export class Tmux implements Multiplexer {
     send('refresh-client -f ignore-size');
     if (created) send(`wait-for -S ${session}`);
     return {
-      reply: (data) => send(`send-keys -t ${paneTarget(session)} -H ${hexBytes(data).join(' ')}`),
+      reply: (data) => send(`send-keys -t ${pane} -H ${hexBytes(data).join(' ')}`),
       dispose: () => {
         control.stdin.end();
         control.kill();
@@ -419,7 +495,7 @@ export class Tmux implements Multiplexer {
       'display-message',
       '-p',
       '-t',
-      paneTarget(session),
+      await this.programPane(session),
       `#{${Tmux.EXIT}} #{pane_dead} #{pane_dead_status} #{pane_dead_signal}`
     ]);
     const [exit, dead, status, signal] = output.replace(/\n$/, '').split(' ');
@@ -431,6 +507,10 @@ export class Tmux implements Multiplexer {
 
   async kill(session: string): Promise<void> {
     await this.tmux(['kill-session', '-t', `=${session}`]).catch(() => undefined);
+  }
+
+  async updateTag(session: string, tag: SessionTag): Promise<void> {
+    await this.tmux(['set-option', '-t', paneTarget(session), Tmux.TAG, encodeTag(tag)]);
   }
 
   private tmux(args: string[]): Promise<string> {
@@ -449,6 +529,9 @@ export class Abduco implements Multiplexer {
   readonly command = 'abduco';
 
   /**
+   * The session gets the environment of the client that starts it, so the
+   * variables pass through the tab's process and not its command line.
+   *
    * @param tags Folder with a file per session holding its tag, since abduco
    *   cannot store one itself
    */
@@ -460,8 +543,10 @@ export class Abduco implements Multiplexer {
   async open(options: SessionOptions): Promise<OpenResult> {
     const created = !(await this.exists(options.session));
     if (created) {
-      fs.mkdirSync(this.tags, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(this.tagFile(options.session), encodeTag(options.tag), { mode: 0o600 });
+      await fs.promises.mkdir(this.tags, { recursive: true, mode: 0o700 });
+      await fs.promises.writeFile(this.tagFile(options.session), encodeTag(options.tag), {
+        mode: 0o600
+      });
     }
     // -A creates the session or attaches to it
     const args = ['-A', options.session, options.command, ...options.args];
@@ -509,6 +594,10 @@ export class Abduco implements Multiplexer {
     return entries;
   }
 
+  async updateTag(session: string, tag: SessionTag): Promise<void> {
+    await fs.promises.writeFile(this.tagFile(session), encodeTag(tag), { mode: 0o600 });
+  }
+
   private tagFile(session: string): string {
     return path.join(this.tags, `${session}.tag`);
   }
@@ -526,12 +615,21 @@ export class Abduco implements Multiplexer {
     return entry && !entry.ended ? undefined : clientCode;
   }
 
-  /** Ends the session's server, also one whose program ended */
+  /**
+   * Ends the session's server, also one whose program ended. abduco has no
+   * command for it, so its processes are found by their command line,
+   * which starts with the session's name the extension chose; only the
+   * user's own processes and only names the extension creates.
+   */
   async kill(session: string): Promise<void> {
     this.removeTag(session);
+    if (!/^agent-tabs-[a-z0-9-]+$/.test(session)) return;
     const entry = (await this.sessions()).find((candidate) => candidate.name === session);
     if (!entry) return;
-    await this.execute('pkill', ['-f', `abduco -A ${session} `]).catch(() => undefined);
+    const user = String(os.userInfo().uid);
+    await this.execute('pkill', ['-U', user, '-f', `^([^ ]*/)?abduco -A ${session} `]).catch(
+      () => undefined
+    );
   }
 }
 

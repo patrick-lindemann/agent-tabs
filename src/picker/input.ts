@@ -1,3 +1,4 @@
+import { splitCommandLine } from '../profiles';
 import type { CommandFlag, PathContext, PathFilterMode } from '../types';
 
 /**
@@ -59,7 +60,8 @@ export interface ParsedInput {
 }
 
 export function parseInput(value: string): ParsedInput {
-  const parts = value.trim().split(/\s+/);
+  // Quotes group words; while a quote is still open, spaces separate them
+  const parts = splitCommandLine(value) ?? value.trim().split(/\s+/);
   const command = parts[0] || '';
   const args = parts.slice(1);
   const last = args[args.length - 1] || '';

@@ -21,8 +21,12 @@ npm run lint          # Biome checks JavaScript/TypeScript/JSON/CSS
 npm run format:check  # Biome formatting check
 npm run typecheck
 npm run compile
-npm test
+npm test              # unit tests, with the coverage thresholds of vitest.config.mts
 ```
+
+`npm run test:pty` starts real processes through node-pty's native module, which needs `npm ci` with its install scripts. CI runs it on Linux, macOS and Windows.
+
+`npm run test:agents` builds a Docker image with the coding agents and checks what the extension assumes about them, e.g. their subcommands and conversation options; see `test/agents/README.md`.
 
 Integration tests launch a downloaded VS Code. By default they run in Docker on a virtual display, so no window opens and nothing takes focus:
 

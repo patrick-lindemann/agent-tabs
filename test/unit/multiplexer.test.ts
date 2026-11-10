@@ -14,7 +14,8 @@ import {
   type Run,
   type SessionOptions,
   type SessionTag,
-  Tmux
+  Tmux,
+  writeEnvironmentFile
 } from '../../src/terminal/multiplexer';
 
 const TAG: SessionTag = {
@@ -77,6 +78,13 @@ describe('tmux control mode output', () => {
     expect(out).toEqual(['\x1b]7501;state=working\x1b\\', 'a\\b\x07']);
   });
 
+  it('keeps only the output of the given pane', () => {
+    const out: string[] = [];
+    const parser = new ControlModeParser((data) => out.push(data), '%3');
+    parser.push(Buffer.from('%output %1 other\n%output %3 mine\n'));
+    expect(out).toEqual(['mine']);
+  });
+
   it('keeps UTF-8 characters split across lines', () => {
     const out: string[] = [];
     const parser = new ControlModeParser((data) => out.push(data));
@@ -97,24 +105,39 @@ describe('tmux sessions', () => {
   it('starts a held session on its own server and releases it once tapped', async () => {
     const { calls, execute } = fakeRun([['has-session', new Error('no session')]]);
     const control = fakeControl();
-    const tmux = new Tmux(execute, (args) => {
-      control.args = args;
-      return control.child as never;
-    });
-    const result = await tmux.open(OPTIONS, () => {});
+    const envFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tabs-env-'));
+    const tmux = new Tmux(
+      execute,
+      (args) => {
+        control.args = args;
+        return control.child as never;
+      },
+      envFolder
+    );
+    const result = await tmux.open(
+      { ...OPTIONS, env: { A: '1', API_KEY: "s3cret 'x'" } },
+      () => {}
+    );
     if (!('client' in result)) throw new Error('no client');
 
     const newSession = calls.find((call) => call.includes('new-session')) ?? [];
     expect(newSession.slice(0, 3)).toEqual(['tmux', '-L', 'agent-tabs']);
-    expect(newSession).toEqual(expect.arrayContaining(['-e', 'A=1', '-c', '/work', '-x', '100']));
+    expect(newSession).toEqual(expect.arrayContaining(['-c', '/work', '-x', '100']));
+    // Values stay off the command line, where `ps` would show them
+    expect(newSession.join(' ')).not.toContain('s3cret');
+    expect(newSession).not.toContain('-e');
     const program = newSession.indexOf('--');
-    expect(newSession.slice(program + 4, program + 9)).toEqual([
+    const [envFile] = fs.readdirSync(envFolder);
+    expect(newSession.slice(program + 4, program + 10)).toEqual([
       'tmux',
       'agent-tabs-1',
+      path.join(envFolder, envFile),
       'claude',
       '--continue',
       ';'
     ]);
+    expect(fs.statSync(path.join(envFolder, envFile)).mode & 0o777).toBe(0o600);
+    fs.rmSync(envFolder, { recursive: true, force: true });
     expect(result.client).toEqual({
       command: 'tmux',
       args: ['-L', 'agent-tabs', 'attach-session', '-t', '=agent-tabs-1']
@@ -158,6 +181,37 @@ describe('tmux sessions', () => {
     await tmux.open(OPTIONS, (data) => out.push(data));
     control.child.stdout.write('%output %1 hi\\033\n');
     expect(out).toEqual(['hi\x1b']);
+  });
+
+  it('reads status and the exit code from the program pane, not the active one', async () => {
+    const { calls, execute } = fakeRun([
+      ['show-options', '%3\n'],
+      ['display-message', ' 0  \n']
+    ]);
+    const control = fakeControl();
+    const out: string[] = [];
+    const tmux = new Tmux(execute, () => control.child as never);
+    const result = await tmux.open(OPTIONS, (data) => out.push(data));
+    control.child.stdout.write('%output %4 split pane\n%output %3 program\n');
+    expect(out).toEqual(['program']);
+    if ('tap' in result) result.tap?.reply('x');
+    expect(control.written.at(-1)).toBe('send-keys -t %3 -H 78\n');
+    await tmux.ended('s', 0);
+    expect(calls.at(-1)).toEqual(expect.arrayContaining(['display-message', '%3']));
+  });
+
+  it('stores the program pane when the session starts', async () => {
+    const { calls, execute } = fakeRun([['has-session', new Error('no session')]]);
+    await new Tmux(execute, () => fakeControl().child as never).open(OPTIONS, () => {});
+    const newSession = calls.find((call) => call.includes('new-session')) ?? [];
+    const option = newSession.indexOf('@agent-tabs-pane');
+    expect(newSession.slice(option - 3, option + 2)).toEqual([
+      '-F',
+      '-t',
+      '=agent-tabs-1:',
+      '@agent-tabs-pane',
+      '#{pane_id}'
+    ]);
   });
 
   it('reports the exit code of a program that ended', async () => {
@@ -211,12 +265,21 @@ describe('tmux sessions', () => {
     await new Tmux(execute).kill('s');
     expect(calls).toEqual([['tmux', '-L', 'agent-tabs', 'kill-session', '-t', '=s']]);
   });
+
+  it('replaces the tag of a session', async () => {
+    const { calls, execute } = fakeRun();
+    await new Tmux(execute).updateTag('s', TAG);
+    expect(calls).toEqual([
+      ['tmux', '-L', 'agent-tabs', 'set-option', '-t', '=s:', '@agent-tabs', encodeTag(TAG)]
+    ]);
+  });
 });
 
 describe('abduco sessions', () => {
   const LIST =
     'Active sessions (on host box)\n' +
     '* Tue\t 2026-11-10 13:43:12\trunning\n' +
+    '* Tue\t 2026-11-10 13:43:12\tagent-tabs-x1\n' +
     '+ Tue\t 2026-11-10 13:43:12\tended\n' +
     '  Tue\t 2026-11-10 13:43:12\tdetached\n';
   let tags: string;
@@ -266,13 +329,93 @@ describe('abduco sessions', () => {
     const { calls, execute } = fakeRun([['', LIST]]);
     const abduco = new Abduco(execute, tags);
     await abduco.open({ ...OPTIONS, session: 'gone' });
-    await abduco.kill('running');
+    await abduco.kill('agent-tabs-x1');
     await abduco.kill('gone');
+    // Not a name the extension creates, e.g. the user's own session
+    await abduco.kill('running');
     expect(calls.filter(([command]) => command === 'pkill')).toEqual([
-      ['pkill', '-f', 'abduco -A running ']
+      ['pkill', '-U', String(os.userInfo().uid), '-f', '^([^ ]*/)?abduco -A agent-tabs-x1 ']
     ]);
     expect(fs.readdirSync(tags)).toEqual([]);
   });
+
+  it('replaces the tag file of a session', async () => {
+    const abduco = new Abduco(fakeRun([['', LIST]]).execute, tags);
+    await abduco.open({ ...OPTIONS, session: 'detached' });
+    const started = { ...TAG, conversation: { id: 'c', started: true } };
+    await abduco.updateTag('detached', started);
+    await expect(abduco.list()).resolves.toEqual([
+      { name: 'detached', tag: started, ended: false, attached: false }
+    ]);
+  });
+});
+
+describe('the session shell', () => {
+  it.skipIf(process.platform === 'win32')(
+    'waits for the tap, runs the program with the variables and stores its exit code',
+    async () => {
+      const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tabs-hold-'));
+      try {
+        // A tmux that records its arguments
+        const log = path.join(folder, 'tmux.log');
+        const fakeTmux = path.join(folder, 'tmux');
+        fs.writeFileSync(fakeTmux, `#!/bin/sh\necho "$*" >> '${log}'\n`, { mode: 0o755 });
+        const envFile = writeEnvironmentFile({ SECRET: 'a b' }, folder);
+        const args = new Tmux().newSession(OPTIONS, envFile);
+        const program = args.indexOf('--');
+        const [, , hold] = args.slice(program + 1);
+        const { spawnSync } = await import('node:child_process');
+        const run = (file: string) =>
+          spawnSync(
+            'sh',
+            ['-c', hold, fakeTmux, 'agent-tabs-1', file, 'sh', '-c', 'echo "[$SECRET]"; exit 3'],
+            { encoding: 'utf8' }
+          );
+
+        const result = run(envFile ?? '');
+        expect(result.stdout).toBe('[a b]\n');
+        expect(result.status).toBe(3);
+        expect(fs.existsSync(envFile ?? '')).toBe(false);
+        expect(fs.readFileSync(log, 'utf8').split('\n')).toEqual([
+          '-L agent-tabs wait-for agent-tabs-1',
+          '-L agent-tabs set-option -t =agent-tabs-1: @agent-tabs-exit 3 ; detach-client -s =agent-tabs-1',
+          ''
+        ]);
+        expect(run('-').stdout).toBe('[]\n');
+      } finally {
+        fs.rmSync(folder, { recursive: true, force: true });
+      }
+    }
+  );
+});
+
+describe('environment files', () => {
+  it.skipIf(process.platform === 'win32')(
+    'exports the variables to sh exactly as given',
+    async () => {
+      const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tabs-env-'));
+      try {
+        const env = { A: "it's $HOME `x` \\n", B: '', 'NOT-VALID': 'x' };
+        const file = writeEnvironmentFile(env, folder) ?? '';
+        const { execFileSync } = await import('node:child_process');
+        const output = execFileSync(
+          'sh',
+          [
+            '-c',
+            '. "$0"; printf "%s|%s|%s" "$A" "$B" "$(printf %s "$B" | wc -c | tr -d " ")"',
+            file
+          ],
+          {
+            encoding: 'utf8'
+          }
+        );
+        expect(output).toBe(`${env.A}||0`);
+        expect(writeEnvironmentFile({}, folder)).toBeUndefined();
+      } finally {
+        fs.rmSync(folder, { recursive: true, force: true });
+      }
+    }
+  );
 });
 
 describe('session tags', () => {

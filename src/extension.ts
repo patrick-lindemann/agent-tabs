@@ -82,6 +82,14 @@ export function activate(context: vscode.ExtensionContext) {
       if (e.affectsConfiguration('agentTabs')) {
         terminalProvider?.updateConfig();
       }
+      if (
+        e.affectsConfiguration('terminal.integrated.fontSize') ||
+        e.affectsConfiguration('terminal.integrated.fontFamily') ||
+        e.affectsConfiguration('terminal.integrated.lineHeight') ||
+        e.affectsConfiguration('editor.fontSize')
+      ) {
+        terminalProvider?.updateAppearance();
+      }
     })
   );
 }

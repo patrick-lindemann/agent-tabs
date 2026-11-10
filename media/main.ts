@@ -29,6 +29,9 @@ function start(): void {
       case 'removeTab':
         terminals.remove(message.id);
         break;
+      case 'appearance':
+        terminals.setFont(message);
+        break;
     }
   });
 

@@ -48,7 +48,8 @@ describe('unsent input', () => {
     ['history', '\x1b[A'],
     ['history in application mode', '\x1bOB'],
     ['completion', '\t'],
-    ['a paste', '\x1b[200~text\x1b[201~']
+    ['a paste', '\x1b[200~text\x1b[201~'],
+    ['a paste without bracketed paste', 'line one\rline two']
   ])('may fill an empty input from %s', (_name, key) => {
     expect(type(key)).toBe('unknown');
   });

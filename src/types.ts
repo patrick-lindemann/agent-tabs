@@ -1,3 +1,7 @@
+import type { AgentId, ProfileIcon } from './protocol';
+import type { Draft } from './terminal/draft';
+import type { MultiplexerId } from './terminal/multiplexer';
+
 // Muted but distinct workspace accent colors
 export const WORKSPACE_ACCENT_COLORS = [
   '#6b9ac4', // Muted blue
@@ -11,9 +15,14 @@ export const WORKSPACE_ACCENT_COLORS = [
 ] as const;
 
 // node-pty types
+/** Ends a listener */
+export interface IDisposable {
+  dispose(): void;
+}
+
 export interface IPty {
-  onData: (callback: (data: string) => void) => void;
-  onExit: (callback: (exitCode: { exitCode: number; signal?: number }) => void) => void;
+  onData: (callback: (data: string) => void) => IDisposable;
+  onExit: (callback: (exitCode: { exitCode: number; signal?: number }) => void) => IDisposable;
   write: (data: string) => void;
   resize: (cols: number, rows: number) => void;
   kill: () => void;
@@ -22,7 +31,8 @@ export interface IPty {
 export interface INodePty {
   spawn: (
     file: string,
-    args: string[],
+    /** On Windows also a ready command line, which node-pty passes on unchanged */
+    args: string[] | string,
     options: {
       name?: string;
       cols?: number;
@@ -51,6 +61,16 @@ export interface LaunchSpec {
   commandLine: string;
   /** The profile's own `multiplexer`, over `agentTabs.multiplexer` */
   multiplexer?: MultiplexerId | 'none';
+  /**
+   * The icon of the profile and its tabs: the profile's `icon`, or the
+   * agent's logo, the terminal icon for a shell, else the sparkle
+   */
+  icon: ProfileIcon;
+  /**
+   * The name of the profile in `agentTabs.profiles` it comes from, so a
+   * restored tab runs the profile as it is now; none for a custom command
+   */
+  profile?: string;
 }
 
 export interface TerminalConfig {
@@ -65,6 +85,8 @@ export interface TerminalConfig {
   statusColors: boolean;
   confirmClose: boolean;
   monochromeIcons: boolean;
+  /** Reopen the tabs of the last window when the view opens */
+  restoreTabs: boolean;
   /** Validated `agentTabs.profiles`, in menu order; never empty */
   profiles: LaunchSpec[];
   /** The profile + opens, from `agentTabs.defaultProfile`; one of `profiles` */
@@ -118,26 +140,38 @@ export interface ClosedTab {
   workspaceFolderIndex?: number;
 }
 
+/** An open tab, kept so the next window of the workspace opens it again */
+export interface OpenTab {
+  launch: LaunchSpec;
+  cwd?: string;
+  workspaceFolderIndex?: number;
+  /** The conversation to continue, once a message was sent in it */
+  conversation?: string;
+  /** The multiplexer session the tab showed, to attach to it again */
+  session?: string;
+  /** The tab was the active one */
+  active?: boolean;
+}
+
 /** A multiplexer session that runs a tab's program */
 export interface SessionRef {
   multiplexer: MultiplexerId;
   name: string;
   /** When the session started, stored in its tag */
   created: number;
+  /** The session's tag says that the conversation started */
+  started?: boolean;
 }
 
 // Host/webview protocol is defined once in the platform-neutral shared module.
 export type {
   AgentId,
   ExtensionMessage,
+  ProfileIcon,
   TabInfo,
   TabStatus,
   WebviewMessage
 } from './protocol';
-
-import type { AgentId } from './protocol';
-import type { Draft } from './terminal/draft';
-import type { MultiplexerId } from './terminal/multiplexer';
 
 // Command help parsing types
 export interface CommandFlag {

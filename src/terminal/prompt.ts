@@ -10,12 +10,9 @@ const DEFAULT_PROMPT_PATTERNS: RegExp[] = [
   /\[[Yy]\/[Nn]\]\s*:?\s*$/,
   /\(yes\/no\)\s*:?\s*$/i,
 
-  // Question prompts (at end)
-  /[Cc]onfirm\??\s*$/,
-  /[Aa]pply\??\s*$/,
-  /[Cc]ontinue\??\s*$/,
-  /[Pp]roceed\??\s*$/,
-  /[Aa]ccept\??\s*$/,
+  // Questions at the end of a line of their own, e.g. `Continue?`, not
+  // output that ends with the word, e.g. `Press any key to continue`
+  /(?:^|[\n\r])\s*(?:Confirm|Apply|Continue|Proceed|Accept)\?\s*$/i,
 
   // Interactive menus (selector arrows - various unicode characters)
   /[❯›>]\s*\d+\./,
@@ -28,19 +25,34 @@ const DEFAULT_PROMPT_PATTERNS: RegExp[] = [
   /esc to cancel/i
 ];
 
-// Keep workspace-configured expressions bounded and reject common sources of
-// catastrophic backtracking. Built-in patterns remain unrestricted.
-function isSafeCustomPattern(pattern: string): boolean {
+/**
+ * Keeps configured expressions bounded and rejects the sources of
+ * catastrophic backtracking, which would freeze the extension host for
+ * every extension: repeating a group, e.g. `(a|aa)+`, more than one
+ * unbounded quantifier, e.g. `a+b+`, and backreferences. Built-in patterns
+ * remain unrestricted.
+ */
+export function isSafeCustomPattern(pattern: string): boolean {
   if (pattern.length === 0 || pattern.length > 200) return false;
-  if (/\\(?:1[0-9]|[2-9][0-9])/.test(pattern)) return false;
-  if (/([+*])[^)]*\1/.test(pattern)) return false;
-  if (/\([^)]*[+*][^)]*\)[+*]/.test(pattern)) return false;
+  // Escaped characters cannot repeat anything
+  const plain = pattern.replace(/\\./g, 'x');
+  if (/\\[1-9k]/.test(pattern)) return false;
+  // A group that repeats, e.g. `(a|aa)+` or `(ab){2,}`
+  if (/\)[+*{]/.test(plain)) return false;
+  if ((plain.match(/[+*]|\{\d*,\}/g) ?? []).length > 1) return false;
   return true;
 }
 
-// Strip ANSI escape codes from terminal output
-function stripAnsi(text: string): string {
-  return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+/**
+ * Removes escape sequences from terminal output: OSC sequences with their
+ * text, e.g. a window title, CSI sequences, two-character escapes, and an
+ * unfinished sequence at the end, which arrives with the next output
+ */
+export function stripAnsi(text: string): string {
+  return text
+    .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, '')
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+    .replace(/\x1B(?:\][^\x07]*|\[[0-?]*[ -/]*)?$/, '');
 }
 
 // Sliding buffer to handle PTY data chunks
@@ -52,10 +64,16 @@ class PromptBuffer {
     this.maxSize = maxSize;
   }
 
+  /**
+   * Keeps the last output, cut at a line break where there is one, so the
+   * buffer does not start inside an escape sequence
+   */
   append(data: string): void {
     this.buffer += data;
     if (this.buffer.length > this.maxSize) {
-      this.buffer = this.buffer.slice(-this.maxSize);
+      const kept = this.buffer.slice(-this.maxSize);
+      const line = kept.indexOf('\n');
+      this.buffer = line >= 0 ? kept.slice(line + 1) : kept;
     }
   }
 

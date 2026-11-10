@@ -1,8 +1,9 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as vscode from 'vscode';
-import type { INodePty, IPty, LaunchSpec, TerminalConfig } from '../types';
-import { shellClearCommand, shellQuote } from './shell';
+import type { IDisposable, INodePty, IPty, LaunchSpec, TerminalConfig } from '../types';
+import { shellKind, shellRunLine } from './shell';
+import { pathKey, resolveExecutable, windowsLaunch } from './windows';
 
 /**
  * Callbacks for PTY events.
@@ -22,12 +23,44 @@ export interface WorkingDirectorySelection {
   folderIndex: number | undefined;
 }
 
+/** How long a redraw keeps the smaller size, so the program notices it */
+const REDRAW_DELAY_MS = 50;
+
+/**
+ * Variables of the extension host that would change how programs in a tab
+ * run, e.g. `ELECTRON_RUN_AS_NODE` makes Electron apps such as `code` run
+ * as Node. VS Code removes the same ones for its own terminals.
+ */
+const HOST_ONLY =
+  /^(?:ELECTRON_.+|VSCODE_(?!PORTABLE$|SHELL_LOGIN$|ENV_(?:REPLACE|APPEND|PREPEND)$).+|SNAP(?:|_.*)|GDK_PIXBUF_.+)$/;
+
+/**
+ * Agents built with Node check `FORCE_COLOR` before colors; other
+ * programs, e.g. a shell, get the terminal's own color support only
+ */
+function agentColors(launch: LaunchSpec | undefined): Record<string, string> {
+  return launch?.agent ? { FORCE_COLOR: '1' } : {};
+}
+
+/** The extension host's environment for a tab's process */
+export function hostEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined && !HOST_ONLY.test(key)) env[key] = value;
+  }
+  return env;
+}
+
 /**
  * Manages PTY process lifecycle.
  */
 export class PtyManager {
   private nodePty: INodePty | undefined;
   private readonly ptys = new Map<string, IPty>();
+  /** The size each PTY has now */
+  private readonly sizes = new Map<string, { cols: number; rows: number }>();
+  /** The listeners of each PTY, ended with it */
+  private readonly listeners = new Map<IPty, IDisposable[]>();
 
   constructor(private readonly callbacks: PtyEventCallbacks) {}
 
@@ -52,18 +85,20 @@ export class PtyManager {
       this.ensureNodePtyLoaded();
       const { shell, env, cwd: defaultCwd } = this.prepareSpawnOptions(config, launch);
       const workingDir = cwd ?? defaultCwd;
-      const pty = client
+      const program = client && this.programFor(client.command, client.args, env);
+      const pty = program
         ? this.nodePty?.spawn(
-            client.command,
-            client.args,
+            program.file,
+            program.args,
             this.spawnOptions(cols, rows, workingDir, env)
           )
         : this.createPty(config, launch, shell, cols, rows, workingDir, env);
       if (!pty) throw new Error('node-pty not loaded');
 
       this.ptys.set(terminalId, pty);
+      this.sizes.set(terminalId, { cols, rows });
       this.setupPtyEventHandlers(terminalId, pty);
-      if (!client) this.handleAutoRun(pty, config, launch);
+      if (!client) this.handleAutoRun(pty, config, launch, shell);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.callbacks.onError(terminalId, errorMessage);
@@ -72,9 +107,10 @@ export class PtyManager {
 
   /**
    * Prompts the user to select a workspace folder if multiple are available.
-   * Returns the selected folder path and its index for color mapping.
+   * Returns the selected folder path and its index for color mapping, or
+   * undefined when the user cancelled.
    */
-  async selectWorkingDirectory(): Promise<WorkingDirectorySelection> {
+  async selectWorkingDirectory(): Promise<WorkingDirectorySelection | undefined> {
     const folders = vscode.workspace.workspaceFolders;
 
     // If no folders or only one, use default behavior (no color indexing)
@@ -98,18 +134,8 @@ export class PtyManager {
       title: 'Choose Working Directory'
     });
 
-    if (selected) {
-      return {
-        path: selected.folder.uri.fsPath,
-        folderIndex: selected.index
-      };
-    }
-
-    // User cancelled - use first folder as default
-    return {
-      path: folders[0].uri.fsPath,
-      folderIndex: 0
-    };
+    // Undefined when the user cancelled, so no tab opens
+    return selected && { path: selected.folder.uri.fsPath, folderIndex: selected.index };
   }
 
   private ensureNodePtyLoaded(): void {
@@ -128,7 +154,7 @@ export class PtyManager {
   } {
     const shell = config.shell || this.getDefaultShell();
     const cwd = this.getWorkingDirectory();
-    const env = this.buildEnvironment({ ...config.env, ...launch.env });
+    const env = this.buildEnvironment({ ...config.env, ...launch.env }, launch);
     return { shell, env, cwd };
   }
 
@@ -145,21 +171,19 @@ export class PtyManager {
     return fs.existsSync(cwd) ? cwd : os.homedir();
   }
 
-  private buildEnvironment(configEnv: Record<string, string>): Record<string, string> {
-    const env: Record<string, string> = {};
-
-    // Copy process.env, filtering undefined values
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined) {
-        env[key] = value;
-      }
-    }
-
-    // Add config env and terminal settings
+  /**
+   * The environment of a tab's process: the extension host's, without the
+   * variables that only concern it, then the configured variables
+   */
+  private buildEnvironment(
+    configEnv: Record<string, string>,
+    launch?: LaunchSpec
+  ): Record<string, string> {
+    const env = hostEnvironment();
     Object.assign(env, configEnv, {
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      FORCE_COLOR: '1'
+      ...agentColors(launch)
     });
 
     // Remove CI flag so CLI agents don't think it's in CI
@@ -186,9 +210,25 @@ export class PtyManager {
 
     const spawnOptions = this.spawnOptions(cols, rows, cwd, env);
     if (config.directMode && launch.command) {
-      return this.nodePty.spawn(launch.command, launch.args, spawnOptions);
+      const { file, args } = this.programFor(launch.command, launch.args, env);
+      return this.nodePty.spawn(file, args, spawnOptions);
     }
-    return this.nodePty.spawn(shell, [], spawnOptions);
+    const { file, args } = this.programFor(shell, [], env);
+    return this.nodePty.spawn(file, args, spawnOptions);
+  }
+
+  /**
+   * What node-pty runs for a program. On Windows, it needs the full path,
+   * and batch files run through `cmd.exe`; see `windows.ts`.
+   */
+  private programFor(
+    command: string,
+    args: string[],
+    env: Record<string, string>
+  ): { file: string; args: string[] | string } {
+    if (process.platform !== 'win32') return { file: command, args };
+    const file = resolveExecutable(command, env[pathKey(env)] ?? '', env.PATHEXT) ?? command;
+    return windowsLaunch(file, args, env.ComSpec ?? env.COMSPEC);
   }
 
   private spawnOptions(cols: number, rows: number, cwd: string, env: Record<string, string>) {
@@ -200,7 +240,7 @@ export class PtyManager {
    * server's: the configured ones and the terminal's color support.
    */
   sessionEnvironment(config: TerminalConfig, launch: LaunchSpec): Record<string, string> {
-    return { COLORTERM: 'truecolor', FORCE_COLOR: '1', ...config.env, ...launch.env };
+    return { COLORTERM: 'truecolor', ...agentColors(launch), ...config.env, ...launch.env };
   }
 
   /** The working directory a tab starts in without its own */
@@ -209,26 +249,38 @@ export class PtyManager {
   }
 
   private setupPtyEventHandlers(terminalId: string, pty: IPty): void {
-    pty.onData((data: string) => {
-      this.callbacks.onData(terminalId, data);
-    });
-
     const startedAt = Date.now();
-    pty.onExit(({ exitCode }) => {
-      // A killed or replaced PTY was already removed from the map
-      if (this.ptys.get(terminalId) !== pty) {
-        return;
-      }
-      this.ptys.delete(terminalId);
-      this.callbacks.onExit(terminalId, exitCode, Date.now() - startedAt);
-    });
+    this.listeners.set(pty, [
+      pty.onData((data: string) => {
+        this.callbacks.onData(terminalId, data);
+      }),
+      pty.onExit(({ exitCode }) => {
+        // A killed or replaced PTY was already removed from the map
+        if (this.ptys.get(terminalId) !== pty) {
+          return;
+        }
+        this.ptys.delete(terminalId);
+        this.sizes.delete(terminalId);
+        this.disposeListeners(pty);
+        this.callbacks.onExit(terminalId, exitCode, Date.now() - startedAt);
+      })
+    ]);
   }
 
-  private handleAutoRun(pty: IPty, config: TerminalConfig, launch: LaunchSpec): void {
+  private disposeListeners(pty: IPty): void {
+    for (const listener of this.listeners.get(pty) ?? []) listener.dispose();
+    this.listeners.delete(pty);
+  }
+
+  /** Without direct mode, types the command into the shell, quoted for it */
+  private handleAutoRun(
+    pty: IPty,
+    config: TerminalConfig,
+    launch: LaunchSpec,
+    shell: string
+  ): void {
     if (!config.directMode && config.autoRun && launch.command) {
-      const fullCommand = [launch.command, ...launch.args.map((arg) => shellQuote(arg))].join(' ');
-      // Clear screen and run command
-      pty.write(`${shellClearCommand()} && ${fullCommand}\r`);
+      pty.write(`${shellRunLine(launch.command, launch.args, shellKind(shell))}\r`);
     }
   }
 
@@ -236,11 +288,9 @@ export class PtyManager {
    * The PATH a tab's process gets, for checking that its command exists.
    */
   getSearchPath(config: TerminalConfig, launch: LaunchSpec): string {
-    const env: Partial<Record<string, string>> = this.buildEnvironment({
-      ...config.env,
-      ...launch.env
-    });
-    return env.PATH ?? '';
+    const env = this.buildEnvironment({ ...config.env, ...launch.env });
+    // Windows writes it `Path`
+    return env[pathKey(env)] ?? '';
   }
 
   /**
@@ -255,6 +305,22 @@ export class PtyManager {
    */
   resize(terminalId: string, cols: number, rows: number): void {
     this.ptys.get(terminalId)?.resize(cols, rows);
+    this.sizes.set(terminalId, { cols, rows });
+  }
+
+  /**
+   * Makes the program draw its screen again, by changing the terminal's
+   * size for a moment, which programs answer with a redraw
+   */
+  redraw(terminalId: string): void {
+    const pty = this.ptys.get(terminalId);
+    const size = this.sizes.get(terminalId);
+    if (!pty || !size || size.rows < 2) return;
+    pty.resize(size.cols, size.rows - 1);
+    setTimeout(() => {
+      const current = this.sizes.get(terminalId);
+      if (this.ptys.get(terminalId) === pty && current) pty.resize(current.cols, current.rows);
+    }, REDRAW_DELAY_MS);
   }
 
   /**
@@ -263,12 +329,14 @@ export class PtyManager {
   kill(terminalId: string): void {
     const pty = this.ptys.get(terminalId);
     if (pty) {
+      this.disposeListeners(pty);
       try {
         pty.kill();
       } catch {
         // Ignore errors when killing
       }
       this.ptys.delete(terminalId);
+      this.sizes.delete(terminalId);
     }
   }
 

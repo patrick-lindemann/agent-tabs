@@ -2,14 +2,24 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
+import { PROFILE_ICONS } from './protocol';
 import { MULTIPLEXER_IDS, type MultiplexerId } from './terminal/multiplexer';
-import type { AgentId, LaunchSpec } from './types';
+import { resolveExecutable } from './terminal/windows';
+import type { AgentId, LaunchSpec, ProfileIcon } from './types';
+import { innerProgram, type Program, programName } from './wrappers';
 
 interface AgentDefinition {
   label: string;
   command: string;
   /** Other names of the executable */
   aliases?: string[];
+  /** npm packages that install it, for `npx` and the like */
+  packages?: string[];
+  /**
+   * Subcommands that do something other than start a conversation, e.g.
+   * `claude doctor`; no conversation arguments go in front of them
+   */
+  subcommands?: string[];
   /**
    * Arguments the extension needs for status reporting. Codex reports
    * `working` and `idle` but no `done`; with these options it writes an OSC 9
@@ -33,6 +43,11 @@ interface AgentDefinition {
     start: (id: string) => string[];
     resume: (id: string) => string[];
     conflicts: string[];
+    /**
+     * A line the agent prints when it starts a conversation with a new ID,
+     * which the tab hides since the ID is new on purpose
+     */
+    startNotice?: (id: string) => string;
   };
 }
 
@@ -44,6 +59,32 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
   claude: {
     label: 'Claude Code',
     command: 'claude',
+    packages: ['@anthropic-ai/claude-code'],
+    subcommands: [
+      'agents',
+      'attach',
+      'auth',
+      'auto-mode',
+      'config',
+      'doctor',
+      'gateway',
+      'import',
+      'install',
+      'logs',
+      'mcp',
+      'migrate-installer',
+      'plugin',
+      'plugins',
+      'purge',
+      'respawn',
+      'rm',
+      'setup-token',
+      'stop',
+      'kill',
+      'ultrareview',
+      'update',
+      'upgrade'
+    ],
     conversation: {
       start: (id) => ['--session-id', id],
       resume: (id) => ['--resume', id],
@@ -64,6 +105,7 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
   codex: {
     label: 'Codex',
     command: 'codex',
+    packages: ['@openai/codex'],
     statusArgs: [
       '-c',
       'tui.notification_method="osc9"',
@@ -74,15 +116,29 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
     ]
   },
   antigravity: { label: 'Antigravity', command: 'agy', noStatus: true },
-  gemini: { label: 'Gemini CLI', command: 'gemini', noStatus: true },
-  opencode: { label: 'OpenCode', command: 'opencode', idleWhenDone: true },
+  gemini: {
+    label: 'Gemini CLI',
+    command: 'gemini',
+    packages: ['@google/gemini-cli'],
+    noStatus: true
+  },
+  opencode: {
+    label: 'OpenCode',
+    command: 'opencode',
+    packages: ['opencode-ai'],
+    idleWhenDone: true
+  },
   pi: {
     label: 'Pi',
     command: 'pi',
+    packages: ['@earendil-works/pi-coding-agent', '@mariozechner/pi-coding-agent'],
+    subcommands: ['auth', 'config', 'install', 'list', 'mcp', 'remove', 'uninstall', 'update'],
     // Opens the conversation with the ID, or starts it
     conversation: {
       start: (id) => ['--session-id', id],
       resume: (id) => ['--session-id', id],
+      startNotice: (id) =>
+        `Warning: No project session found with id '${id}'; creating a new session with that id.`,
       conflicts: [
         '--session-id',
         '--session',
@@ -103,14 +159,45 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
     command: 'agent',
     aliases: ['cursor-agent'],
     noStatus: true,
-    // An unknown ID starts a chat with that ID
+    subcommands: [
+      'about',
+      'agent',
+      'bedrock',
+      'create-chat',
+      'generate-rule',
+      'help',
+      'install-shell-integration',
+      'login',
+      'logout',
+      'ls',
+      'mcp',
+      'models',
+      'persist',
+      'plugin',
+      'resume',
+      'rule',
+      'status',
+      'team',
+      'uninstall-shell-integration',
+      'update',
+      'upgrade',
+      'whoami',
+      'worker'
+    ],
+    // `--new-session-id` (not in `--help`) creates the chat with a UUIDv4
+    // the caller chooses; `--resume` opens an existing chat by its ID
     conversation: {
-      start: (id) => ['--resume', id],
+      start: (id) => ['--new-session-id', id],
       resume: (id) => ['--resume', id],
-      conflicts: ['--resume', '--continue', 'resume', 'ls', 'create-chat', '-p', '--print']
+      conflicts: ['--new-session-id', '--resume', '--continue', '-w', '--worktree', '-p', '--print']
     }
   },
-  copilot: { label: 'GitHub Copilot', command: 'copilot', noStatus: true },
+  copilot: {
+    label: 'GitHub Copilot',
+    command: 'copilot',
+    packages: ['@github/copilot'],
+    noStatus: true
+  },
   grok: { label: 'Grok Build', command: 'grok' },
   hermes: { label: 'Hermes Agent', command: 'hermes' },
   devin: { label: 'Devin', command: 'devin' }
@@ -179,10 +266,10 @@ function quoteWord(word: string): string {
 }
 
 /**
- * Builds what a tab runs from a command line. The first word that names a
- * known agent, e.g. `claude` in `tmux new-session claude`, gives the tab the
- * agent's logo, title format and status support; when that word is the
- * agent's executable itself, its status arguments follow it.
+ * Builds what a tab runs from a command line. The program it runs, also
+ * behind a wrapper, e.g. `claude` in `env A=1 claude` or `npx
+ * @openai/codex`, gives the tab the agent's logo, title format and status
+ * support, and its status arguments follow it.
  */
 function launchFromWords(
   label: string,
@@ -190,16 +277,42 @@ function launchFromWords(
   commandLine: string,
   programStatus: boolean
 ): LaunchSpec {
-  const index = words.findIndex((word) => agentOf(word) !== undefined);
-  const agent = index >= 0 ? agentOf(words[index]) : undefined;
+  const program = innerProgram(words);
+  const agent = program && agentOfProgram(program);
   const statusArgs = agent && programStatus ? (AGENTS[agent].statusArgs ?? []) : [];
   const all = [...words];
-  // A shell's `-c` takes one command string; words after it are not its arguments
-  const shellCommand = index > 0 && /^-\w*c$/.test(words[index - 1]);
-  if (statusArgs.length > 0 && !/\s/.test(words[index]) && !shellCommand) {
-    all.splice(index + 1, 0, ...statusArgs);
+  if (program && statusArgs.length > 0 && !program.shell) {
+    all.splice(program.index + 1, 0, ...statusArgs);
   }
-  return { label, command: all[0], args: all.slice(1), env: {}, agent, commandLine };
+  // A shell, also around a command string, e.g. `sh` in `sh -c 'echo hi'`;
+  // a known agent in the string gets the agent's logo instead
+  const shell = program?.shell ? innerProgram(words.slice(0, program.index)) : program;
+  const icon: ProfileIcon = agent ?? (shell && isShell(shell) ? 'terminal' : 'sparkle');
+  return { label, command: all[0], args: all.slice(1), env: {}, agent, commandLine, icon };
+}
+
+/** Shells, whose profiles get the terminal icon */
+const SHELLS = new Set([
+  'bash',
+  'zsh',
+  'fish',
+  'sh',
+  'dash',
+  'ksh',
+  'mksh',
+  'tcsh',
+  'csh',
+  'nu',
+  'elvish',
+  'xonsh',
+  'pwsh',
+  'powershell',
+  'cmd'
+]);
+
+/** Whether a program is a shell that runs on this machine */
+function isShell(program: Program): boolean {
+  return !program.remote && !program.package && SHELLS.has(program.name.toLowerCase());
 }
 
 /**
@@ -217,6 +330,14 @@ export function newConversation(launch: LaunchSpec): string | undefined {
 }
 
 /**
+ * The line an agent prints when it starts the conversation with a new ID,
+ * e.g. pi's warning that no session has the ID yet
+ */
+export function startNotice(launch: LaunchSpec, id: string): string | undefined {
+  return (launch.agent && AGENTS[launch.agent].conversation?.startNotice?.(id)) || undefined;
+}
+
+/**
  * The launch with the arguments that start (`resume` false) or continue a
  * conversation, right after the agent's executable.
  */
@@ -230,28 +351,41 @@ export function withConversation(launch: LaunchSpec, id: string, resume: boolean
 }
 
 /**
- * Where the agent's executable is in a launch's words, unless it only runs
- * inside a command string, e.g. `bash -c "claude"`
+ * Where the launch's agent is among its words, for arguments that follow
+ * it. Undefined when it runs inside a command string, e.g. `bash -c
+ * "claude"`, or a subcommand follows it, e.g. `claude doctor`.
  */
 function agentIndex(launch: LaunchSpec): number | undefined {
   const words = [launch.command, ...launch.args];
-  const index = words.findIndex((word) => agentOf(word) !== undefined);
-  if (index < 0 || /\s/.test(words[index]) || (index > 0 && /^-\w*c$/.test(words[index - 1]))) {
-    return undefined;
-  }
-  return index;
+  const program = innerProgram(words);
+  const agent = program && agentOfProgram(program);
+  if (!program || !agent || agent !== launch.agent || program.shell) return undefined;
+  const next = words[program.index + 1];
+  if (next !== undefined && AGENTS[agent].subcommands?.includes(next)) return undefined;
+  return program.index;
 }
 
-/** The agent a word runs: its executable, also as a path or inside a quoted command */
+/** The agent an executable is, by its name, also as a path */
 function agentOf(word: string): AgentId | undefined {
-  const name = path.basename(word.trim().split(/\s/)[0]).replace(/\.(exe|cmd)$/i, '');
+  const name = programName(word);
   return AGENT_IDS.find((id) => AGENTS[id].command === name || AGENTS[id].aliases?.includes(name));
+}
+
+/** The agent a program is: its executable, or for `npx` and the like its package */
+function agentOfProgram(program: Program): AgentId | undefined {
+  if (program.package) {
+    const found = AGENT_IDS.find((id) => AGENTS[id].packages?.includes(program.name));
+    if (found) return found;
+  }
+  return agentOf(program.name);
 }
 
 /** A profile as written in `agentTabs.profiles` */
 export interface ProfileSetting {
   command: string;
   name?: string;
+  /** An icon in place of the one the command line gets; `null` is the same as none */
+  icon?: ProfileIcon | null;
   env?: Record<string, string>;
   multiplexer?: MultiplexerId | 'none';
 }
@@ -286,11 +420,12 @@ export function defaultProfile(
  * `problems`.
  *
  * Without any profile, there is one for each known agent that is installed,
- * or for all of them when none is found.
+ * or for all of them when none is found, then `terminal`, a plain shell.
  */
 export function resolveProfiles(
   setting: unknown,
-  programStatus: boolean
+  programStatus: boolean,
+  terminal?: LaunchSpec
 ): { profiles: LaunchSpec[]; problems: string[] } {
   const problems: string[] = [];
   const profiles: LaunchSpec[] = [];
@@ -302,7 +437,7 @@ export function resolveProfiles(
     );
   }
   for (const [index, entry] of list.entries()) {
-    const { command, name, env, multiplexer } = (
+    const { command, name, env, multiplexer, icon } = (
       typeof entry === 'object' && entry !== null ? entry : {}
     ) as Record<string, unknown>;
     const position = `profile ${index + 1}`;
@@ -331,9 +466,17 @@ export function resolveProfiles(
       problems.push(
         `the multiplexer of ${position} must be ${[...MULTIPLEXER_IDS, 'none'].join(', ')}`
       );
+    } else if (
+      icon !== undefined &&
+      icon !== null &&
+      !PROFILE_ICONS.includes(icon as ProfileIcon)
+    ) {
+      problems.push(`the icon of ${position} must be one of ${PROFILE_ICONS.join(', ')} or null`);
     } else {
       const launch = launchFromWords(name.trim(), words, command.trim(), programStatus);
       launch.env = { ...(env as Record<string, string> | undefined) };
+      launch.profile = launch.label;
+      if (icon !== undefined && icon !== null) launch.icon = icon as ProfileIcon;
       if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
     }
@@ -345,6 +488,7 @@ export function resolveProfiles(
       const { label, command } = AGENTS[agent];
       profiles.push(launchFromWords(label, [command], command, programStatus));
     }
+    if (terminal) profiles.push(terminal);
   }
   return { profiles, problems };
 }
@@ -356,16 +500,20 @@ function defaultLabel(launch: LaunchSpec): string {
 
 /**
  * The first program a launch needs that cannot be found: its command, or the
- * agent it wraps, e.g. `claude` in `tmux new-session claude`. `searchPath` is
- * the PATH the terminal gets.
+ * program a wrapper runs from the PATH, e.g. `claude` in `env A=1 claude` or
+ * `tmux new-session claude`. A program that runs elsewhere is not looked
+ * for: on another machine (`ssh`) or from a package (`npx`). Inside a
+ * shell's command string, only an agent is, since the string may start
+ * with a shell builtin. `searchPath` is the PATH the terminal gets.
  */
 export function missingCommand(launch: LaunchSpec, searchPath?: string): string | undefined {
   if (!isInstalled(launch.command, searchPath)) return launch.command;
-  if (!launch.agent || agentOf(launch.command) === launch.agent) return undefined;
-  const wrapped = launch.args
-    .map((arg) => arg.trim().split(/\s/)[0])
-    .find((word) => agentOf(word) === launch.agent);
-  return wrapped && !isInstalled(wrapped, searchPath) ? wrapped : undefined;
+  const words = [launch.command, ...launch.args];
+  const program = innerProgram(words);
+  if (!program || program.index === 0 || program.remote || program.package) return undefined;
+  if (program.shell && !agentOf(program.name)) return undefined;
+  const command = program.shell ? words[program.index].trim().split(/\s/)[0] : words[program.index];
+  return isInstalled(command, searchPath) ? undefined : command;
 }
 
 /**
@@ -374,6 +522,10 @@ export function missingCommand(launch: LaunchSpec, searchPath?: string): string 
  * on (with PATHEXT on Windows).
  */
 export function isInstalled(command: string, searchPath = process.env.PATH ?? ''): boolean {
+  if (process.platform === 'win32') {
+    // As the tab starts it, see `terminal/windows.ts`
+    return resolveExecutable(command, searchPath, process.env.PATHEXT) !== undefined;
+  }
   const isFile = (file: string) => {
     try {
       fs.accessSync(file, fs.constants.X_OK);
@@ -382,17 +534,35 @@ export function isInstalled(command: string, searchPath = process.env.PATH ?? ''
       return false;
     }
   };
-  if (command.includes('/') || command.includes('\\')) {
+  if (command.includes('/')) {
     return isFile(command);
   }
-  const extensions =
-    process.platform === 'win32'
-      ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';')]
-      : [''];
   return searchPath
     .split(path.delimiter)
     .filter(Boolean)
-    .some((dir) => extensions.some((extension) => isFile(path.join(dir, command + extension))));
+    .some((dir) => isFile(path.join(dir, command)));
+}
+
+/**
+ * The Terminal profile: a plain shell, as VS Code's terminal opens it.
+ * `shell` is VS Code's default shell. On macOS, POSIX shells start as login
+ * shells, as there.
+ */
+export function terminalLaunch(
+  shell: string,
+  platform: NodeJS.Platform = process.platform
+): LaunchSpec {
+  const name = programName(shell);
+  const login = platform === 'darwin' && /^(?:bash|zsh|fish|sh|ksh|dash)$/.test(name);
+  const args = login ? ['-l'] : [];
+  return {
+    label: 'Terminal',
+    command: shell,
+    args,
+    env: {},
+    commandLine: [shell, ...args].map(quoteWord).join(' '),
+    icon: 'terminal'
+  };
 }
 
 /**
@@ -412,8 +582,13 @@ export function launchForCommand(
 
 type StopwordLanguage = Exclude<keyof typeof stopword, 'removeStopwords'>;
 
+/**
+ * The stopword lists, English first: agents mostly write titles in English,
+ * so it wins a tie, e.g. `die` in `Fix the die roll` stays
+ */
 const STOPWORD_LISTS = Object.entries(stopword)
   .filter((entry): entry is [StopwordLanguage, string[]] => Array.isArray(entry[1]))
+  .sort(([a], [b]) => Number(b === 'eng') - Number(a === 'eng'))
   .map(([, words]) => new Set(words));
 
 const wordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });

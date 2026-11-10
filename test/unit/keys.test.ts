@@ -51,5 +51,6 @@ describe('webview keybindings', () => {
     expect(keySequence(event('Enter', 'Enter', { shiftKey: true }), false)).toBe('\x1b[13;2u');
     expect(keySequence(event('KeyC', 'c', { ctrlKey: true }), true)).toBe('\x03');
     expect(keySequence(event('KeyC', 'c', { metaKey: true }), false)).toBe('\x03');
+    expect(keySequence(event('ArrowUp', 'ArrowUp', { altKey: true }), true)).toBe('\x1b[1;3A');
   });
 });

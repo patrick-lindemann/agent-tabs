@@ -10,7 +10,8 @@ import {
   missingCommand,
   resolveProfiles,
   shortTitle,
-  splitCommandLine
+  splitCommandLine,
+  terminalLaunch
 } from '../../src/profiles';
 import type { AgentId } from '../../src/types';
 
@@ -61,11 +62,25 @@ describe('recognizing agents', () => {
     ['env FOO=bar claude', 'claude'],
     ['tmux new-session -- claude', 'claude'],
     ['npx @openai/codex', 'codex'],
+    ['npx -y @openai/codex@latest', 'codex'],
+    ['bunx @google/gemini-cli', 'gemini'],
+    ['pnpm dlx @anthropic-ai/claude-code', 'claude'],
     ['npx pi', 'pi'],
+    ['ssh -p 2222 devbox claude --continue', 'claude'],
+    ['tmux new -s work claude', 'claude'],
+    ['abduco -A work pi', 'pi'],
+    ['nohup env A=1 codex', 'codex'],
     ['"/opt/cursor/cursor-agent" --x', 'cursor'],
     ['bash -lc "claude --continue"', 'claude'],
     ['claudette', undefined],
-    ['zsh', undefined]
+    ['zsh', undefined],
+    // Only the program a command line runs counts, not any word naming an agent
+    ['tmux new -s claude', undefined],
+    ['tmux attach -t claude', undefined],
+    ['docker run --name codex img', undefined],
+    ['git log --author pi', undefined],
+    ['python -m agent', undefined],
+    ['env -S "claude"', undefined]
   ] as Array<[string, AgentId | undefined]>)('reads %s as %s', (line, agent) => {
     expect(resolveProfiles([{ name: 'P', command: line }], false).profiles[0].agent).toBe(agent);
   });
@@ -78,6 +93,79 @@ describe('recognizing agents', () => {
       args: ['--debug']
     });
     expect(launchForCommand('/usr/bin/htop', [], false)).toMatchObject({ label: 'htop' });
+  });
+});
+
+describe('the plain terminal', () => {
+  it('starts a POSIX shell as a login shell on macOS, like VS Code', () => {
+    expect(terminalLaunch('/bin/zsh', 'darwin')).toMatchObject({
+      label: 'Terminal',
+      command: '/bin/zsh',
+      args: ['-l'],
+      commandLine: '/bin/zsh -l',
+      icon: 'terminal'
+    });
+    expect(terminalLaunch('/bin/bash', 'linux').args).toEqual([]);
+    expect(terminalLaunch('C:\\Windows\\System32\\cmd.exe', 'win32').args).toEqual([]);
+  });
+
+  it('comes after the agents when no profile is configured', () => {
+    const terminal = terminalLaunch('/bin/zsh', 'linux');
+    const { profiles } = resolveProfiles(undefined, false, terminal);
+    expect(profiles.at(-1)).toBe(terminal);
+    expect(profiles[0].agent).toBeDefined();
+    // Configured profiles replace it, so it can be removed
+    const configured = resolveProfiles([{ name: 'P', command: 'pi' }], false, terminal);
+    expect(configured.profiles.map((p) => p.label)).toEqual(['P']);
+  });
+
+  it.each([
+    ['zsh', true],
+    ['/bin/bash -l', true],
+    ['fish --login', true],
+    ['pwsh -NoLogo', true],
+    ['env A=1 zsh', true],
+    ['sh', true],
+    ['bash build.sh', true],
+    ["sh -c 'echo bye'", true],
+    // A known agent's logo wins
+    ['bash -lc pi', false],
+    ['ssh devbox bash', false],
+    ['htop', false]
+  ])('shows %s with the terminal icon: %s', (line, terminal) => {
+    const [profile] = resolveProfiles([{ name: 'P', command: line }], false).profiles;
+    expect(profile.icon === 'terminal').toBe(terminal);
+  });
+
+  it.each([
+    [undefined, 'claude'],
+    ['terminal', 'terminal'],
+    ['pi', 'pi'],
+    ['sparkle', 'sparkle'],
+    // The same as not set
+    [null, 'claude']
+  ] as const)('uses the icon %s of a profile', (icon, shown) => {
+    const { profiles, problems } = resolveProfiles([{ name: 'P', command: 'claude', icon }], false);
+    expect(problems).toEqual([]);
+    expect(profiles[0].icon).toBe(shown);
+    // The icon changes nothing else
+    expect(profiles[0].agent).toBe('claude');
+  });
+
+  it('skips a profile with an unknown icon, like other invalid entries', () => {
+    const { profiles, problems } = resolveProfiles(
+      [
+        { name: 'P', command: 'claude', icon: 'rocket' },
+        { name: 'Q', command: 'pi' }
+      ],
+      false
+    );
+    expect(profiles.map((profile) => profile.label)).toEqual(['Q']);
+    expect(problems).toEqual([expect.stringContaining('the icon of profile 1 must be one of')]);
+  });
+
+  it('has no agent', () => {
+    expect(terminalLaunch('/bin/zsh').agent).toBeUndefined();
   });
 });
 
@@ -101,6 +189,19 @@ describe('status arguments', () => {
       ...CODEX_STATUS_ARGS,
       'resume'
     ]);
+  });
+
+  it.each(['tmux new -s codex', 'docker run --name codex img'])(
+    'adds nothing to a command that only mentions codex: %s',
+    (line) => {
+      const [profile] = resolveProfiles([{ name: 'P', command: line }], true).profiles;
+      expect([profile.command, ...profile.args]).toEqual(splitCommandLine(line));
+    }
+  );
+
+  it('adds them after codex run by npx', () => {
+    const [profile] = resolveProfiles([{ name: 'P', command: 'npx @openai/codex' }], true).profiles;
+    expect(profile.args).toEqual(['@openai/codex', ...CODEX_STATUS_ARGS]);
   });
 
   it.each(['bash -c "codex --full-auto"', 'bash -lc codex'])(
@@ -256,6 +357,10 @@ describe('finding commands', () => {
     for (const [name, mode] of [
       ['claude', 0o755],
       ['tmux', 0o755],
+      ['npx', 0o755],
+      ['ssh', 0o755],
+      ['env', 0o755],
+      ['bash', 0o755],
       ['notes', 0o644]
     ] as const) {
       fs.writeFileSync(path.join(dir, name), '#!/bin/sh\n', { mode });
@@ -278,6 +383,17 @@ describe('finding commands', () => {
     expect(missingCommand(launchForCommand('screen', [], false), dir)).toBe('screen');
     expect(missingCommand(launchForCommand('tmux', ['new-session', 'pi'], false), dir)).toBe('pi');
     expect(missingCommand(launchForCommand('tmux', ['ls'], false), dir)).toBeUndefined();
+    expect(missingCommand(launchForCommand('env', ['A=1', 'htop'], false), dir)).toBe('htop');
+  });
+
+  it.skipIf(process.platform === 'win32')('does not look for programs that run elsewhere', () => {
+    const launch = (line: string) =>
+      resolveProfiles([{ name: 'P', command: line }], false).profiles[0];
+    expect(missingCommand(launch('npx @openai/codex'), dir)).toBeUndefined();
+    expect(missingCommand(launch('ssh devbox pi'), dir)).toBeUndefined();
+    expect(missingCommand(launch('bash -lc "cd x && pi"'), dir)).toBeUndefined();
+    expect(missingCommand(launch('bash -lc "pi --continue"'), dir)).toBe('pi');
+    expect(missingCommand(launch('tmux new -s pi'), dir)).toBeUndefined();
   });
 });
 
@@ -310,6 +426,8 @@ describe('shortening titles', () => {
     ['Make it work', 1, 'work'],
     ['Fix the login bug in the settings page', 3, 'Fix login bug'],
     ['Behebe den Fehler in der Anmeldung', 3, 'Behebe Fehler Anmeldung'],
+    // A tie between English and German goes to English, so `die` stays
+    ['Fix the die roll', 4, 'Fix die roll'],
     ['日本語のテスト', 2, '日本語テスト'],
     ['src/app.ts: fix', 4, 'src/app.ts fix'],
     ['!!!', 4, undefined]

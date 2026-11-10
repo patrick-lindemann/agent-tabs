@@ -24,6 +24,15 @@ const CONTROL = /[\x00-\x1f\x7f]/;
 
 export function typed(draft: Draft, data: string): Draft {
   if (NEW_LINE.has(data)) return add(draft, 1);
+  // A paste without bracketed paste: several characters with line breaks,
+  // which may or may not have sent the text
+  if (
+    [...data].length > 1 &&
+    /^[^\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]+$/.test(data) &&
+    /[\r\n]/.test(data)
+  ) {
+    return 'unknown';
+  }
   if (BACKSPACE.has(data)) return draft === 'unknown' ? draft : Math.max(0, draft - 1);
   if (!CONTROL.test(data)) return add(draft, [...data].length);
   if (draft === 0 && !FILLS_INPUT.test(data)) return 0;

@@ -3,6 +3,9 @@ import type { TabInfo, TabStatus, TerminalInstance } from '../types';
 import { WORKSPACE_ACCENT_COLORS } from '../types';
 import { hasDraft } from './draft';
 
+/** Why closing a tab would lose something */
+export type CloseRisk = 'working' | 'waiting' | 'draft' | 'session';
+
 const STATUS_LABELS: Record<TabStatus, string> = {
   working: 'Working',
   blocked: 'Needs input',
@@ -10,10 +13,7 @@ const STATUS_LABELS: Record<TabStatus, string> = {
   error: 'Failed'
 };
 
-/**
- * Manages terminal instance state including active terminal tracking.
- * Eliminates duplicated tab activation logic.
- */
+/** The open tabs, which one is active, and how each is labeled and described */
 export class TerminalStateManager {
   private readonly terminals = new Map<string, TerminalInstance>();
   private activeTerminalId: string | undefined;
@@ -80,30 +80,14 @@ export class TerminalStateManager {
     return this.activeTerminalId;
   }
 
-  /**
-   * Deactivates the current terminal and activates a new one.
-   * This eliminates the duplicated tab activation logic.
-   * Returns the previously active terminal (if any).
-   */
-  setActive(id: string): TerminalInstance | undefined {
-    let previousActive: TerminalInstance | undefined;
-
-    // Deactivate previous
-    if (this.activeTerminalId && this.activeTerminalId !== id) {
-      previousActive = this.terminals.get(this.activeTerminalId);
-      if (previousActive) {
-        previousActive.isActive = false;
-      }
-    }
-
-    // Activate new
+  /** Makes a tab the active one; an unknown ID changes nothing */
+  setActive(id: string): void {
     const instance = this.terminals.get(id);
-    if (instance) {
-      instance.isActive = true;
-      this.activeTerminalId = id;
-    }
-
-    return previousActive;
+    if (!instance) return;
+    const previous = this.activeTerminalId && this.terminals.get(this.activeTerminalId);
+    if (previous) previous.isActive = false;
+    instance.isActive = true;
+    this.activeTerminalId = id;
   }
 
   /**
@@ -131,7 +115,7 @@ export class TerminalStateManager {
       id: t.id,
       label: this.getLabel(t, autoTitles, titleWords),
       description: this.getFullLabel(t, true),
-      agent: t.launch.agent,
+      icon: t.launch.icon ?? t.launch.agent ?? 'sparkle',
       isActive: t.isActive,
       accentColor: this.getAccentColor(t.workspaceFolderIndex),
       status: this.getStatus(t),
@@ -179,13 +163,15 @@ export class TerminalStateManager {
 
   /**
    * Why closing a tab would lose something: its agent is working, waiting
-   * for an answer, or has input that was not sent; undefined when nothing.
+   * for an answer, or has input that was not sent, or its detached session
+   * still runs and would end; undefined when nothing.
    */
-  closeRisk(instance: TerminalInstance): 'working' | 'waiting' | 'draft' | undefined {
+  closeRisk(instance: TerminalInstance): CloseRisk | undefined {
+    if (instance.detached) return 'session';
     if (this.isBusy(instance)) {
       return instance.programState === 'working' && !instance.needsInput ? 'working' : 'waiting';
     }
-    if (!instance.exited && !instance.detached && hasDraft(instance.draft)) return 'draft';
+    if (!instance.exited && hasDraft(instance.draft)) return 'draft';
     return undefined;
   }
 
@@ -230,14 +216,5 @@ export class TerminalStateManager {
       return undefined;
     }
     return WORKSPACE_ACCENT_COLORS[folderIndex % WORKSPACE_ACCENT_COLORS.length];
-  }
-
-  /**
-   * Iterates over all terminal IDs.
-   */
-  forEachId(callback: (id: string) => void): void {
-    for (const id of this.terminals.keys()) {
-      callback(id);
-    }
   }
 }

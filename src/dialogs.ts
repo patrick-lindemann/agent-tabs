@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { missingCommand } from './profiles';
+import type { CloseRisk } from './terminal/state';
 import type { AgentId, LaunchSpec } from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
@@ -8,8 +9,8 @@ const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi',
 export type ProfileChoice = { profile: LaunchSpec } | 'custom' | 'manage' | undefined;
 
 /**
- * Use Profile…: the profiles in their configured order with their logos and
- * Custom Command, then Manage Profiles. VS Code's native view menus
+ * Use Profile…: the profiles in their configured order with their logos,
+ * then Custom Command…, then Manage Profiles…. VS Code's native view menus
  * cannot follow a setting's order or list user-defined profiles.
  */
 export async function pickProfile(
@@ -33,9 +34,9 @@ export async function pickProfile(
       iconPath: profileIcon(profile, monochrome, extensionUri),
       choice: { profile }
     })),
-    { label: 'Custom Command', iconPath: new vscode.ThemeIcon('terminal'), choice: 'custom' },
+    { label: 'Custom Command…', iconPath: new vscode.ThemeIcon('edit'), choice: 'custom' },
     { label: '', kind: vscode.QuickPickItemKind.Separator },
-    { label: 'Manage Profiles', choice: 'manage' }
+    { label: 'Manage Profiles…', choice: 'manage' }
   ];
 
   const picked = await vscode.window.showQuickPick(items, {
@@ -54,14 +55,14 @@ function profileIcon(
   monochrome: boolean,
   extensionUri: vscode.Uri
 ): vscode.IconPath {
-  if (!profile.agent) {
-    return new vscode.ThemeIcon('sparkle-filled');
+  const { icon } = profile;
+  if (icon === 'terminal') return new vscode.ThemeIcon('terminal');
+  if (icon === 'sparkle') return new vscode.ThemeIcon('sparkle-filled');
+  const file = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.png`);
+  if (!monochrome && BRAND_COLORED.has(icon)) {
+    return file(icon);
   }
-  const icon = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.png`);
-  if (!monochrome && BRAND_COLORED.has(profile.agent)) {
-    return icon(profile.agent);
-  }
-  return { light: icon(`${profile.agent}-light`), dark: icon(`${profile.agent}-dark`) };
+  return { light: file(`${icon}-light`), dark: file(`${icon}-dark`) };
 }
 
 /**
@@ -103,6 +104,8 @@ export interface TabEntry {
 export function pickTab(entries: TabEntry[], active: 1 | -1 = 1): Promise<string | undefined> {
   const pick = vscode.window.createQuickPick<TabEntry>();
   pick.placeholder = 'Switch to terminal tab';
+  pick.matchOnDescription = true;
+  pick.matchOnDetail = true;
   pick.items = entries;
   const preselected = active === 1 ? entries[1] : entries[entries.length - 1];
   if (preselected) pick.activeItems = [preselected];
@@ -125,13 +128,14 @@ export interface BusyTab {
   /** The profile's name, e.g. `Claude Code` */
   agent: string;
   /** Why closing would lose something */
-  reason: 'working' | 'waiting' | 'draft';
+  reason: CloseRisk;
 }
 
 const REASONS: Record<BusyTab['reason'], string> = {
   working: 'is still working',
   waiting: 'is waiting for your input',
-  draft: 'has a message you have not sent'
+  draft: 'has a message you have not sent',
+  session: 'still runs in its detached session'
 };
 
 /**
@@ -145,7 +149,7 @@ export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
   const message = single ? `Close "${first.label}"?` : `Close ${String(busy.length)} tabs?`;
   const detail = single
     ? `${first.agent} ${REASONS[first.reason]}. Closing the tab ends its session.`
-    : 'Their agents are working, waiting for input or have a message you have not sent. Closing the tabs ends their sessions.';
+    : 'Their agents are working, waiting for input, have a message you have not sent or still run in a detached session. Closing the tabs ends their sessions.';
   const close = busy.length === 1 ? 'Close' : 'Close All';
   const dontAsk = "Close and Don't Ask Again";
 

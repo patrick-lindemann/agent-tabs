@@ -5,12 +5,14 @@ import {
   missingCommand,
   newConversation,
   reportsStatus,
+  startNotice,
   withConversation
 } from '../profiles';
 import type {
   ClosedTab,
   ExtensionMessage,
   LaunchSpec,
+  OpenTab,
   SessionRef,
   TerminalInstance
 } from '../types';
@@ -21,8 +23,10 @@ import {
   type Multiplexer,
   type MultiplexerId,
   type SessionEntry,
+  type SessionTag,
   type Tap
 } from './multiplexer';
+import { NoticeFilter } from './notice';
 import { PromptDetector } from './prompt';
 import { PtyManager } from './pty';
 import { isTerminalReport } from './signals';
@@ -35,8 +39,24 @@ const COMMAND_NOT_FOUND = 127;
 /** How long restoring waits for the clients of a previous view to detach */
 const DETACH_WAIT_MS = 1000;
 
+/**
+ * How much of each tab's recent output is kept, in characters, to show it
+ * again in a webview that loaded again, e.g. after Reload Webviews
+ */
+const HISTORY_CHARS = 512 * 1024;
+
+/** How long output that may start a program's notice waits for the rest of it */
+const NOTICE_FLUSH_MS = 100;
+
 /** How long a tab must stay in view before its result counts as seen */
 const SEEN_DELAY_MS = 1000;
+
+/**
+ * A process that exits sooner did not start properly, e.g. a wrong option;
+ * its tab stays open with the exit code instead of closing or restarting,
+ * which could loop
+ */
+const QUICK_EXIT_MS = 3000;
 
 /** What the tabs need from the view that shows them */
 export interface TabsHost {
@@ -47,12 +67,20 @@ export interface TabsHost {
   isVisible(): boolean;
   /** Whether the view exists, so process output has somewhere to go */
   isAttached(): boolean;
+  /** Closes tabs the user asked to close, asking first when they would lose something */
+  requestClose(ids: string[]): void;
 }
 
 /** Where closed tabs are kept for reopening, e.g. the workspace state */
 export interface ClosedTabStore {
   get(): ClosedTab[];
   set(tabs: ClosedTab[]): void;
+}
+
+/** Where the open tabs are kept for the next window, e.g. the workspace state */
+export interface OpenTabStore {
+  get(): OpenTab[];
+  set(tabs: OpenTab[]): void;
 }
 
 /** How many closed tabs can be reopened */
@@ -69,9 +97,26 @@ export class Tabs {
   private readonly status = new StatusTracker();
   /** Raw output of tabs whose multiplexer hides status signals from the client */
   private readonly taps = new Map<string, Tap>();
+  /** Hide a notice a tab's program prints when it starts */
+  private readonly notices = new Map<string, NoticeFilter>();
   private seenTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Each tab's recent output, as the webview showed it */
+  private readonly history = new Map<string, string>();
+  /** Shows output a notice filter held back, when no more came */
+  private readonly noticeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tab IDs, most recently shown first */
   private recent: string[] = [];
+  /** The open tabs last kept, to write them only when they change */
+  private savedOpen: string | undefined;
+  /** Tabs are being restored; they are kept once all are open */
+  private restoring = false;
+  /** The first view's restore; later views of the same tabs only show them */
+  private restored: Promise<void> | undefined;
+  /**
+   * Counts resets of the view, so work that started before one, e.g. a
+   * session that is still starting, does not treat its tab as closed
+   */
+  private generation = 0;
   private cols = 80;
   private rows = 24;
 
@@ -80,7 +125,8 @@ export class Tabs {
     private readonly host: TabsHost,
     /** Identifies the workspace in the tags of its sessions */
     private readonly workspace = '',
-    private readonly closedTabs?: ClosedTabStore
+    private readonly closedTabs?: ClosedTabStore,
+    private readonly openTabs?: OpenTabStore
   ) {
     this.pty = new PtyManager({
       onData: (id, data) => this.handleData(id, data),
@@ -89,13 +135,24 @@ export class Tabs {
     });
     this.prompt = new PromptDetector(promptConfig(), (id, waiting) => {
       this.state.setWaitingForInput(id, waiting);
-      this.host.refresh();
+      this.refresh();
     });
   }
 
-  /** Opens a tab. Without a launch it runs the first profile. */
-  async create(launch?: LaunchSpec): Promise<string> {
-    const { path: cwd, folderIndex } = await this.pty.selectWorkingDirectory();
+  /** Sends the tab list again and keeps the open tabs for the next window */
+  private refresh(): void {
+    this.saveOpen();
+    this.host.refresh();
+  }
+
+  /**
+   * Opens a tab. Without a launch it runs the first profile. Returns
+   * undefined when the user cancelled choosing its folder.
+   */
+  async create(launch?: LaunchSpec): Promise<string | undefined> {
+    const folder = await this.pty.selectWorkingDirectory();
+    if (!folder) return undefined;
+    const { path: cwd, folderIndex } = folder;
     return this.open({
       launch: launch ?? this.config.getConfig().defaultProfile,
       cwd,
@@ -104,16 +161,70 @@ export class Tabs {
   }
 
   /**
-   * Opens a tab for each session of this workspace that no window shows,
-   * e.g. after the window reloaded or reconnected to its remote, in the
-   * order they started, and returns how many there are. Sessions are found
-   * by the tag the extension stores with them on the machine they run on,
-   * so other sessions are never touched.
+   * The view is ready to show tabs. The first time, the tabs of the last
+   * window open again, or the first profile when there are none. A view
+   * that loads again while the tabs still run, e.g. after its webview was
+   * reloaded, gets the open tabs instead.
+   */
+  async attachView(): Promise<void> {
+    if (this.restored) {
+      await this.restored;
+      this.showAll();
+      return;
+    }
+    const generation = this.generation;
+    const restoring = this.restore().then(async () => {
+      // A tab the user opened while restoring waited for sessions counts too
+      if (this.generation === generation && this.state.count === 0) await this.create();
+    });
+    this.restored = restoring;
+    try {
+      await restoring;
+    } catch (error) {
+      if (this.restored === restoring) this.restored = undefined;
+      throw error;
+    }
+  }
+
+  /**
+   * Sends all open tabs to a view that does not know them yet, with their
+   * recent output, and asks their programs to draw their screen again
+   */
+  private showAll(): void {
+    for (const id of this.state.getAllIds()) {
+      this.host.post({ type: 'createTab', id });
+      const history = this.history.get(id);
+      if (history) this.host.post({ type: 'output', id, data: history });
+      this.pty.redraw(id);
+    }
+    const active = this.state.getActiveId();
+    if (active) this.host.post({ type: 'switchTab', id: active });
+    this.host.refresh();
+  }
+
+  /**
+   * Opens the tabs of the last window of this workspace again, in their
+   * order and with the same tab active, and returns how many there are.
+   * With `agentTabs.restoreTabs`, a tab continues its conversation where its
+   * agent supports that, or starts its profile again in its folder.
+   *
+   * A tab whose multiplexer session still runs attaches to it, e.g. after
+   * the window reloaded or reconnected to its remote. Sessions of this
+   * workspace that no window shows and the last window did not list open
+   * too, in the order they started. Sessions are found by the tag the
+   * extension stores with them on the machine they run on, so other
+   * sessions are never touched.
    *
    * Sessions of other workspaces whose program ended and that no window
    * shows are ended, so they do not pile up.
+   *
+   * A window without a folder belongs to no workspace: it adopts no
+   * sessions, since every such window would share them, and only reopens
+   * the sessions it listed itself.
    */
   async restore(): Promise<number> {
+    const saved = this.config.getConfig().restoreTabs ? (this.openTabs?.get() ?? []) : [];
+    const generation = this.generation;
     let entries = await this.listSessions();
     // Clients of the previous view may still be detaching, e.g. after the
     // window reconnected to its remote
@@ -121,35 +232,106 @@ export class Tabs {
       await new Promise((resolve) => setTimeout(resolve, DETACH_WAIT_MS));
       entries = await this.listSessions();
     }
-    const shown = new Set(this.state.getAll().map((instance) => instance.session?.name));
-    const restore = entries
-      .filter((entry) => this.isOwn(entry) && !entry.attached && !shown.has(entry.name))
-      .sort((a, b) => a.tag.created - b.tag.created);
+    // The view went away meanwhile; the next one restores
+    if (this.generation !== generation) return 0;
     for (const entry of entries) {
       if (!this.isOwn(entry) && entry.ended && !entry.attached) {
         void getMultiplexer(entry.multiplexer).kill(entry.name);
       }
     }
-    for (const { name, multiplexer, tag } of restore) {
-      this.open({
-        launch: tag.launch,
-        cwd: tag.cwd,
-        workspaceFolderIndex: tag.workspaceFolderIndex,
-        session: { multiplexer, name, created: tag.created },
-        // Messages may have been sent since the window closed
-        conversation: tag.conversation && { id: tag.conversation.id, started: true }
-      });
+
+    const shown = new Set(this.state.getAll().map((instance) => instance.session?.name));
+    const own = new Map(
+      entries.filter((entry) => this.isOwn(entry)).map((entry) => [entry.name, entry])
+    );
+    const listed = new Set(saved.map((tab) => tab.session));
+    const opened: string[] = [];
+    let active: string | undefined;
+    this.restoring = true;
+    try {
+      for (const tab of saved) {
+        const entry = tab.session ? own.get(tab.session) : undefined;
+        if (tab.session && (shown.has(tab.session) || entry?.attached)) continue;
+        if (entry) {
+          own.delete(entry.name);
+          opened.push(this.openSession(entry));
+        } else {
+          opened.push(
+            this.open({
+              launch: this.current(tab.launch),
+              cwd: tab.cwd,
+              workspaceFolderIndex: tab.workspaceFolderIndex,
+              conversation: tab.conversation ? { id: tab.conversation, started: true } : undefined
+            })
+          );
+        }
+        if (tab.active) active = opened[opened.length - 1];
+      }
+      const sessions = [...own.values()]
+        .filter((entry) => this.workspace !== '' || listed.has(entry.name))
+        .filter((entry) => !entry.attached && !shown.has(entry.name))
+        .sort((a, b) => a.tag.created - b.tag.created);
+      for (const entry of sessions) {
+        opened.push(this.openSession(entry));
+      }
+    } finally {
+      this.restoring = false;
     }
-    return restore.length;
+    if (active) this.switchTo(active);
+    this.saveOpen();
+    return opened.length;
   }
 
-  /** The sessions the extension started, of every multiplexer */
+  /** Opens a tab that attaches to a session of this workspace */
+  private openSession({
+    name,
+    multiplexer,
+    tag
+  }: SessionEntry & { multiplexer: MultiplexerId }): string {
+    return this.open({
+      launch: this.current(tag.launch),
+      cwd: tag.cwd,
+      workspaceFolderIndex: tag.workspaceFolderIndex,
+      session: { multiplexer, name, created: tag.created, started: tag.conversation?.started },
+      // Tags of older versions do not say whether a message was sent
+      conversation: tag.conversation && {
+        id: tag.conversation.id,
+        started: tag.conversation.started ?? true
+      }
+    });
+  }
+
+  /**
+   * Keeps the open tabs for the next window of the workspace, unless the
+   * view is gone: its tabs ended with it but should open again.
+   */
+  private saveOpen(): void {
+    if (!this.openTabs || this.restoring || !this.host.isAttached()) return;
+    const activeId = this.state.getActiveId();
+    const tabs: OpenTab[] = this.state.getAll().map((instance) => ({
+      launch: stored(instance.launch),
+      cwd: instance.cwd,
+      workspaceFolderIndex: instance.workspaceFolderIndex,
+      conversation: instance.conversation?.started ? instance.conversation.id : undefined,
+      session: instance.session?.name,
+      active: instance.id === activeId || undefined
+    }));
+    const json = JSON.stringify(tabs);
+    if (json === this.savedOpen) return;
+    this.savedOpen = json;
+    this.openTabs.set(tabs);
+  }
+
+  /**
+   * The sessions the extension started, of every installed multiplexer,
+   * also when none is configured now, as sessions may remain from before
+   */
   private async listSessions(): Promise<Array<SessionEntry & { multiplexer: MultiplexerId }>> {
     const lists = await Promise.all(
       MULTIPLEXER_IDS.map(async (id) => {
-        const sessions = await getMultiplexer(id)
-          .list()
-          .catch(() => []);
+        const multiplexer = getMultiplexer(id);
+        if (!isInstalled(multiplexer.command)) return [];
+        const sessions = await multiplexer.list().catch(() => []);
         return sessions.map((entry) => ({ ...entry, multiplexer: id }));
       })
     );
@@ -170,7 +352,7 @@ export class Tabs {
     if (!tab) return false;
     this.closedTabs?.set(rest);
     this.open({
-      launch: tab.launch,
+      launch: this.current(tab.launch),
       cwd: tab.cwd,
       workspaceFolderIndex: tab.workspaceFolderIndex,
       conversation: { id: tab.conversation, started: true }
@@ -178,11 +360,24 @@ export class Tabs {
     return true;
   }
 
+  /**
+   * A stored launch as its profile is now, e.g. after the profile's
+   * command or environment changed. As stored when the profile is gone, it
+   * was a custom command, or the profile now runs another agent, which
+   * could not continue the conversation. A stored launch has no environment.
+   */
+  private current(launch: LaunchSpec): LaunchSpec {
+    if (!launch.profile) return launch;
+    const { profiles } = this.config.getConfig();
+    const profile = profiles.find((other) => other.label === launch.profile);
+    return profile && profile.agent === launch.agent ? profile : launch;
+  }
+
   /** Keeps a closed tab whose conversation can be continued */
   private rememberClosed(instance: TerminalInstance): void {
     if (!this.closedTabs || !instance.conversation?.started) return;
     const tab: ClosedTab = {
-      launch: instance.launch,
+      launch: stored(instance.launch),
       conversation: instance.conversation.id,
       cwd: instance.cwd,
       workspaceFolderIndex: instance.workspaceFolderIndex
@@ -206,7 +401,7 @@ export class Tabs {
     this.recent = [id, ...this.recent];
     this.state.setActive(id);
     this.host.post({ type: 'createTab', id });
-    this.host.refresh();
+    this.refresh();
     this.start(instance);
     this.host.post({ type: 'switchTab', id });
     return id;
@@ -222,12 +417,16 @@ export class Tabs {
     this.endSession(instance);
     this.prompt.removeTerminal(id);
     this.status.forget(id);
+    this.notices.delete(id);
+    this.history.delete(id);
     this.state.delete(id);
     this.recent = this.recent.filter((other) => other !== id);
     this.host.post({ type: 'removeTab', id });
+    // Before a new tab may ask for its folder
+    this.saveOpen();
 
     if (this.state.getActiveId() !== id) {
-      this.host.refresh();
+      this.refresh();
       return;
     }
     const remaining = this.state.getAllIds();
@@ -245,7 +444,7 @@ export class Tabs {
     this.state.setActive(id);
     this.scheduleSeen();
     this.host.post({ type: 'switchTab', id });
-    this.host.refresh();
+    this.refresh();
   }
 
   /** Switches to the tab at a 1-based position; 0 is the last tab */
@@ -270,14 +469,18 @@ export class Tabs {
     this.switchTo(ids[(current + step + ids.length) % ids.length]);
   }
 
-  /** Typed input. In an exited tab, Enter restarts and Esc closes. */
+  /**
+   * Typed input. In an exited tab, Enter restarts and Esc closes. In a
+   * detached one, Enter attaches again and Esc closes it and ends its
+   * session, after asking, since the program may still be working.
+   */
   input(id: string, data: string): void {
     const instance = this.state.get(id);
     if (instance?.detached) {
       if (data === '\r') {
         this.attachAgain(instance);
       } else if (data === '\x1b') {
-        this.close(id);
+        this.host.requestClose([id]);
       }
       return;
     }
@@ -299,27 +502,64 @@ export class Tabs {
     // typing only move within it
     if (instance?.needsInput && (data.includes('\r') || data === '\x1b')) {
       instance.needsInput = false;
-      this.host.refresh();
+      this.refresh();
     }
     // Typing into a tab counts as having seen its result
     if (instance?.unseen && this.isInView(instance)) {
       instance.unseen = undefined;
-      this.host.refresh();
+      this.refresh();
     }
   }
 
   /**
-   * Counts unsent input. For agents that report their status, a message
-   * counts as sent when the agent starts working, since Enter may only
-   * answer a question or pick an entry; for the others on Enter.
+   * Counts unsent input. Once the agent reported its status, a message
+   * counts as sent when it starts working, since Enter may only answer a
+   * question or pick an entry. Before that, and with `programStatus` off,
+   * Enter sends it. An agent that should report but has not yet, e.g. an
+   * older version, gets its conversation marked only by a report, since
+   * Enter may answer a dialog before the first message.
    */
   private trackDraft(instance: TerminalInstance, data: string): void {
     if (data !== '\r') {
       instance.draft = typed(instance.draft ?? 0, data);
-    } else if (!instance.reportsStatus && !reportsStatus(instance.launch.agent)) {
-      instance.draft = 0;
-      if (instance.conversation) instance.conversation.started = true;
+      return;
     }
+    const { programStatus } = this.config.getConfig();
+    if (programStatus && instance.reportsStatus) return;
+    instance.draft = 0;
+    if (programStatus && reportsStatus(instance.launch.agent)) return;
+    if (instance.conversation && !instance.conversation.started) {
+      instance.conversation.started = true;
+      this.conversationStarted(instance);
+      this.saveOpen();
+    }
+  }
+
+  /**
+   * Stores in the tab's session that its conversation started, so a window
+   * that attaches to it later continues the conversation
+   */
+  private conversationStarted(instance: TerminalInstance): void {
+    const { session, conversation } = instance;
+    if (!session || !conversation?.started || session.started) return;
+    session.started = true;
+    void getMultiplexer(session.multiplexer)
+      .updateTag(session.name, this.sessionTag(instance, session))
+      .catch(() => {
+        session.started = undefined;
+      });
+  }
+
+  /** What a session stores about its tab */
+  private sessionTag(instance: TerminalInstance, session: SessionRef): SessionTag {
+    return {
+      workspace: this.workspace,
+      launch: stored(instance.launch),
+      conversation: instance.conversation && { ...instance.conversation },
+      cwd: instance.cwd,
+      workspaceFolderIndex: instance.workspaceFolderIndex,
+      created: session.created
+    };
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -346,7 +586,7 @@ export class Tabs {
     this.seenTimer = setTimeout(() => {
       if (instance.unseen && this.isInView(instance)) {
         instance.unseen = undefined;
-        this.host.refresh();
+        this.refresh();
       }
     }, SEEN_DELAY_MS);
   }
@@ -361,19 +601,32 @@ export class Tabs {
    * keep running, and the next webview attaches to them again.
    */
   reset(): void {
-    this.pty.killAll();
-    this.disposeTaps();
-    this.prompt.dispose();
-    this.status.clear();
-    this.state.clear();
-    this.recent = [];
-  }
-
-  dispose(): void {
+    this.generation++;
+    this.restored = undefined;
     clearTimeout(this.seenTimer);
     this.pty.killAll();
     this.disposeTaps();
     this.prompt.dispose();
+    this.status.clear();
+    this.notices.clear();
+    this.history.clear();
+    this.clearNoticeTimers();
+    this.state.clear();
+    this.recent = [];
+    this.savedOpen = undefined;
+  }
+
+  dispose(): void {
+    clearTimeout(this.seenTimer);
+    this.clearNoticeTimers();
+    this.pty.killAll();
+    this.disposeTaps();
+    this.prompt.dispose();
+  }
+
+  private clearNoticeTimers(): void {
+    for (const timer of this.noticeTimers.values()) clearTimeout(timer);
+    this.noticeTimers.clear();
   }
 
   private disposeTaps(): void {
@@ -398,8 +651,8 @@ export class Tabs {
     this.rememberClosed(instance);
     instance.conversation = undefined;
     this.status.forget(id);
-    this.host.refresh();
-    this.host.post({ type: 'clear', id });
+    this.refresh();
+    this.clear(id);
     this.start(instance);
   }
 
@@ -414,6 +667,12 @@ export class Tabs {
       const id = newConversation(instance.launch);
       if (id) instance.conversation = { id, started: false };
     }
+    this.notices.delete(instance.id);
+    const { conversation } = instance;
+    const notice = conversation?.started
+      ? undefined
+      : conversation && startNotice(instance.launch, conversation.id);
+    if (notice) this.notices.set(instance.id, new NoticeFilter(notice));
     const searchPath = this.pty.getSearchPath(config, instance.launch);
     const multiplexer = this.multiplexerFor(instance);
     if (multiplexer && !isInstalled(multiplexer.command, searchPath)) {
@@ -454,12 +713,26 @@ export class Tabs {
     const config = this.config.getConfig();
     const { id } = instance;
     const launch = runLaunch(instance);
+    // A tab that attaches to a session never starts a new one in its place,
+    // e.g. when another window ended it meanwhile, which would run the
+    // program again
+    const attaching = instance.session;
+    if (attaching && !(await multiplexer.exists(attaching.name).catch(() => false))) {
+      if (this.state.get(id) === instance && instance.session === attaching) {
+        this.showSessionGone(instance);
+      }
+      return;
+    }
     instance.session ??= {
       multiplexer: multiplexer.id as MultiplexerId,
       name: sessionName(),
       created: Date.now()
     };
     const session = instance.session;
+    const generation = this.generation;
+    const tag = this.sessionTag(instance, session);
+    // The next window attaches to the session instead of starting a new one
+    this.saveOpen();
 
     let result: Awaited<ReturnType<Multiplexer['open']>>;
     try {
@@ -472,14 +745,7 @@ export class Tabs {
           cwd: instance.cwd ?? this.pty.defaultWorkingDirectory(),
           cols: this.cols,
           rows: this.rows,
-          tag: {
-            workspace: this.workspace,
-            launch: instance.launch,
-            conversation: instance.conversation,
-            cwd: instance.cwd,
-            workspaceFolderIndex: instance.workspaceFolderIndex,
-            created: session.created
-          }
+          tag
         },
         (data) => this.handleTapData(id, data)
       );
@@ -489,10 +755,13 @@ export class Tabs {
       return;
     }
 
-    // The tab closed or restarted while the session started
+    // The tab closed or restarted while the session started. When the
+    // view went away instead, the session runs on for the next view.
     if (this.state.get(id) !== instance || instance.session !== session) {
       if ('tap' in result) result.tap?.dispose();
-      if (this.state.get(id) !== instance) void multiplexer.kill(session.name);
+      if (this.state.get(id) !== instance && this.generation === generation) {
+        void multiplexer.kill(session.name);
+      }
       return;
     }
     if ('exitCode' in result) {
@@ -500,14 +769,18 @@ export class Tabs {
       return;
     }
     if (result.tap) this.taps.set(id, result.tap);
+    // A new session's tag says what the conversation was when it started;
+    // a message may have been sent since
+    if (result.created && tag.conversation?.started) session.started = true;
+    this.conversationStarted(instance);
     this.pty.spawn(id, config, launch, this.cols, this.rows, instance.cwd, result.client);
   }
 
   /** After a tab's session was detached, Enter attaches the tab again */
   private attachAgain(instance: TerminalInstance): void {
     instance.detached = false;
-    this.host.refresh();
-    this.host.post({ type: 'clear', id: instance.id });
+    this.refresh();
+    this.clear(instance.id);
     this.start(instance);
   }
 
@@ -561,10 +834,25 @@ export class Tabs {
     instance.statusMessage = 'Detached';
     instance.needsInput = false;
     this.prompt.removeTerminal(instance.id);
-    this.host.refresh();
+    this.refresh();
     this.write(
       instance.id,
       `\r\n\x1b[2m[Detached; the session runs on. Press Enter to attach again or Esc to end it and close the tab.]\x1b[0m\r\n`
+    );
+  }
+
+  /** The tab's session ended elsewhere, e.g. in another window */
+  private showSessionGone(instance: TerminalInstance): void {
+    this.endSession(instance);
+    instance.exited = true;
+    instance.programState = undefined;
+    instance.statusMessage = undefined;
+    instance.needsInput = false;
+    this.prompt.removeTerminal(instance.id);
+    this.refresh();
+    this.write(
+      instance.id,
+      `\r\n\x1b[2m[The session ended elsewhere. Press Enter to start the profile again or Esc to close.]\x1b[0m\r\n`
     );
   }
 
@@ -577,7 +865,7 @@ export class Tabs {
     instance.exited = true;
     instance.missing = command;
     instance.statusMessage = `${command} not found`;
-    this.host.refresh();
+    this.refresh();
 
     const what = agent ? `${label} is not installed` : `"${label}" cannot start`;
     const message = `${what}: \`${command}\` was not found on the PATH.`;
@@ -589,10 +877,53 @@ export class Tabs {
   }
 
   private write(id: string, data: string): void {
+    this.remember(id, data);
     this.host.post({ type: 'output', id, data });
   }
 
-  private handleData(id: string, data: string): void {
+  private clear(id: string): void {
+    this.history.delete(id);
+    this.host.post({ type: 'clear', id });
+  }
+
+  /**
+   * Keeps a tab's recent output, cut at a line start so it does not begin
+   * inside an escape sequence
+   */
+  private remember(id: string, data: string): void {
+    let history = (this.history.get(id) ?? '') + data;
+    if (history.length > HISTORY_CHARS) {
+      const kept = history.slice(-HISTORY_CHARS);
+      const line = kept.indexOf('\n');
+      history = line >= 0 ? kept.slice(line + 1) : kept;
+    }
+    this.history.set(id, history);
+  }
+
+  private handleData(id: string, received: string): void {
+    const notice = this.notices.get(id);
+    const data = notice ? notice.filter(received) : received;
+    if (notice) {
+      clearTimeout(this.noticeTimers.get(id));
+      if (notice.finished) {
+        this.notices.delete(id);
+      } else {
+        this.noticeTimers.set(
+          id,
+          setTimeout(() => {
+            this.noticeTimers.delete(id);
+            if (this.notices.get(id) !== notice) return;
+            const held = notice.flush();
+            if (held) this.showData(id, held);
+          }, NOTICE_FLUSH_MS)
+        );
+      }
+    }
+    if (data) this.showData(id, data);
+  }
+
+  /** Output that reaches the tab: its signals are read and the view shows it */
+  private showData(id: string, data: string): void {
     // With a tap, the client's output is the multiplexer's drawing
     if (!this.taps.has(id)) {
       this.trackSignals(id, data);
@@ -620,14 +951,16 @@ export class Tabs {
       }
     });
     if (changed) {
-      this.host.refresh();
+      this.conversationStarted(instance);
+      this.refresh();
     }
   }
 
   /**
    * `onExit: auto` closes the tab after a clean exit (e.g. `/exit`) and keeps
-   * failed runs open so their output stays readable. `restart` falls back to
-   * the prompt when the process dies right after starting, to avoid a loop.
+   * failed runs open so their output stays readable. A process that dies
+   * right after starting keeps its tab with every setting: closing the last
+   * tab opens a new one and `restart` starts it again, which would loop.
    */
   private handleExit(id: string, exitCode: number, runtimeMs: number): void {
     const instance = this.state.get(id);
@@ -642,11 +975,12 @@ export class Tabs {
     }
 
     const { onExit } = this.config.getConfig();
-    if (onExit === 'close' || (onExit === 'auto' && exitCode === 0)) {
+    const quick = runtimeMs < QUICK_EXIT_MS;
+    if (!quick && (onExit === 'close' || (onExit === 'auto' && exitCode === 0))) {
       this.close(id);
       return;
     }
-    if (onExit === 'restart' && runtimeMs >= 3000) {
+    if (!quick && onExit === 'restart') {
       this.restart(id);
       return;
     }
@@ -659,7 +993,7 @@ export class Tabs {
       instance.unseen = 'error';
     }
     this.prompt.removeTerminal(id);
-    this.host.refresh();
+    this.refresh();
     this.write(
       id,
       `\r\n\x1b[2m[Process exited with code ${String(exitCode)}. Press Enter to restart or Esc to close.]\x1b[0m\r\n`
@@ -673,12 +1007,21 @@ export class Tabs {
     instance.exited = true;
     instance.statusMessage = 'Terminal failed to start';
     instance.missing = instance.launch.command || 'terminal';
-    this.host.refresh();
+    this.refresh();
     this.write(
       id,
       `\r\nError starting terminal: ${error}\r\n\x1b[2mPress Enter to retry or Esc to close.\x1b[0m\r\n`
     );
   }
+}
+
+/**
+ * A launch as it is stored for later, in the workspace state or a session's
+ * tag: without its environment, where secrets such as API keys go. The
+ * profile it came from gives it again.
+ */
+function stored(launch: LaunchSpec): LaunchSpec {
+  return { ...launch, env: {} };
 }
 
 /** A session name that tmux and abduco accept and that is unique per tab */

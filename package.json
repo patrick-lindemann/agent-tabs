@@ -2,7 +2,7 @@
   "name": "agent-tabs",
   "displayName": "Agent Tabs: Coding Agents in the Sidebar",
   "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "publisher": "patrick-lindemann",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -47,6 +47,22 @@
     "Chat",
     "Other"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode, the profiles, shell, environment variables and prompt patterns come from your user settings only, since workspace settings could run any program.",
+      "restrictedConfigurations": [
+        "agentTabs.profiles",
+        "agentTabs.defaultProfile",
+        "agentTabs.multiplexer",
+        "agentTabs.shell",
+        "agentTabs.env",
+        "agentTabs.autoRun",
+        "agentTabs.directMode",
+        "agentTabs.promptPatterns"
+      ]
+    }
+  },
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -136,7 +152,7 @@
       },
       {
         "command": "agentTabs.manageProfiles",
-        "title": "Manage Profiles",
+        "title": "Manage Profiles…",
         "category": "Agent Tabs"
       }
     ],
@@ -335,6 +351,29 @@
                 },
                 "markdownDescription": "Environment variables for this profile, added to `#agentTabs.env#`."
               },
+              "icon": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "claude",
+                  "codex",
+                  "antigravity",
+                  "gemini",
+                  "opencode",
+                  "pi",
+                  "cursor",
+                  "copilot",
+                  "grok",
+                  "hermes",
+                  "devin",
+                  "terminal",
+                  "sparkle",
+                  null
+                ],
+                "markdownDescription": "The icon in the menu and on the profile's tabs, in place of the one its command line gets: an agent's logo, `terminal` or `sparkle`. Not set or `null`, the command line decides: an agent's logo, `terminal` for a shell, else `sparkle`. It changes nothing else, e.g. status support."
+              },
               "multiplexer": {
                 "type": "string",
                 "enum": [
@@ -346,7 +385,7 @@
               }
             }
           },
-          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and may have a `name`, `env` and `multiplexer`:\n\n```json\n[\n  { \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed.",
+          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and a unique `name`, and may have `env`, `multiplexer` and `icon`:\n\n```json\n[\n  { \"name\": \"Claude\", \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`) as the program the command line runs, also behind a wrapper such as `env`, `npx` or `ssh <host>`, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed, then a Terminal profile with VS Code's default shell.",
           "order": 0
         },
         "agentTabs.defaultProfile": {
@@ -364,7 +403,7 @@
           ],
           "default": "none",
           "scope": "machine-overridable",
-          "enumDescriptions": [
+          "markdownEnumDescriptions": [
             "Programs end with their window.",
             "Run each tab in a tmux session (3.2 or later), with status support.",
             "Run each tab in an abduco session, with status support. Its output is not kept in the tab's scrollback."
@@ -380,27 +419,33 @@
             "restart",
             "keep"
           ],
-          "enumDescriptions": [
+          "markdownEnumDescriptions": [
             "Close the tab after a clean exit (code 0); keep it open after an error. Closing the last tab opens a new one.",
             "Always close the tab when the process exits.",
             "Restart the command in the same tab. Falls back to 'keep' if the process exits within 3 seconds of starting.",
             "Keep the tab open; press Enter to restart or Esc to close."
           ],
           "default": "auto",
-          "description": "What happens when the terminal's process exits (e.g. after /exit)",
+          "markdownDescription": "What happens when the terminal's process exits (e.g. after /exit)",
           "order": 2
+        },
+        "agentTabs.restoreTabs": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Open the tabs of the last window of a workspace again, in their order and with the same tab active, like editor tabs. Claude Code, pi and Cursor continue their conversation once a message was sent; other tabs start their profile again in their folder. Tabs in a running `#agentTabs.multiplexer#` session attach to it either way.",
+          "order": 3
         },
         "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
-          "description": "Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent, since closing ends its session.",
-          "order": 3
+          "markdownDescription": "Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent, since closing ends its session.",
+          "order": 4
         },
         "agentTabs.autoTabTitles": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the profile's name.",
-          "order": 4
+          "order": 5
         },
         "agentTabs.tabTitleWords": {
           "type": "integer",
@@ -408,39 +453,39 @@
           "minimum": 1,
           "maximum": 12,
           "markdownDescription": "Maximum number of words in a tab's name with `#agentTabs.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages.",
-          "order": 5
+          "order": 6
         },
         "agentTabs.monochromeIcons": {
           "type": "boolean",
           "default": false,
-          "description": "Show agent logos in the text color instead of their brand colors.",
-          "order": 6
+          "markdownDescription": "Show agent logos in the text color instead of their brand colors.",
+          "order": 7
         },
         "agentTabs.programStatus": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show agent status (working, needs input, done, error) on tabs. Agents such as pi, Claude Code and Codex report it through the [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status). Other programs fall back to `#agentTabs.promptNotification#`.",
-          "order": 7
+          "order": 8
         },
         "agentTabs.statusColors": {
           "type": "boolean",
           "default": true,
-          "description": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color.",
-          "order": 8
+          "markdownDescription": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color.",
+          "order": 9
         },
         "agentTabs.promptNotification": {
           "type": "boolean",
           "default": true,
-          "description": "Show notification indicator on tab when terminal is waiting for user input",
-          "order": 9
+          "markdownDescription": "Show notification indicator on tab when terminal is waiting for user input",
+          "order": 10
         },
         "agentTabs.promptNotificationDelay": {
           "type": "number",
           "default": 300,
           "minimum": 100,
           "maximum": 2000,
-          "description": "Delay in milliseconds before showing the notification after output stops",
-          "order": 10
+          "markdownDescription": "Delay in milliseconds before showing the notification after output stops",
+          "order": 11
         },
         "agentTabs.promptPatterns": {
           "type": "array",
@@ -448,33 +493,33 @@
             "type": "string"
           },
           "default": [],
-          "description": "Additional regex patterns to detect when terminal is waiting for input (e.g., '^mybot> $'). Built-in patterns detect most CLI AI tools automatically.",
-          "order": 11
+          "markdownDescription": "Additional regex patterns to detect when terminal is waiting for input (e.g., `^mybot> $`). Built-in patterns detect most CLI AI tools automatically.",
+          "order": 12
         },
         "agentTabs.directMode": {
           "type": "boolean",
           "default": true,
-          "description": "Run command directly without shell wrapper (cleaner output, but no shell features)",
-          "order": 12
+          "markdownDescription": "Run command directly without shell wrapper (cleaner output, but no shell features)",
+          "order": 13
         },
         "agentTabs.shell": {
           "type": "string",
           "default": "",
-          "description": "Custom shell path (empty = system default)",
-          "order": 13,
+          "markdownDescription": "Custom shell path (empty = system default)",
+          "order": 14,
           "scope": "machine-overridable"
         },
         "agentTabs.autoRun": {
           "type": "boolean",
           "default": true,
-          "description": "With directMode off: run the profile's command in the shell when a tab opens",
-          "order": 14
+          "markdownDescription": "With directMode off: run the profile's command in the shell when a tab opens",
+          "order": 15
         },
         "agentTabs.env": {
           "type": "object",
           "default": {},
-          "description": "Additional environment variables",
-          "order": 15,
+          "markdownDescription": "Additional environment variables",
+          "order": 16,
           "scope": "machine-overridable"
         }
       }
@@ -498,9 +543,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p media/tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
     "watch:extension": "npm run compile:extension -- --watch",
     "watch:media": "npm run compile:media -- --watch",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:pty": "vitest run --config vitest.pty.config.mts",
+    "test:agents": "docker build --quiet --tag agent-tabs-agents test/agents && docker run --rm -v \"$PWD/test/agents:/probe:ro\" agent-tabs-agents sh /probe/probe.sh",
     "test:integration": "sh scripts/headless.sh",
     "test:integration:visible": "npm run compile:tests && vscode-test",
     "compile:tests": "npm run compile && tsc -p tsconfig.tests.json",

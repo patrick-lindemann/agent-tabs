@@ -5,6 +5,68 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-11-11
+
+### Added
+
+- The tabs of the last window open again when VS Code starts, in their order and with the same tab active, like editor tabs: Claude Code, pi and Cursor continue their conversation once a message was sent, other tabs start their profile again in their folder. Turn it off with `agentTabs.restoreTabs`
+- A **Terminal** profile, after the agents' profiles, opens VS Code's default shell. Like the others, it is only there while `agentTabs.profiles` is empty, and Manage Profiles… writes it into the setting, where it can be moved or removed
+- A profile's `icon` sets the icon in the menu and on its tabs: an agent's logo, `terminal` or `sparkle`. Without it or with `null`, the command line decides, as before
+- Profiles that run a shell, e.g. `sh`, `zsh -l` or `bash build.sh`, show the terminal icon, unless the shell runs a known agent
+
+### Changed
+
+- The profile menu's Custom Command and Manage Profiles are now **Custom Command…** and **Manage Profiles…**; Custom Command… has its own icon
+
+### Fixed
+
+- A new pi tab no longer shows pi's warning that no project session has the tab's conversation ID; the ID is new on purpose
+- A program that exits right after starting no longer opens again and again with `agentTabs.onExit` set to `auto` or `close`: its tab stays open with the exit code, as with `restart`
+- Esc in a detached tab asks before it ends the session, since its agent may still be working
+- Reloading the view's webview shows the open tabs with their recent output instead of opening them all a second time, and their programs draw their screen again
+- Programs that follow the terminal's color scheme, e.g. pi, are told when VS Code switches between a light and a dark theme (DECSET 2031 and DSR 996)
+- A session that is still starting when the view closes keeps running for the next view
+- Cancelling the folder choice in a multi-root workspace no longer opens the tab in the first folder
+- No extra tab opens when one was opened while the last window's tabs were restored
+- A profile that runs its agent through `npx`, `bunx`, `pnpm dlx` or `ssh <host>` starts, instead of reporting the agent as not installed when it is not on the local PATH
+- Only the program a command line runs counts as its agent: `tmux new -s claude`, `docker run --name codex img` or `git log --author pi` no longer get an agent's arguments, and `python -m agent` is not taken for Cursor
+- No conversation arguments are added in front of a subcommand, e.g. `claude doctor`, `pi install` or `agent login`
+- The example in the description of `agentTabs.profiles` has the `name` every profile needs
+- With `agentTabs.programStatus` off, or before an agent first reports its status, Enter sends a message: closing the tab no longer asks about an unsent message, and the tab can be reopened with its conversation
+- Custom Command keeps quoted words together, e.g. `claude --append-system-prompt "be brief"`
+- The warning about invalid profiles appears once, not again after every change to an Agent Tabs setting
+- Agents installed while VS Code runs get a profile, when none is configured, once the window has focus again
+- An invalid `agentTabs.onExit` or `agentTabs.tabTitleWords` falls back to the default
+- On Windows, tabs start agents installed as `.exe` or as npm's `.cmd` shims, e.g. `claude`, `codex` or `pi`: the extension finds the program with PATHEXT, including in the last entry of the PATH, and runs batch files through `cmd.exe` with their arguments escaped
+- With `agentTabs.directMode` off, the command typed into the shell is quoted for it, also a path with spaces, in `cmd.exe` and PowerShell too
+- A tab whose session another window ended meanwhile no longer starts its profile again on its own; it says so and starts it on Enter
+- Windows without a folder no longer open each other's multiplexer sessions
+- Opening a window no longer runs `tmux` or `abduco` when they are not installed
+- Closing an abduco tab ends only the extension's own session of that name, and only the user's processes
+- With tmux, status and the exit code come from the program's pane, also after the user split the window
+- pi's notice about a new session ID is also hidden when it arrives in several pieces
+- Shortened tab titles keep a word that is a filler word only in another language, e.g. `die` in `Fix the die roll`
+- Prompt detection no longer reads a window title or a sentence ending in "continue" as a question
+- Programs in tabs no longer get the extension host's `ELECTRON_*` and `VSCODE_*` variables, e.g. `ELECTRON_RUN_AS_NODE`, which made `code` and other Electron apps run as Node
+- Closing a tab asks about unsent text that was pasted without bracketed paste
+- Terminals follow a change of the color theme, and use the font size, family and line height of VS Code's terminal (`terminal.integrated.*`)
+- Tabs can be used from the keyboard: Tab focuses the active tab, the arrow keys, Home and End switch tabs, Delete closes one. The close buttons are labeled for screen readers
+- The tab strip updates its tabs in place instead of rebuilding them on every status change
+- Alt+Up and Alt+Down send Alt instead of Ctrl with the arrow key
+- Switch Tab… also finds tabs by their full title and status
+- Custom Command starts with the default profile's whole command line, e.g. `env A=1 pi`, not only its first word
+- Only agents get `FORCE_COLOR=1`, not every program
+- A new Cursor tab starts its chat with `--new-session-id`, which creates a chat with the tab's ID, instead of `--resume` with an ID no chat has; reopening it still uses `--resume`
+- A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
+
+### Security
+
+- A profile's environment variables, e.g. API keys, no longer appear on tmux's command line, where every user of the machine could read them with `ps`; the session reads them from a file only the user can read, and deletes it
+- Custom Command runs only `--help` of a command, without a shell and only when it is installed, to suggest its flags, and no longer runs the help of every profile when the window opens. It no longer tries `-h` or `help`, which mean something else for some programs
+- In Restricted Mode, the profiles, shell, environment variables and prompt patterns of an untrusted workspace's settings are ignored, as declared to VS Code
+- Prompt patterns that could freeze the extension host, e.g. `(a|aa)+$`, are rejected: a group may not repeat, only one quantifier may be unbounded, and backreferences are not allowed
+- The open and closed tabs kept in the workspace state and the tags of multiplexer sessions no longer contain a profile's environment variables. A restored or reopened tab runs its profile as it is now, so changes to its command line, environment or multiplexer apply
+
 ## [3.1.0] - 2026-11-10
 
 ### Added

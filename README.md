@@ -20,13 +20,17 @@ Tabs take their name from the agent's session: Claude Code's conversation summar
 
 ### Every agent, one place
 
-Open any agent from the `+ ⌄` menu, with its logo. Agent Tabs finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue` or `env MODEL=fast pi` work, and Custom Command runs anything else with completion for its flags.
+Open any agent from the `+ ⌄` menu, with its logo. Agent Tabs finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue` or `env MODEL=fast pi` work, and a **Terminal** profile after them opens VS Code's default shell. **Custom Command…** runs anything else with completion for its flags.
 
 ![The profile menu with installed agents](media/screenshots/profiles.png)
 
 ### Agents that keep running
 
 With `agentTabs.multiplexer` set to `tmux` or `abduco`, each tab runs its agent in its own session. The agent keeps working when you close the window or your laptop loses the connection to a remote, and the next window shows the same tabs again, with their status. Closing a tab ends its session.
+
+### Tabs that come back
+
+Close VS Code with a few agents open, and the next window of the workspace opens the same tabs again, in their order and with the same one active, like editor tabs. Claude Code, pi and Cursor continue their conversation; other agents start again in their folder. Turn it off with `agentTabs.restoreTabs`.
 
 ### Reopen closed tabs
 
@@ -52,7 +56,7 @@ Tabs use the keys you know from editors, clicking `src/app.ts:42` in an agent's 
 | Cursor | `agent` | From prompts | — |
 | Antigravity | `agy` | From prompts | Your title script |
 
-An agent is recognized anywhere in a profile's command line, also behind a wrapper such as `env` or `npx`. Any other program runs too, with a generic icon and prompt-based status. To run agents in tmux, use `agentTabs.multiplexer` instead of `tmux` in the command line, which hides their status.
+An agent is recognized as the program a profile's command line runs, also behind a wrapper: `env`, `nohup`, `npx`/`bunx`/`pnpm dlx` (by command or package name), `tmux new-session`, `abduco`, `ssh <host>` or `bash -c`. An agent that runs on another machine (`ssh`) or from a package (`npx`) is not looked for on the local PATH. The extension adds no arguments when a subcommand such as `claude doctor` follows the agent. Any other program runs too, with prompt-based status: a shell gets the terminal icon, anything else a sparkle. A profile's `icon` overrides the icon, e.g. `"icon": "claude"` for a script that starts Claude, or `"sparkle"`; `null` is the same as leaving it out. To run agents in tmux, use `agentTabs.multiplexer` instead of `tmux` in the command line, which hides their status.
 
 ## Keyboard shortcuts
 
@@ -79,6 +83,7 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 | `agentTabs.defaultProfile` | first profile | The `name` of the profile `+` opens, e.g. `Claude Code`. |
 | `agentTabs.multiplexer` | `none` | Run tabs in `tmux` (3.2+) or `abduco` sessions that outlive the window. |
 | `agentTabs.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
+| `agentTabs.restoreTabs` | `true` | Open the tabs of the last window again, continuing the conversations of Claude Code, pi and Cursor. |
 | `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent. |
 
 **Tab names and icons**

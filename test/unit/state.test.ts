@@ -18,12 +18,12 @@ function manager(...instances: TerminalInstance[]) {
 }
 
 describe('active tab', () => {
-  it('activates one tab at a time and returns the previous one', () => {
+  it('activates one tab at a time', () => {
     const a = tab();
     const b = tab({ id: 'b' });
     const state = manager(a, b);
-    expect(state.setActive('a')).toBeUndefined();
-    expect(state.setActive('b')).toBe(a);
+    state.setActive('a');
+    state.setActive('b');
     expect([a.isActive, b.isActive]).toEqual([false, true]);
     expect(state.getActiveId()).toBe('b');
   });
@@ -140,7 +140,7 @@ describe('tab list', () => {
         id: 'a',
         label: 'Claude Code',
         description: 'Claude Code',
-        agent: 'claude',
+        icon: 'claude',
         isActive: true,
         accentColor: undefined,
         status: 'working',
@@ -150,7 +150,7 @@ describe('tab list', () => {
         id: 'b',
         label: 'Fix login',
         description: 'Claude Code / Fix login',
-        agent: 'claude',
+        icon: 'claude',
         isActive: false,
         accentColor: WORKSPACE_ACCENT_COLORS[1],
         status: undefined,

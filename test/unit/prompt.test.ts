@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PromptDetector } from '../../src/terminal/prompt';
+import { PromptDetector, stripAnsi } from '../../src/terminal/prompt';
 import { SILENT_AGENTS } from './agents';
 
 const DELAY = 100;
@@ -140,6 +140,20 @@ describe('timing', () => {
   });
 });
 
+describe('output that is not a prompt', () => {
+  it.each([
+    ['a sentence ending in a prompt word', 'Press any key to continue'],
+    ['a window title', '\x1b]0;Continue?\x07working'],
+    ['an unfinished escape sequence', 'done\x1b[3']
+  ])('ignores %s', (_, output) => {
+    expect(waits(output)).toBe(false);
+  });
+
+  it('removes window titles and keeps the text after them', () => {
+    expect(stripAnsi('\x1b]0;title\x07Continue?\x1b]2;x\x1b\\')).toBe('Continue?');
+  });
+});
+
 describe('custom patterns', () => {
   it('matches a custom prompt', () => {
     expect(waits('mybot: ', ['mybot: $'])).toBe(true);
@@ -151,12 +165,25 @@ describe('custom patterns', () => {
     ['too long', `a{${'1'.repeat(200)}}`],
     ['nested quantifiers', '(a+)+$'],
     ['repeated quantifiers', 'a+b+$'],
-    ['a high backreference', '(a)\\12']
+    ['a high backreference', '(a)\\12'],
+    ['a backreference', '(a)\\1'],
+    ['a repeated alternation', '(a|aa)+$'],
+    ['a repeated group with a count', '(ab){2,}$'],
+    ['two unbounded counts', 'a{1,}b{1,}$']
   ])('rejects a %s pattern', (_, pattern) => {
     const d = detector([pattern]);
     expect(console.warn).toHaveBeenCalledTimes(1);
     d.dispose();
   });
+
+  it.each(['mybot: $', '^\\[y/N\\]\\s*$', 'Approve\\?\\s*$', '(?:yes|no)\\?$', 'a\\+b+$'])(
+    'accepts the simple pattern %s',
+    (pattern) => {
+      const d = detector([pattern]);
+      expect(console.warn).not.toHaveBeenCalled();
+      d.dispose();
+    }
+  );
 
   it('keeps working after rejecting a pattern', () => {
     expect(waits('ready>', ['[', '^ready>$'])).toBe(true);

@@ -4,13 +4,16 @@ import { confirmClose, manageProfiles, pickProfile, pickTab } from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
 import { Tabs } from '../terminal/tabs';
-import type { ClosedTab, ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
+import type { ClosedTab, ExtensionMessage, LaunchSpec, OpenTab, TerminalInstance } from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
 import { dispatchMessage, type MessageHandlerContext } from './messages';
 
 /** Workspace state key of the closed tabs that can be reopened */
 const CLOSED_TABS_KEY = 'agentTabs.closedTabs';
+
+/** Workspace state key of the open tabs, which the next window opens again */
+const OPEN_TABS_KEY = 'agentTabs.openTabs';
 
 /**
  * Identifies the workspace in the tags of its multiplexer sessions: the
@@ -45,20 +48,19 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         post: (message) => this.post(message),
         refresh: () => this.refresh(),
         isVisible: () => this.view?.visible === true,
-        isAttached: () => !this.disposed && this.view !== undefined
+        isAttached: () => !this.disposed && this.view !== undefined,
+        requestClose: (ids) => void this.requestClose(ids)
       },
       workspaceKey(),
       workspaceState && {
         get: () => workspaceState.get<ClosedTab[]>(CLOSED_TABS_KEY, []),
         set: (tabs) => void workspaceState.update(CLOSED_TABS_KEY, tabs)
+      },
+      workspaceState && {
+        get: () => workspaceState.get<OpenTab[]>(OPEN_TABS_KEY, []),
+        set: (tabs) => void workspaceState.update(OPEN_TABS_KEY, tabs)
       }
     );
-
-    // Pre-load help for the custom command picker (missing commands are handled gracefully)
-    const profileCommands = this.config.getConfig().profiles.map((p) => p.command);
-    this.picker.preloadCommands([
-      ...new Set([...profileCommands, 'gemini', 'aider', 'gh', 'interpreter', 'opencode'])
-    ]);
   }
 
   // --- WebviewViewProvider ---
@@ -86,12 +88,34 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   // --- Messages from the webview ---
 
-  /** Attaches to the sessions of the last window, or opens the first tab */
+  /**
+   * Restores the tabs of the last window or opens the first one; a webview
+   * that loaded again gets the tabs that are open
+   */
   handleReady(cols: number, rows: number): void {
     this.tabs.setSize(cols, rows);
-    void this.tabs.restore().then((restored) => {
-      if (restored === 0) void this.createTerminal();
+    this.postAppearance();
+    void this.tabs.attachView();
+  }
+
+  /** The terminal font of VS Code's own terminal, for the webview */
+  private postAppearance(): void {
+    const terminal = vscode.workspace.getConfiguration('terminal.integrated');
+    const editor = vscode.workspace.getConfiguration('editor');
+    const fontSize = terminal.get<number>('fontSize') || editor.get<number>('fontSize') || 12;
+    const lineHeight = terminal.get<number>('lineHeight') || 1.2;
+    this.post({
+      type: 'appearance',
+      fontSize,
+      fontFamily: terminal.get<string>('fontFamily') || undefined,
+      // VS Code reads values of 8 and more as pixels
+      lineHeight: lineHeight >= 8 ? lineHeight / fontSize : lineHeight
     });
+  }
+
+  /** The terminal or editor font changed */
+  updateAppearance(): void {
+    this.postAppearance();
   }
 
   handleInput(id: string, data: string): void {
@@ -143,7 +167,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   // --- Commands ---
 
-  createTerminal(launch?: LaunchSpec): Promise<string> {
+  createTerminal(launch?: LaunchSpec): Promise<string | undefined> {
     return this.tabs.create(launch);
   }
 
@@ -171,7 +195,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   async promptAndCreateTerminal(): Promise<void> {
     const config = this.config.getConfig();
-    const result = await this.picker.promptForCommand(config.defaultProfile.command);
+    // The default profile's whole command line, e.g. `env A=1 pi`
+    const result = await this.picker.promptForCommand(config.defaultProfile.commandLine);
     if (!result.cancelled && result.command) {
       await this.createTerminal(
         launchForCommand(result.command, result.args, config.programStatus)
@@ -225,7 +250,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         busy.map(({ instance, reason }) => ({
           label: state.getLabel(instance, autoTabTitles, tabTitleWords),
           agent: instance.launch.label,
-          reason: reason as 'working' | 'waiting' | 'draft'
+          reason: reason as NonNullable<typeof reason>
         }))
       );
       // The dialog took focus; the webview focuses the active tab again
