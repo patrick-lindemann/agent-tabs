@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An invalid `agentTabs.onExit` or `agentTabs.tabTitleWords` falls back to the default
 - On Windows, tabs start agents installed as `.exe` or as npm's `.cmd` shims, e.g. `claude`, `codex` or `pi`: the extension finds the program with PATHEXT, including in the last entry of the PATH, and runs batch files through `cmd.exe` with their arguments escaped
 - With `agentTabs.directMode` off, the command typed into the shell is quoted for it, also a path with spaces, in `cmd.exe` and PowerShell too
+- A tab whose session another window ended meanwhile no longer starts its profile again on its own; it says so and starts it on Enter
+- Windows without a folder no longer open each other's multiplexer sessions
+- Opening a window no longer runs `tmux` or `abduco` when they are not installed
+- Closing an abduco tab ends only the extension's own session of that name, and only the user's processes
+- With tmux, status and the exit code come from the program's pane, also after the user split the window
+- pi's notice about a new session ID is also hidden when it arrives in several pieces
+- Shortened tab titles keep a word that is a filler word only in another language, e.g. `die` in `Fix the die roll`
 - A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
 ### Security

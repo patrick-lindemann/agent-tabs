@@ -896,6 +896,22 @@ describe('tabs in a multiplexer', () => {
     expect(tmux.killed).toEqual([]);
   });
 
+  it('adopts no sessions in a window without a folder', async () => {
+    const tabs = new TestTabs(
+      { getConfig: () => config() } as unknown as ConfigManager,
+      {
+        post: () => {},
+        refresh: () => {},
+        isVisible: () => true,
+        isAttached: () => true,
+        requestClose: () => {}
+      },
+      ''
+    );
+    tmux.add('other-empty-window', { workspace: '' });
+    await expect(tabs.restore()).resolves.toBe(0);
+  });
+
   it('leaves a session alone that another window shows', async () => {
     const { tabs } = setup();
     tmux.add('shown', {}, { attached: true });
@@ -912,6 +928,24 @@ describe('tabs in a multiplexer', () => {
     if (entry) entry.attached = false;
     await vi.advanceTimersByTimeAsync(1000);
     await expect(restoring).resolves.toBe(1);
+  });
+
+  it('does not start a session again that ended while it was restored', async () => {
+    const { tabs, output } = setup({ multiplexer: 'tmux' });
+    tmux.add('mine', {});
+    const restoring = tabs.restore();
+    await Promise.resolve();
+    tmux.sessions.delete('mine');
+    await restoring;
+    await vi.runAllTimersAsync();
+    const [tab] = tabs.state.getAll();
+    expect(output(tab.id)).toContain('The session ended elsewhere');
+    expect(tmux.sessions.size).toBe(0);
+    expect(tab.exited).toBe(true);
+
+    tabs.input(tab.id, '\r');
+    await vi.runAllTimersAsync();
+    expect(tmux.sessions.size).toBe(1);
   });
 
   it('ends ended sessions of other workspaces that no window shows', async () => {
@@ -1439,6 +1473,28 @@ describe("pi's notice about a new session ID", () => {
     const id = await tabs.create(PI);
     pty().emit(`hello\r\n${notice('other')}`);
     expect(output(id)).toBe(`hello\r\n${notice('other')}`);
+  });
+
+  it('hides the notice when it arrives in pieces', async () => {
+    const { tabs, pty, instance, output } = setup();
+    const id = await tabs.create(PI);
+    const text = notice(instance(id).conversation?.id ?? '');
+    pty().emit(`before\r\n${text.slice(0, 12)}`);
+    expect(output(id)).toBe('before\r\n');
+    pty().emit(text.slice(12, 40));
+    pty().emit(`${text.slice(40)}after`);
+    expect(output(id)).toBe('before\r\nafter');
+  });
+
+  it('shows output that only looked like the start of the notice', async () => {
+    const { tabs, pty, output } = setup();
+    const id = await tabs.create(PI);
+    pty().emit('Warning: low disk');
+    vi.advanceTimersByTime(100);
+    expect(output(id)).toBe('Warning: low disk');
+    pty().emit('\r\nWarn');
+    pty().emit('ing: other');
+    expect(output(id)).toBe('Warning: low disk\r\nWarning: other');
   });
 
   it('stops looking once the program shows its screen', async () => {

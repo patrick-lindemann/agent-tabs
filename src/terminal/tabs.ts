@@ -39,6 +39,9 @@ const COMMAND_NOT_FOUND = 127;
 /** How long restoring waits for the clients of a previous view to detach */
 const DETACH_WAIT_MS = 1000;
 
+/** How long output that may start a program's notice waits for the rest of it */
+const NOTICE_FLUSH_MS = 100;
+
 /** How long a tab must stay in view before its result counts as seen */
 const SEEN_DELAY_MS = 1000;
 
@@ -91,6 +94,8 @@ export class Tabs {
   /** Hide a notice a tab's program prints when it starts */
   private readonly notices = new Map<string, NoticeFilter>();
   private seenTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Shows output a notice filter held back, when no more came */
+  private readonly noticeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tab IDs, most recently shown first */
   private recent: string[] = [];
   /** The open tabs last kept, to write them only when they change */
@@ -198,6 +203,10 @@ export class Tabs {
    *
    * Sessions of other workspaces whose program ended and that no window
    * shows are ended, so they do not pile up.
+   *
+   * A window without a folder belongs to no workspace: it adopts no
+   * sessions, since every such window would share them, and only reopens
+   * the sessions it listed itself.
    */
   async restore(): Promise<number> {
     const saved = this.config.getConfig().restoreTabs ? (this.openTabs?.get() ?? []) : [];
@@ -221,6 +230,7 @@ export class Tabs {
     const own = new Map(
       entries.filter((entry) => this.isOwn(entry)).map((entry) => [entry.name, entry])
     );
+    const listed = new Set(saved.map((tab) => tab.session));
     const opened: string[] = [];
     let active: string | undefined;
     this.restoring = true;
@@ -244,6 +254,7 @@ export class Tabs {
         if (tab.active) active = opened[opened.length - 1];
       }
       const sessions = [...own.values()]
+        .filter((entry) => this.workspace !== '' || listed.has(entry.name))
         .filter((entry) => !entry.attached && !shown.has(entry.name))
         .sort((a, b) => a.tag.created - b.tag.created);
       for (const entry of sessions) {
@@ -297,13 +308,16 @@ export class Tabs {
     this.openTabs.set(tabs);
   }
 
-  /** The sessions the extension started, of every multiplexer */
+  /**
+   * The sessions the extension started, of every installed multiplexer,
+   * also when none is configured now, as sessions may remain from before
+   */
   private async listSessions(): Promise<Array<SessionEntry & { multiplexer: MultiplexerId }>> {
     const lists = await Promise.all(
       MULTIPLEXER_IDS.map(async (id) => {
-        const sessions = await getMultiplexer(id)
-          .list()
-          .catch(() => []);
+        const multiplexer = getMultiplexer(id);
+        if (!isInstalled(multiplexer.command)) return [];
+        const sessions = await multiplexer.list().catch(() => []);
         return sessions.map((entry) => ({ ...entry, multiplexer: id }));
       })
     );
@@ -580,6 +594,7 @@ export class Tabs {
     this.prompt.dispose();
     this.status.clear();
     this.notices.clear();
+    this.clearNoticeTimers();
     this.state.clear();
     this.recent = [];
     this.savedOpen = undefined;
@@ -587,9 +602,15 @@ export class Tabs {
 
   dispose(): void {
     clearTimeout(this.seenTimer);
+    this.clearNoticeTimers();
     this.pty.killAll();
     this.disposeTaps();
     this.prompt.dispose();
+  }
+
+  private clearNoticeTimers(): void {
+    for (const timer of this.noticeTimers.values()) clearTimeout(timer);
+    this.noticeTimers.clear();
   }
 
   private disposeTaps(): void {
@@ -676,6 +697,16 @@ export class Tabs {
     const config = this.config.getConfig();
     const { id } = instance;
     const launch = runLaunch(instance);
+    // A tab that attaches to a session never starts a new one in its place,
+    // e.g. when another window ended it meanwhile, which would run the
+    // program again
+    const attaching = instance.session;
+    if (attaching && !(await multiplexer.exists(attaching.name).catch(() => false))) {
+      if (this.state.get(id) === instance && instance.session === attaching) {
+        this.showSessionGone(instance);
+      }
+      return;
+    }
     instance.session ??= {
       multiplexer: multiplexer.id as MultiplexerId,
       name: sessionName(),
@@ -794,6 +825,21 @@ export class Tabs {
     );
   }
 
+  /** The tab's session ended elsewhere, e.g. in another window */
+  private showSessionGone(instance: TerminalInstance): void {
+    this.endSession(instance);
+    instance.exited = true;
+    instance.programState = undefined;
+    instance.statusMessage = undefined;
+    instance.needsInput = false;
+    this.prompt.removeTerminal(instance.id);
+    this.refresh();
+    this.write(
+      instance.id,
+      `\r\n\x1b[2m[The session ended elsewhere. Press Enter to start the profile again or Esc to close.]\x1b[0m\r\n`
+    );
+  }
+
   /**
    * Shows in the tab that a command was not found, with the failed status.
    * Enter tries again and Esc closes, like after any exit.
@@ -821,8 +867,27 @@ export class Tabs {
   private handleData(id: string, received: string): void {
     const notice = this.notices.get(id);
     const data = notice ? notice.filter(received) : received;
-    if (notice?.finished) this.notices.delete(id);
-    if (!data) return;
+    if (notice) {
+      clearTimeout(this.noticeTimers.get(id));
+      if (notice.finished) {
+        this.notices.delete(id);
+      } else {
+        this.noticeTimers.set(
+          id,
+          setTimeout(() => {
+            this.noticeTimers.delete(id);
+            if (this.notices.get(id) !== notice) return;
+            const held = notice.flush();
+            if (held) this.showData(id, held);
+          }, NOTICE_FLUSH_MS)
+        );
+      }
+    }
+    if (data) this.showData(id, data);
+  }
+
+  /** Output that reaches the tab: its signals are read and the view shows it */
+  private showData(id: string, data: string): void {
     // With a tap, the client's output is the multiplexer's drawing
     if (!this.taps.has(id)) {
       this.trackSignals(id, data);

@@ -293,15 +293,11 @@ export function newConversation(launch: LaunchSpec): string | undefined {
 }
 
 /**
- * Matches the line an agent prints when it starts the conversation with a
- * new ID, with its colors and line break, e.g. pi's warning that no session
- * has the ID yet
+ * The line an agent prints when it starts the conversation with a new ID,
+ * e.g. pi's warning that no session has the ID yet
  */
-export function startNotice(launch: LaunchSpec, id: string): RegExp | undefined {
-  const notice = launch.agent && AGENTS[launch.agent].conversation?.startNotice?.(id);
-  if (!notice) return undefined;
-  const escaped = notice.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:\\x1b\\[[0-9;]*m)*${escaped}(?:\\x1b\\[[0-9;]*m)*\\r?\\n?`);
+export function startNotice(launch: LaunchSpec, id: string): string | undefined {
+  return (launch.agent && AGENTS[launch.agent].conversation?.startNotice?.(id)) || undefined;
 }
 
 /**
@@ -516,8 +512,13 @@ export function launchForCommand(
 
 type StopwordLanguage = Exclude<keyof typeof stopword, 'removeStopwords'>;
 
+/**
+ * The stopword lists, English first: agents mostly write titles in English,
+ * so it wins a tie, e.g. `die` in `Fix the die roll` stays
+ */
 const STOPWORD_LISTS = Object.entries(stopword)
   .filter((entry): entry is [StopwordLanguage, string[]] => Array.isArray(entry[1]))
+  .sort(([a], [b]) => Number(b === 'eng') - Number(a === 'eng'))
   .map(([, words]) => new Set(words));
 
 const wordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });

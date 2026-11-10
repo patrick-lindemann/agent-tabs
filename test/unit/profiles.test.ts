@@ -352,6 +352,8 @@ describe('shortening titles', () => {
     ['Make it work', 1, 'work'],
     ['Fix the login bug in the settings page', 3, 'Fix login bug'],
     ['Behebe den Fehler in der Anmeldung', 3, 'Behebe Fehler Anmeldung'],
+    // A tie between English and German goes to English, so `die` stays
+    ['Fix the die roll', 4, 'Fix die roll'],
     ['日本語のテスト', 2, '日本語テスト'],
     ['src/app.ts: fix', 4, 'src/app.ts fix'],
     ['!!!', 4, undefined]

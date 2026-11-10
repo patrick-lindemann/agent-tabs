@@ -78,6 +78,13 @@ describe('tmux control mode output', () => {
     expect(out).toEqual(['\x1b]7501;state=working\x1b\\', 'a\\b\x07']);
   });
 
+  it('keeps only the output of the given pane', () => {
+    const out: string[] = [];
+    const parser = new ControlModeParser((data) => out.push(data), '%3');
+    parser.push(Buffer.from('%output %1 other\n%output %3 mine\n'));
+    expect(out).toEqual(['mine']);
+  });
+
   it('keeps UTF-8 characters split across lines', () => {
     const out: string[] = [];
     const parser = new ControlModeParser((data) => out.push(data));
@@ -176,6 +183,37 @@ describe('tmux sessions', () => {
     expect(out).toEqual(['hi\x1b']);
   });
 
+  it('reads status and the exit code from the program pane, not the active one', async () => {
+    const { calls, execute } = fakeRun([
+      ['show-options', '%3\n'],
+      ['display-message', ' 0  \n']
+    ]);
+    const control = fakeControl();
+    const out: string[] = [];
+    const tmux = new Tmux(execute, () => control.child as never);
+    const result = await tmux.open(OPTIONS, (data) => out.push(data));
+    control.child.stdout.write('%output %4 split pane\n%output %3 program\n');
+    expect(out).toEqual(['program']);
+    if ('tap' in result) result.tap?.reply('x');
+    expect(control.written.at(-1)).toBe('send-keys -t %3 -H 78\n');
+    await tmux.ended('s', 0);
+    expect(calls.at(-1)).toEqual(expect.arrayContaining(['display-message', '%3']));
+  });
+
+  it('stores the program pane when the session starts', async () => {
+    const { calls, execute } = fakeRun([['has-session', new Error('no session')]]);
+    await new Tmux(execute, () => fakeControl().child as never).open(OPTIONS, () => {});
+    const newSession = calls.find((call) => call.includes('new-session')) ?? [];
+    const option = newSession.indexOf('@agent-tabs-pane');
+    expect(newSession.slice(option - 3, option + 2)).toEqual([
+      '-F',
+      '-t',
+      '=agent-tabs-1:',
+      '@agent-tabs-pane',
+      '#{pane_id}'
+    ]);
+  });
+
   it('reports the exit code of a program that ended', async () => {
     const tmux = new Tmux(fakeRun([['display-message', '3 0  \n']]).execute);
     await expect(tmux.open(OPTIONS, () => {})).resolves.toEqual({ exitCode: 3 });
@@ -241,6 +279,7 @@ describe('abduco sessions', () => {
   const LIST =
     'Active sessions (on host box)\n' +
     '* Tue\t 2026-11-10 13:43:12\trunning\n' +
+    '* Tue\t 2026-11-10 13:43:12\tagent-tabs-x1\n' +
     '+ Tue\t 2026-11-10 13:43:12\tended\n' +
     '  Tue\t 2026-11-10 13:43:12\tdetached\n';
   let tags: string;
@@ -290,10 +329,12 @@ describe('abduco sessions', () => {
     const { calls, execute } = fakeRun([['', LIST]]);
     const abduco = new Abduco(execute, tags);
     await abduco.open({ ...OPTIONS, session: 'gone' });
-    await abduco.kill('running');
+    await abduco.kill('agent-tabs-x1');
     await abduco.kill('gone');
+    // Not a name the extension creates, e.g. the user's own session
+    await abduco.kill('running');
     expect(calls.filter(([command]) => command === 'pkill')).toEqual([
-      ['pkill', '-f', 'abduco -A running ']
+      ['pkill', '-U', String(os.userInfo().uid), '-f', '^([^ ]*/)?abduco -A agent-tabs-x1 ']
     ]);
     expect(fs.readdirSync(tags)).toEqual([]);
   });

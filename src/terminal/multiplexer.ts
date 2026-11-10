@@ -203,7 +203,11 @@ export class ControlModeParser {
   private pending = Buffer.alloc(0);
   private readonly decoder = new StringDecoder('utf8');
 
-  constructor(private readonly onOutput: (data: string) => void) {}
+  /** @param pane Only this pane's output, e.g. `%3`, when given */
+  constructor(
+    private readonly onOutput: (data: string) => void,
+    private readonly pane?: string
+  ) {}
 
   push(chunk: Buffer): void {
     let buffer = Buffer.concat([this.pending, chunk]);
@@ -221,6 +225,8 @@ export class ControlModeParser {
     if (line.subarray(0, prefix.length).toString('latin1') !== prefix) return;
     const space = line.indexOf(0x20, prefix.length);
     if (space === -1) return;
+    const pane = line.subarray(prefix.length - 1, space).toString('latin1');
+    if (this.pane && pane !== this.pane) return;
     const data = line.subarray(space + 1);
     const bytes: number[] = [];
     for (let i = 0; i < data.length; i++) {
@@ -262,6 +268,11 @@ export class Tmux implements Multiplexer {
   static readonly TAG = '@agent-tabs';
   /** Session option with the program's exit code, once it exited */
   static readonly EXIT = '@agent-tabs-exit';
+  /**
+   * Session option with the ID of the program's pane, e.g. `%3`, which
+   * stays the same when the user splits the window or switches panes
+   */
+  static readonly PANE = '@agent-tabs-pane';
 
   constructor(
     private readonly execute: Run = run,
@@ -286,7 +297,7 @@ export class Tmux implements Multiplexer {
       const exitCode = await this.deadPaneStatus(session);
       if (exitCode !== undefined) return { exitCode };
     }
-    const tap = this.tap(session, created, onData);
+    const tap = this.tap(session, await this.programPane(session), created, onData);
     return {
       client: {
         command: this.command,
@@ -346,6 +357,13 @@ export class Tmux implements Multiplexer {
       encodeTag(options.tag),
       ';',
       'set-option',
+      '-F',
+      '-t',
+      target,
+      Tmux.PANE,
+      '#{pane_id}',
+      ';',
+      'set-option',
       '-t',
       target,
       'status',
@@ -385,7 +403,23 @@ export class Tmux implements Multiplexer {
     );
   }
 
-  private tap(session: string, created: boolean, onData: (data: string) => void): Tap {
+  /**
+   * The program's pane: the one stored when the session started, or for
+   * sessions of older versions the active one
+   */
+  private async programPane(session: string): Promise<string> {
+    const pane = await this.tmux(['show-options', '-qv', '-t', paneTarget(session), Tmux.PANE])
+      .then((output) => output.trim())
+      .catch(() => '');
+    return /^%\d+$/.test(pane) ? pane : paneTarget(session);
+  }
+
+  private tap(
+    session: string,
+    pane: string,
+    created: boolean,
+    onData: (data: string) => void
+  ): Tap {
     const control = this.spawnControl([
       '-L',
       Tmux.SOCKET,
@@ -394,7 +428,8 @@ export class Tmux implements Multiplexer {
       '-t',
       `=${session}`
     ]);
-    const parser = new ControlModeParser(onData);
+    // Other panes the user opens in the session are not the program
+    const parser = new ControlModeParser(onData, pane.startsWith('%') ? pane : undefined);
     control.stdout.on('data', (chunk: Buffer) => parser.push(chunk));
     // A failing control client only costs the status reports, but must not
     // leave a new session's program held back
@@ -411,7 +446,7 @@ export class Tmux implements Multiplexer {
     send('refresh-client -f ignore-size');
     if (created) send(`wait-for -S ${session}`);
     return {
-      reply: (data) => send(`send-keys -t ${paneTarget(session)} -H ${hexBytes(data).join(' ')}`),
+      reply: (data) => send(`send-keys -t ${pane} -H ${hexBytes(data).join(' ')}`),
       dispose: () => {
         control.stdin.end();
         control.kill();
@@ -460,7 +495,7 @@ export class Tmux implements Multiplexer {
       'display-message',
       '-p',
       '-t',
-      paneTarget(session),
+      await this.programPane(session),
       `#{${Tmux.EXIT}} #{pane_dead} #{pane_dead_status} #{pane_dead_signal}`
     ]);
     const [exit, dead, status, signal] = output.replace(/\n$/, '').split(' ');
@@ -578,12 +613,21 @@ export class Abduco implements Multiplexer {
     return entry && !entry.ended ? undefined : clientCode;
   }
 
-  /** Ends the session's server, also one whose program ended */
+  /**
+   * Ends the session's server, also one whose program ended. abduco has no
+   * command for it, so its processes are found by their command line,
+   * which starts with the session's name the extension chose; only the
+   * user's own processes and only names the extension creates.
+   */
   async kill(session: string): Promise<void> {
     this.removeTag(session);
+    if (!/^agent-tabs-[a-z0-9-]+$/.test(session)) return;
     const entry = (await this.sessions()).find((candidate) => candidate.name === session);
     if (!entry) return;
-    await this.execute('pkill', ['-f', `abduco -A ${session} `]).catch(() => undefined);
+    const user = String(os.userInfo().uid);
+    await this.execute('pkill', ['-U', user, '-f', `^([^ ]*/)?abduco -A ${session} `]).catch(
+      () => undefined
+    );
   }
 }
 
