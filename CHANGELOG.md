@@ -5,6 +5,24 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-11-10
+
+### Breaking
+
+- Keybindings follow VS Code's editor tabs: new tab is `Cmd+N` / `Ctrl+N`, go to tab is `Ctrl+1…9` on macOS and the last tab is `Ctrl+0` / `Alt+0`; closing stays `Ctrl+Shift+W` on Windows and Linux, where `Ctrl+W` deletes a word in the agents
+- `agentTabs.profiles` is a list again: each profile has a `command` and optionally a `name`, `env` and `multiplexer`, e.g. `[{ "command": "claude --continue" }, { "name": "Pi fast", "command": "pi", "env": { "MODEL": "fast" } }]`. A profile without a name is named after its agent or program. The table of names and command lines from 2.0 is no longer read; write your profiles as a list again
+
+### Added
+
+- Reopen Closed Tab (`Cmd+Shift+T` / `Ctrl+Shift+T`) opens the last closed tab again and continues its conversation, for Claude Code, pi and Cursor; it remembers the last ten closed tabs per workspace once a message was sent in them
+- Closing a tab with a message you have not sent asks first, like closing one whose agent is working; only the number of typed characters is tracked, never the text
+- `Ctrl+Shift+Tab` lists the tabs from the least recently used, and `Ctrl+Tab` now lists them most recently used first
+- `agentTabs.multiplexer` runs tabs in tmux (3.2 or later) or abduco sessions that keep running when the window closes or loses its connection to a remote; the next window of the workspace attaches to them again, also from another computer. Status works inside tmux too. Only sessions Agent Tabs started are touched, and those whose agent exited are cleaned up. Profiles can choose their own with `multiplexer`, or `none`
+
+### Fixed
+
+- In a remote window, profiles from the local settings no longer mix with the remote's: `agentTabs.profiles`, `agentTabs.shell` and `agentTabs.env` are read from the remote's settings (or the workspace's)
+
 ## [2.0.1] - 2026-11-08
 
 ### Fixed

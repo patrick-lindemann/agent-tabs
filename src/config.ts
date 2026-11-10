@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { resolveProfiles } from './profiles';
+import { multiplexerSetting, resolveProfiles } from './profiles';
 import type { PromptDetectorConfig } from './terminal/prompt';
 import type { OnExitAction, TerminalConfig } from './types';
 
@@ -51,7 +51,8 @@ export class ConfigManager {
       statusColors: config.get<boolean>('statusColors', true),
       confirmClose: config.get<boolean>('confirmClose', true),
       monochromeIcons: config.get<boolean>('monochromeIcons', false),
-      profiles
+      profiles,
+      multiplexer: multiplexerSetting(config.get('multiplexer'))
     };
 
     return this.cachedConfig;

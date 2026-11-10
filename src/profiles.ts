@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
+import { MULTIPLEXER_IDS, type MultiplexerId } from './terminal/multiplexer';
 import type { AgentId, LaunchSpec } from './types';
 
 interface AgentDefinition {
@@ -20,6 +22,18 @@ interface AgentDefinition {
    * report `idle` after `working` only when the user cancels.
    */
   idleWhenDone?: boolean;
+  /** Reports no status; its tab's status comes from prompt detection */
+  noStatus?: boolean;
+  /**
+   * Arguments that start a conversation with an ID the extension chooses
+   * and that continue it, so a closed tab can be reopened. Not added when
+   * the command line already picks a conversation with one of `conflicts`.
+   */
+  conversation?: {
+    start: (id: string) => string[];
+    resume: (id: string) => string[];
+    conflicts: string[];
+  };
 }
 
 /**
@@ -27,7 +41,26 @@ interface AgentDefinition {
  * format and status options. Everything else is configured in the agent.
  */
 const AGENTS: Record<AgentId, AgentDefinition> = {
-  claude: { label: 'Claude Code', command: 'claude' },
+  claude: {
+    label: 'Claude Code',
+    command: 'claude',
+    conversation: {
+      start: (id) => ['--session-id', id],
+      resume: (id) => ['--resume', id],
+      conflicts: [
+        '--session-id',
+        '-r',
+        '--resume',
+        '-c',
+        '--continue',
+        '--fork-session',
+        '--from-pr',
+        '--teleport',
+        '-p',
+        '--print'
+      ]
+    }
+  },
   codex: {
     label: 'Codex',
     command: 'codex',
@@ -40,18 +73,58 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
       'tui.notification_condition="always"'
     ]
   },
-  antigravity: { label: 'Antigravity', command: 'agy' },
-  gemini: { label: 'Gemini CLI', command: 'gemini' },
+  antigravity: { label: 'Antigravity', command: 'agy', noStatus: true },
+  gemini: { label: 'Gemini CLI', command: 'gemini', noStatus: true },
   opencode: { label: 'OpenCode', command: 'opencode', idleWhenDone: true },
-  pi: { label: 'Pi', command: 'pi' },
-  cursor: { label: 'Cursor', command: 'agent', aliases: ['cursor-agent'] },
-  copilot: { label: 'GitHub Copilot', command: 'copilot' },
+  pi: {
+    label: 'Pi',
+    command: 'pi',
+    // Opens the conversation with the ID, or starts it
+    conversation: {
+      start: (id) => ['--session-id', id],
+      resume: (id) => ['--session-id', id],
+      conflicts: [
+        '--session-id',
+        '--session',
+        '-c',
+        '--continue',
+        '-r',
+        '--resume',
+        '--fork',
+        '--no-session',
+        '-p',
+        '--print',
+        '--export'
+      ]
+    }
+  },
+  cursor: {
+    label: 'Cursor',
+    command: 'agent',
+    aliases: ['cursor-agent'],
+    noStatus: true,
+    // An unknown ID starts a chat with that ID
+    conversation: {
+      start: (id) => ['--resume', id],
+      resume: (id) => ['--resume', id],
+      conflicts: ['--resume', '--continue', 'resume', 'ls', 'create-chat', '-p', '--print']
+    }
+  },
+  copilot: { label: 'GitHub Copilot', command: 'copilot', noStatus: true },
   grok: { label: 'Grok Build', command: 'grok' },
   hermes: { label: 'Hermes Agent', command: 'hermes' },
   devin: { label: 'Devin', command: 'devin' }
 };
 
 const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
+
+/**
+ * Whether an agent reports its status (OSC 7501), so that a message counts
+ * as sent when it starts working rather than on Enter
+ */
+export function reportsStatus(agent: AgentId | undefined): boolean {
+  return agent !== undefined && !AGENTS[agent].noStatus;
+}
 
 /** Whether an agent reports `idle` instead of `done` when a turn completes */
 export function idleWhenDone(agent: AgentId | undefined): boolean {
@@ -129,16 +202,70 @@ function launchFromWords(
   return { label, command: all[0], args: all.slice(1), env: {}, agent, commandLine };
 }
 
+/**
+ * A new conversation ID for a launch, when its agent can start a
+ * conversation with a given ID and the command line does not pick one
+ * already.
+ */
+export function newConversation(launch: LaunchSpec): string | undefined {
+  const conversation = launch.agent && AGENTS[launch.agent].conversation;
+  if (!conversation || agentIndex(launch) === undefined) return undefined;
+  const conflict = launch.args.some((arg) =>
+    conversation.conflicts.some((flag) => arg === flag || arg.startsWith(`${flag}=`))
+  );
+  return conflict ? undefined : randomUUID();
+}
+
+/**
+ * The launch with the arguments that start (`resume` false) or continue a
+ * conversation, right after the agent's executable.
+ */
+export function withConversation(launch: LaunchSpec, id: string, resume: boolean): LaunchSpec {
+  const conversation = launch.agent && AGENTS[launch.agent].conversation;
+  const index = agentIndex(launch);
+  if (!conversation || index === undefined) return launch;
+  const words = [launch.command, ...launch.args];
+  words.splice(index + 1, 0, ...(resume ? conversation.resume(id) : conversation.start(id)));
+  return { ...launch, command: words[0], args: words.slice(1) };
+}
+
+/**
+ * Where the agent's executable is in a launch's words, unless it only runs
+ * inside a command string, e.g. `bash -c "claude"`
+ */
+function agentIndex(launch: LaunchSpec): number | undefined {
+  const words = [launch.command, ...launch.args];
+  const index = words.findIndex((word) => agentOf(word) !== undefined);
+  if (index < 0 || /\s/.test(words[index]) || (index > 0 && /^-\w*c$/.test(words[index - 1]))) {
+    return undefined;
+  }
+  return index;
+}
+
 /** The agent a word runs: its executable, also as a path or inside a quoted command */
 function agentOf(word: string): AgentId | undefined {
   const name = path.basename(word.trim().split(/\s/)[0]).replace(/\.(exe|cmd)$/i, '');
   return AGENT_IDS.find((id) => AGENTS[id].command === name || AGENTS[id].aliases?.includes(name));
 }
 
+/** A profile as written in `agentTabs.profiles` */
+export interface ProfileSetting {
+  command: string;
+  name?: string;
+  env?: Record<string, string>;
+  multiplexer?: MultiplexerId | 'none';
+}
+
+/** `agentTabs.multiplexer` or a profile's `multiplexer`, if valid */
+export function multiplexerSetting(value: unknown): MultiplexerId | 'none' {
+  return MULTIPLEXER_IDS.includes(value as MultiplexerId) ? (value as MultiplexerId) : 'none';
+}
+
 /**
- * Resolves `agentTabs.profiles`, a table of names and command lines, in
- * the order of the settings. Invalid entries are skipped and described in
- * `problems`.
+ * Resolves `agentTabs.profiles`, a list of profiles with a command line and
+ * optionally a name, environment variables and a multiplexer, in the order of the setting.
+ * Without a name, a profile is named after its agent or program. Invalid
+ * entries are skipped and described in `problems`.
  *
  * Without any profile, there is one for each known agent that is installed,
  * or for all of them when none is found.
@@ -149,25 +276,45 @@ export function resolveProfiles(
 ): { profiles: LaunchSpec[]; problems: string[] } {
   const problems: string[] = [];
   const profiles: LaunchSpec[] = [];
-  const table = setting;
+  const list = Array.isArray(setting) ? setting : [];
 
-  if (
-    table !== undefined &&
-    (typeof table !== 'object' || table === null || Array.isArray(table))
-  ) {
-    problems.push('it must map names to command lines');
-  } else {
-    for (const [name, line] of Object.entries(table ?? {})) {
-      const words = typeof line === 'string' ? splitCommandLine(line) : undefined;
-      if (!name.trim()) {
-        problems.push('a profile has no name');
-      } else if (typeof line !== 'string' || !line.trim()) {
-        problems.push(`"${name}" needs a command`);
-      } else if (!words?.length) {
-        problems.push(`the command of "${name}" has an unclosed quote`);
-      } else {
-        profiles.push(launchFromWords(name.trim(), words, line.trim(), programStatus));
-      }
+  if (setting !== undefined && !Array.isArray(setting)) {
+    problems.push('it must be a list of profiles, e.g. [{ "command": "claude" }]');
+  }
+  for (const [index, entry] of list.entries()) {
+    const { command, name, env, multiplexer } = (
+      typeof entry === 'object' && entry !== null ? entry : {}
+    ) as Record<string, unknown>;
+    const position = `profile ${index + 1}`;
+    const words = typeof command === 'string' ? splitCommandLine(command) : undefined;
+    if (typeof command !== 'string' || !command.trim()) {
+      problems.push(`${position} needs a command`);
+    } else if (!words?.length) {
+      problems.push(`the command of ${position} has an unclosed quote`);
+    } else if (name !== undefined && typeof name !== 'string') {
+      problems.push(`the name of ${position} must be text`);
+    } else if (
+      env !== undefined &&
+      (typeof env !== 'object' ||
+        env === null ||
+        Array.isArray(env) ||
+        Object.values(env).some((value) => typeof value !== 'string'))
+    ) {
+      problems.push(`the env of ${position} must map names to text`);
+    } else if (
+      multiplexer !== undefined &&
+      multiplexer !== 'none' &&
+      !MULTIPLEXER_IDS.includes(multiplexer as MultiplexerId)
+    ) {
+      problems.push(
+        `the multiplexer of ${position} must be ${[...MULTIPLEXER_IDS, 'none'].join(', ')}`
+      );
+    } else {
+      const launch = launchFromWords(name?.trim() ?? '', words, command.trim(), programStatus);
+      launch.label ||= defaultLabel(launch);
+      launch.env = { ...(env as Record<string, string> | undefined) };
+      if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
+      profiles.push(launch);
     }
   }
 
@@ -179,6 +326,11 @@ export function resolveProfiles(
     }
   }
   return { profiles, problems };
+}
+
+/** The agent's name, e.g. `Claude Code`, or the program's, e.g. `htop` */
+function defaultLabel(launch: LaunchSpec): string {
+  return launch.agent ? AGENTS[launch.agent].label : path.basename(launch.command);
 }
 
 /**
@@ -232,9 +384,9 @@ export function launchForCommand(
   programStatus: boolean
 ): LaunchSpec {
   const words = [command, ...args];
-  const agent = agentOf(command);
-  const label = agent ? AGENTS[agent].label : path.basename(command);
-  return launchFromWords(label, words, words.map(quoteWord).join(' '), programStatus);
+  const launch = launchFromWords('', words, words.map(quoteWord).join(' '), programStatus);
+  launch.label = defaultLabel(launch);
+  return launch;
 }
 
 type StopwordLanguage = Exclude<keyof typeof stopword, 'removeStopwords'>;

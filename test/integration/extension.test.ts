@@ -35,6 +35,8 @@ suite('Agent Tabs extension', () => {
       await vscode.commands.executeCommand(command);
     }
     await vscode.commands.executeCommand('agentTabs.switchToTabAt', 1);
+    await vscode.commands.executeCommand('agentTabs.switchToTabAt', 0);
+    await vscode.commands.executeCommand('agentTabs.reopenClosedTab');
   });
 
   test('reads its configuration defaults', () => {
@@ -43,5 +45,19 @@ suite('Agent Tabs extension', () => {
     assert.strictEqual(config.get('directMode'), true);
     assert.strictEqual(config.get('programStatus'), true);
     assert.strictEqual(config.get('onExit'), 'auto');
+    assert.strictEqual(config.get('multiplexer'), 'none');
+    assert.deepStrictEqual(config.get('profiles'), []);
+  });
+
+  test('reads the profiles and the multiplexer from the remote or workspace', () => {
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    const properties = extension.packageJSON.contributes.configuration.properties as Record<
+      string,
+      { scope?: string }
+    >;
+    for (const key of ['profiles', 'multiplexer', 'shell', 'env']) {
+      assert.strictEqual(properties[`agentTabs.${key}`].scope, 'machine-overridable', key);
+    }
   });
 });

@@ -4,10 +4,24 @@ import { confirmClose, manageProfiles, pickProfile, pickTab } from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
 import { Tabs } from '../terminal/tabs';
-import type { ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
+import type { ClosedTab, ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
 import { dispatchMessage, type MessageHandlerContext } from './messages';
+
+/** Workspace state key of the closed tabs that can be reopened */
+const CLOSED_TABS_KEY = 'agentTabs.closedTabs';
+
+/**
+ * Identifies the workspace in the tags of its multiplexer sessions: the
+ * paths of its workspace file or folders on the machine the extension runs
+ * on, which stay the same whichever computer connects to a remote.
+ */
+function workspaceKey(): string {
+  const file = vscode.workspace.workspaceFile;
+  if (file && file.scheme !== 'untitled') return file.fsPath;
+  return (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath).join('\n');
+}
 
 /**
  * The terminal view in the secondary sidebar: connects the webview to the
@@ -21,13 +35,24 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   private readonly picker = new CommandInputPicker();
   private readonly tabs: Tabs;
 
-  constructor(private readonly extensionUri: vscode.Uri) {
-    this.tabs = new Tabs(this.config, {
-      post: (message) => this.post(message),
-      refresh: () => this.refresh(),
-      isVisible: () => this.view?.visible === true,
-      isAttached: () => !this.disposed && this.view !== undefined
-    });
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    workspaceState?: vscode.Memento
+  ) {
+    this.tabs = new Tabs(
+      this.config,
+      {
+        post: (message) => this.post(message),
+        refresh: () => this.refresh(),
+        isVisible: () => this.view?.visible === true,
+        isAttached: () => !this.disposed && this.view !== undefined
+      },
+      workspaceKey(),
+      workspaceState && {
+        get: () => workspaceState.get<ClosedTab[]>(CLOSED_TABS_KEY, []),
+        set: (tabs) => void workspaceState.update(CLOSED_TABS_KEY, tabs)
+      }
+    );
 
     // Pre-load help for the custom command picker (missing commands are handled gracefully)
     const profileCommands = this.config.getConfig().profiles.map((p) => p.command);
@@ -61,9 +86,12 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   // --- Messages from the webview ---
 
+  /** Attaches to the sessions of the last window, or opens the first tab */
   handleReady(cols: number, rows: number): void {
     this.tabs.setSize(cols, rows);
-    void this.createTerminal();
+    void this.tabs.restore().then((restored) => {
+      if (restored === 0) void this.createTerminal();
+    });
   }
 
   handleInput(id: string, data: string): void {
@@ -150,17 +178,26 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     }
   }
 
-  /** Quick pick over the open tabs with their status, for switching without the tab strip */
-  async pickTerminal(): Promise<void> {
+  /**
+   * Quick pick over the open tabs with their status, most recently used
+   * first, for switching without the tab strip. `step` 1 selects the
+   * previously used tab, -1 the least recently used.
+   */
+  async pickTerminal(step: 1 | -1 = 1): Promise<void> {
     const { state } = this.tabs;
     const { autoTabTitles } = this.config.getConfig();
+    const instances = this.tabs
+      .recentlyUsed()
+      .map((id) => state.get(id))
+      .filter((instance): instance is TerminalInstance => instance !== undefined);
     const id = await pickTab(
-      state.getAll().map((instance) => ({
+      instances.map((instance) => ({
         id: instance.id,
         label: state.getFullLabel(instance, autoTabTitles),
         description: instance.isActive ? 'active' : undefined,
         detail: state.describeStatus(instance)
-      }))
+      })),
+      step
     );
     if (id) {
       this.tabs.switchTo(id);
@@ -170,24 +207,24 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   /**
    * Closes tabs the user asked to close. Closing ends the agent's process, so
-   * tabs whose agent is working or waiting for an answer ask first, unless
-   * `agentTabs.confirmClose` is off.
+   * tabs whose agent is working, waiting for an answer or has unsent input
+   * ask first, unless `agentTabs.confirmClose` is off.
    */
   async requestClose(ids: string[]): Promise<boolean> {
     const { state } = this.tabs;
     const { confirmClose: confirm, autoTabTitles, tabTitleWords } = this.config.getConfig();
     const busy = ids
       .map((id) => state.get(id))
-      .filter(
-        (instance): instance is TerminalInstance => instance !== undefined && state.isBusy(instance)
-      );
+      .filter((instance): instance is TerminalInstance => instance !== undefined)
+      .map((instance) => ({ instance, reason: state.closeRisk(instance) }))
+      .filter((entry) => entry.reason !== undefined);
 
     if (busy.length > 0 && confirm) {
       const confirmed = await confirmClose(
-        busy.map((instance) => ({
+        busy.map(({ instance, reason }) => ({
           label: state.getLabel(instance, autoTabTitles, tabTitleWords),
           agent: instance.launch.label,
-          working: state.getStatus(instance) === 'working'
+          reason: reason as 'working' | 'waiting' | 'draft'
         }))
       );
       // The dialog took focus; the webview focuses the active tab again
@@ -204,6 +241,15 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     const others = this.tabs.state.getAllIds().filter((other) => other !== id);
     if (await this.requestClose(others)) {
       this.tabs.switchTo(id);
+    }
+  }
+
+  /** Reopens the most recently closed tab with its conversation */
+  reopenClosedTerminal(): void {
+    if (!this.tabs.reopenClosed()) {
+      void vscode.window.showInformationMessage(
+        'Agent Tabs: no closed tab to reopen. Tabs of Claude Code, pi and Cursor can be reopened once a message was sent.'
+      );
     }
   }
 

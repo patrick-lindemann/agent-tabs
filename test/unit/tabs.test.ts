@@ -1,9 +1,23 @@
 import { createRequire } from 'node:module';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConfigManager } from '../../src/config';
-import { launchForCommand } from '../../src/profiles';
+import { launchForCommand, resolveProfiles } from '../../src/profiles';
+import {
+  type Multiplexer,
+  type OpenResult,
+  type SessionEntry,
+  type SessionOptions,
+  type SessionTag,
+  setMultiplexer
+} from '../../src/terminal/multiplexer';
 import { Tabs, type TabsHost } from '../../src/terminal/tabs';
-import type { ExtensionMessage, IPty, OnExitAction, TerminalConfig } from '../../src/types';
+import type {
+  ClosedTab,
+  ExtensionMessage,
+  IPty,
+  OnExitAction,
+  TerminalConfig
+} from '../../src/types';
 import { status } from './agents';
 
 const vscode = vi.hoisted(() => ({
@@ -29,6 +43,7 @@ vi.mock('vscode', () => ({
 /** A process started by node-pty, controlled by the test */
 interface FakePty extends IPty {
   file: string;
+  args: string[];
   written: string[];
   size: [number, number];
   killed: boolean;
@@ -41,12 +56,13 @@ const spawned: FakePty[] = [];
 // PtyManager loads node-pty with require(), which vi.mock does not see
 const nodePty = {
   fail: undefined as string | undefined,
-  spawn: (file: string, _args: string[], options: { cols: number; rows: number }) => {
+  spawn: (file: string, args: string[], options: { cols: number; rows: number }) => {
     if (nodePty.fail) throw new Error(nodePty.fail);
     let onData: (data: string) => void = () => {};
     let onExit: (event: { exitCode: number }) => void = () => {};
     const pty: FakePty = {
       file,
+      args,
       written: [],
       killed: false,
       onData: (callback) => {
@@ -83,7 +99,7 @@ afterAll(() => {
 });
 
 // Commands found on the PATH; the real missingCommand checks them through isInstalled
-const installed = vi.hoisted(() => new Set(['claude', 'codex', 'pi', 'tmux']));
+const installed = vi.hoisted(() => new Set(['claude', 'codex', 'pi', 'env', 'tmux', 'abduco']));
 vi.mock('node:fs', async (original) => {
   const fs = await original<typeof import('node:fs')>();
   const known = (file: string) => installed.has(file.split(/[\\/]/).pop() ?? '');
@@ -96,6 +112,8 @@ vi.mock('node:fs', async (original) => {
     statSync: (file: string) => (known(String(file)) ? { isFile: () => true } : fs.statSync(file))
   };
 });
+
+const WORKSPACE = '/work/project';
 
 function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
   return {
@@ -111,6 +129,7 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     confirmClose: true,
     monochromeIcons: false,
     profiles: [launchForCommand('claude', [], true)],
+    multiplexer: 'none',
     ...overrides
   };
 }
@@ -128,7 +147,14 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
     isAttached: () => host.attached
   };
   const manager = { getConfig: () => current } as unknown as ConfigManager;
-  const tabs = new Tabs(manager, host);
+  const closed = {
+    tabs: [] as ClosedTab[],
+    get: () => closed.tabs,
+    set: (tabs: ClosedTab[]) => {
+      closed.tabs = tabs;
+    }
+  };
+  const tabs = new Tabs(manager, host, WORKSPACE, closed);
   const output = (id: string) =>
     posted
       .filter((m): m is Extract<ExtensionMessage, { type: 'output' }> => m.type === 'output')
@@ -138,6 +164,7 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
   return {
     tabs,
     host,
+    closed,
     posted,
     output,
     setOnExit: (onExit: OnExitAction) => {
@@ -234,17 +261,30 @@ describe('switching tabs', () => {
     expect(tabs.state.getActiveId()).toBe(b);
   });
 
-  it('switches by position, with 9 as the last tab', async () => {
+  it('switches by position, with 0 as the last tab', async () => {
     const { tabs } = setup();
     const a = await tabs.create();
-    await tabs.create();
+    const b = await tabs.create();
     const c = await tabs.create();
     tabs.switchToPosition(1);
     expect(tabs.state.getActiveId()).toBe(a);
-    tabs.switchToPosition(9);
+    tabs.switchToPosition(0);
     expect(tabs.state.getActiveId()).toBe(c);
+    tabs.switchToPosition(2);
+    expect(tabs.state.getActiveId()).toBe(b);
     tabs.switchToPosition(5);
-    expect(tabs.state.getActiveId()).toBe(c);
+    expect(tabs.state.getActiveId()).toBe(b);
+  });
+
+  it('lists tabs most recently used first', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const c = await tabs.create();
+    tabs.switchTo(a);
+    expect(tabs.recentlyUsed()).toEqual([a, c, b]);
+    tabs.close(c);
+    expect(tabs.recentlyUsed()).toEqual([a, b]);
   });
 });
 
@@ -558,5 +598,464 @@ describe('reset', () => {
     expect(spawned.every((pty) => pty.killed)).toBe(true);
     expect(tabs.state.count).toBe(0);
     expect(tabs.state.getActiveId()).toBeUndefined();
+  });
+});
+
+/** A tmux-like multiplexer whose sessions live in memory */
+class FakeMultiplexer implements Multiplexer {
+  readonly id = 'tmux';
+  readonly command = 'tmux';
+  /** Sessions with their tag and the exit code of their program once it ended */
+  readonly sessions = new Map<
+    string,
+    { options: SessionOptions; exitCode?: number; attached?: boolean }
+  >();
+  readonly killed: string[] = [];
+  readonly replies: string[] = [];
+  tapData: (data: string) => void = () => {};
+  tapDisposed = 0;
+  fail: string | undefined;
+
+  open(options: SessionOptions, onData: (data: string) => void): Promise<OpenResult> {
+    if (this.fail) return Promise.reject(new Error(this.fail));
+    const existing = this.sessions.get(options.session);
+    if (existing?.exitCode !== undefined) return Promise.resolve({ exitCode: existing.exitCode });
+    if (!existing) this.sessions.set(options.session, { options });
+    this.tapData = onData;
+    return Promise.resolve({
+      client: { command: 'tmux', args: ['attach-session', '-t', options.session] },
+      tap: {
+        reply: (data) => this.replies.push(data),
+        dispose: () => this.tapDisposed++
+      },
+      created: !existing
+    });
+  }
+
+  /** A session as another window or workspace left it */
+  add(
+    name: string,
+    tag: Partial<SessionTag>,
+    state: { exitCode?: number; attached?: boolean } = {}
+  ) {
+    const fullTag: SessionTag = {
+      workspace: WORKSPACE,
+      launch: launchForCommand('claude', [], true),
+      created: 1,
+      ...tag
+    };
+    this.sessions.set(name, {
+      options: { session: name, tag: fullTag } as SessionOptions,
+      ...state
+    });
+  }
+
+  exists(session: string): Promise<boolean> {
+    return Promise.resolve(this.sessions.has(session));
+  }
+
+  list(): Promise<SessionEntry[]> {
+    return Promise.resolve(
+      [...this.sessions].map(([name, entry]) => ({
+        name,
+        tag: entry.options.tag,
+        ended: entry.exitCode !== undefined,
+        attached: entry.attached === true
+      }))
+    );
+  }
+
+  ended(session: string, clientCode: number): Promise<number | undefined> {
+    const entry = this.sessions.get(session);
+    return Promise.resolve(entry ? entry.exitCode : clientCode);
+  }
+
+  kill(session: string): Promise<void> {
+    this.killed.push(session);
+    this.sessions.delete(session);
+    return Promise.resolve();
+  }
+}
+
+/** An abduco-like multiplexer without sessions */
+const noSessions: Multiplexer = {
+  id: 'abduco',
+  command: 'abduco',
+  open: () => Promise.reject(new Error('not used')),
+  exists: () => Promise.resolve(false),
+  list: () => Promise.resolve([]),
+  ended: (_session, code) => Promise.resolve(code),
+  kill: () => Promise.resolve()
+};
+
+describe('tabs in a multiplexer', () => {
+  let tmux: FakeMultiplexer;
+  beforeEach(() => {
+    tmux = new FakeMultiplexer();
+    setMultiplexer(tmux, 'tmux');
+    setMultiplexer(noSessions, 'abduco');
+  });
+  afterEach(() => {
+    setMultiplexer(undefined, 'tmux');
+    setMultiplexer(undefined, 'abduco');
+  });
+
+  const sessionOf = (instance: { session?: { name: string } }) => instance.session?.name ?? '';
+
+  it('runs the profile in a tagged session and shows it with the client', async () => {
+    const { tabs, instance, pty } = setup({ multiplexer: 'tmux', env: { A: '1' } });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    expect(session).toMatch(/^agent-tabs-/);
+    expect(tmux.sessions.get(session)?.options).toMatchObject({
+      command: 'claude',
+      args: ['--session-id', instance(id).conversation?.id],
+      env: expect.objectContaining({ A: '1' }) as unknown,
+      tag: { workspace: WORKSPACE, launch: { command: 'claude' } }
+    });
+    expect(pty().file).toBe('tmux');
+  });
+
+  it('runs a profile without a session when it says none', async () => {
+    const { tabs, pty } = setup({ multiplexer: 'tmux' });
+    await tabs.create({ ...launchForCommand('claude', [], true), multiplexer: 'none' });
+    await vi.runAllTimersAsync();
+    expect(pty().file).toBe('claude');
+    expect(tmux.sessions.size).toBe(0);
+  });
+
+  it('reads status from the tap and replies through it', async () => {
+    const { tabs, pty, status: tabStatus } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    // What the client draws carries no signals of the program
+    pty().emit(status('state=error'));
+    expect(tabStatus(id)).toBeUndefined();
+    tmux.tapData(`\x1b]7501;?\x1b\\${status('state=working')}`);
+    expect(tabStatus(id)).toBe('working');
+    expect(tmux.replies).toEqual(['\x1b]7501;?\x1b\\']);
+    expect(pty().written).toEqual([]);
+  });
+
+  it('ends the session when the tab closes', async () => {
+    const { tabs, instance } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    tabs.close(id);
+    expect(tmux.killed).toEqual([session]);
+    expect(tmux.tapDisposed).toBe(1);
+    expect(tmux.sessions.size).toBe(1);
+  });
+
+  it('keeps sessions when the view goes away and attaches to them again', async () => {
+    const { tabs, instance } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    tabs.reset();
+    expect(tmux.killed).toEqual([]);
+
+    await expect(tabs.restore()).resolves.toBe(1);
+    await vi.runAllTimersAsync();
+    const [restored] = tabs.state.getAll();
+    expect(restored.session?.name).toBe(session);
+    expect(restored.launch.command).toBe('claude');
+    expect(tmux.sessions.size).toBe(1);
+  });
+
+  it('restores the sessions of this workspace in the order they started', async () => {
+    const { tabs } = setup();
+    tmux.add('second', { created: 2, launch: launchForCommand('pi', [], true), cwd: '/work/b' });
+    tmux.add('first', { created: 1 });
+    tmux.add('elsewhere', { workspace: '/other' });
+    await expect(tabs.restore()).resolves.toBe(2);
+    expect(
+      tabs.state.getAll().map((tab) => [tab.session?.name, tab.launch.label, tab.cwd])
+    ).toEqual([
+      ['first', 'Claude Code', undefined],
+      ['second', 'Pi', '/work/b']
+    ]);
+    expect(tmux.killed).toEqual([]);
+  });
+
+  it('leaves a session alone that another window shows', async () => {
+    const { tabs } = setup();
+    tmux.add('shown', {}, { attached: true });
+    const restoring = tabs.restore();
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(restoring).resolves.toBe(0);
+  });
+
+  it('restores a session whose old client detached meanwhile', async () => {
+    const { tabs } = setup();
+    tmux.add('reconnected', {}, { attached: true });
+    const restoring = tabs.restore();
+    const entry = tmux.sessions.get('reconnected');
+    if (entry) entry.attached = false;
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(restoring).resolves.toBe(1);
+  });
+
+  it('ends ended sessions of other workspaces that no window shows', async () => {
+    const { tabs } = setup();
+    tmux.add('other-ended', { workspace: '/other' }, { exitCode: 0 });
+    tmux.add('other-running', { workspace: '/other' });
+    tmux.add('other-shown', { workspace: '/other' }, { exitCode: 0, attached: true });
+    await expect(tabs.restore()).resolves.toBe(0);
+    expect(tmux.killed).toEqual(['other-ended']);
+  });
+
+  it('handles the end of the program like an exit', async () => {
+    const { tabs, instance, pty, output } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    const entry = tmux.sessions.get(session);
+    if (entry) entry.exitCode = 2;
+    pty().exit(0);
+    await vi.runAllTimersAsync();
+    expect(output(id)).toContain('Process exited with code 2');
+    expect(tmux.killed).toEqual([session]);
+    expect(instance(id).session).toBeUndefined();
+
+    tabs.input(id, '\r');
+    await vi.runAllTimersAsync();
+    expect(sessionOf(instance(id))).not.toBe(session);
+    expect(tmux.sessions.size).toBe(1);
+  });
+
+  it('offers to attach again after the client was detached', async () => {
+    const { tabs, instance, pty, output, status: tabStatus } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    const first = pty();
+    first.exit(0);
+    await vi.runAllTimersAsync();
+    expect(output(id)).toContain('Detached');
+    expect(instance(id).detached).toBe(true);
+    expect(tabStatus(id)).toBeUndefined();
+
+    tabs.input(id, '\r');
+    await vi.runAllTimersAsync();
+    expect(pty()).not.toBe(first);
+    expect(sessionOf(instance(id))).toBe(session);
+
+    pty().exit(0);
+    await vi.runAllTimersAsync();
+    tabs.input(id, '\x1b');
+    expect(tabs.state.get(id)).toBeUndefined();
+    expect(tmux.killed).toEqual([session]);
+  });
+
+  it('shows a program of this workspace that ended while no client was attached', async () => {
+    const { tabs, output } = setup();
+    tmux.add('done', {}, { exitCode: 1 });
+    await tabs.restore();
+    await vi.runAllTimersAsync();
+    const [tab] = tabs.state.getAll();
+    expect(output(tab.id)).toContain('Process exited with code 1');
+    expect(tmux.killed).toEqual(['done']);
+  });
+
+  it('explains a missing multiplexer', async () => {
+    installed.delete('tmux');
+    try {
+      const { tabs, output } = setup({ multiplexer: 'tmux' });
+      const id = await tabs.create();
+      expect(output(id)).toContain('`tmux` was not found');
+      expect(tmux.sessions.size).toBe(0);
+    } finally {
+      installed.add('tmux');
+    }
+  });
+
+  it('shows an error when the session cannot start', async () => {
+    tmux.fail = 'server exited unexpectedly';
+    const { tabs, output, instance } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    expect(output(id)).toContain('server exited unexpectedly');
+    expect(instance(id).session).toBeUndefined();
+  });
+
+  it('ends a session that started after its tab closed', async () => {
+    const { tabs } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await tabs.create();
+    tabs.close(id);
+    await vi.runAllTimersAsync();
+    expect(tmux.sessions.size).toBe(1);
+    expect(tmux.tapDisposed).toBe(1);
+  });
+});
+
+describe('reopening closed tabs', () => {
+  const args = (pty: { args?: string[] } | undefined) => pty?.args ?? [];
+  const working = status('state=working');
+
+  it('starts Claude with a conversation ID and continues it when reopened', async () => {
+    const { tabs, pty, instance, closed } = setup();
+    const id = await tabs.create();
+    const conversation = instance(id).conversation?.id ?? '';
+    expect(conversation).toMatch(/^[0-9a-f-]{36}$/);
+    expect(args(pty())).toEqual(['--session-id', conversation]);
+    pty().emit(working);
+    tabs.close(id);
+    expect(closed.tabs).toEqual([expect.objectContaining({ conversation })]);
+
+    expect(tabs.reopenClosed()).toBe(true);
+    expect(args(pty())).toEqual(['--resume', conversation]);
+    expect(closed.tabs).toEqual([]);
+    expect(tabs.reopenClosed()).toBe(false);
+  });
+
+  it('does not remember a tab before a message was sent', async () => {
+    const { tabs, closed } = setup();
+    const id = await tabs.create();
+    tabs.input(id, 'h');
+    tabs.input(id, '\r');
+    tabs.close(id);
+    expect(closed.tabs).toEqual([]);
+  });
+
+  it('remembers an agent without status once Enter was pressed', async () => {
+    installed.add('cursor-agent');
+    try {
+      const { tabs, closed, pty } = setup();
+      const id = await tabs.create(launchForCommand('cursor-agent', [], true));
+      const conversation = args(pty())[1];
+      expect(args(pty())[0]).toBe('--resume');
+      tabs.input(id, 'fix it');
+      tabs.input(id, '\r');
+      tabs.close(id);
+      expect(closed.tabs).toEqual([expect.objectContaining({ conversation })]);
+    } finally {
+      installed.delete('cursor-agent');
+    }
+  });
+
+  it('reopens several closed tabs, newest first', async () => {
+    const { tabs, pty, instance } = setup();
+    const ids = [await tabs.create(), await tabs.create(), await tabs.create()];
+    const conversations = ids.map((id) => instance(id).conversation?.id);
+    for (const process of spawned) process.emit(working);
+    tabs.close(ids[0]);
+    tabs.close(ids[1]);
+    tabs.reopenClosed();
+    expect(args(pty())).toEqual(['--resume', conversations[1]]);
+    tabs.reopenClosed();
+    expect(args(pty())).toEqual(['--resume', conversations[0]]);
+  });
+
+  it('keeps at most ten closed tabs', async () => {
+    const { tabs, closed } = setup();
+    for (let i = 0; i < 12; i++) {
+      const id = await tabs.create();
+      spawned[spawned.length - 1].emit(working);
+      tabs.close(id);
+      await vi.runAllTimersAsync();
+    }
+    expect(closed.tabs).toHaveLength(10);
+  });
+
+  it('starts a new conversation on restart and keeps the old one for reopening', async () => {
+    const { tabs, pty, instance, closed } = setup();
+    const id = await tabs.create();
+    const first = instance(id).conversation?.id;
+    pty().emit(working);
+    pty().exit(1);
+    tabs.input(id, '\r');
+    const second = instance(id).conversation?.id;
+    expect(second).not.toBe(first);
+    expect(args(pty())).toEqual(['--session-id', second]);
+    expect(closed.tabs).toEqual([expect.objectContaining({ conversation: first })]);
+  });
+
+  it('leaves command lines alone that pick a conversation themselves', async () => {
+    const { tabs, pty, instance } = setup();
+    const id = await tabs.create(launchForCommand('claude', ['--continue'], true));
+    expect(instance(id).conversation).toBeUndefined();
+    expect(args(pty())).toEqual(['--continue']);
+    await tabs.create(launchForCommand('codex', [], false));
+    expect(args(pty())).toEqual([]);
+  });
+
+  it('adds the arguments after an agent behind a wrapper', async () => {
+    const { tabs, pty, instance } = setup();
+    const [profile] = resolveProfiles([{ command: 'env A=1 pi --model x' }], false).profiles;
+    const id = await tabs.create(profile);
+    const conversation = instance(id).conversation?.id;
+    expect([pty().file, ...args(pty())]).toEqual([
+      'env',
+      'A=1',
+      'pi',
+      '--session-id',
+      conversation,
+      '--model',
+      'x'
+    ]);
+  });
+});
+
+describe('asking before closing', () => {
+  it('asks for typed but unsent input, not after it was deleted', async () => {
+    const { tabs, instance } = setup();
+    const id = await tabs.create();
+    const risk = () => tabs.state.closeRisk(instance(id));
+    expect(risk()).toBeUndefined();
+    tabs.input(id, 'hi');
+    expect(risk()).toBe('draft');
+    tabs.input(id, '\x7f');
+    tabs.input(id, '\x7f');
+    expect(risk()).toBeUndefined();
+  });
+
+  it('counts a message as sent when the agent starts working, not on Enter', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    pty().emit(status('state=idle'));
+    tabs.input(id, 'do it');
+    tabs.input(id, '\r');
+    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
+    pty().emit(status('state=working'));
+    expect(tabs.state.closeRisk(instance(id))).toBe('working');
+    pty().emit(status('state=done'));
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it('counts Enter as sending for agents without status', async () => {
+    installed.add('gemini');
+    const { tabs, instance } = setup();
+    const id = await tabs.create(launchForCommand('gemini', [], false));
+    installed.delete('gemini');
+    tabs.input(id, 'go');
+    tabs.input(id, '\r');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it('asks after editing it cannot follow, until the next message', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    tabs.input(id, 'hello');
+    tabs.input(id, '\x17');
+    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
+    pty().emit(status('state=working'));
+    pty().emit(status('state=done'));
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it('ignores mouse and focus reports and does not ask after an exit', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    tabs.input(id, '\x1b[I');
+    tabs.input(id, '\x1b[<0;3;4M');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+    tabs.input(id, 'x');
+    pty().exit(1);
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });
 });

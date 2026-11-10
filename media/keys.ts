@@ -7,24 +7,28 @@ export interface KeyboardEventLike {
   shiftKey: boolean;
 }
 
+/**
+ * Keys bound to Agent Tabs commands, which the terminal leaves to VS Code
+ * instead of typing them. They follow VS Code's editor tabs; on Windows and
+ * Linux closing is Ctrl+Shift+W, because Ctrl+W deletes a word in the agents.
+ */
 export function isTabShortcut(event: KeyboardEventLike, isMac: boolean): boolean {
-  const { key, code, ctrlKey, metaKey, altKey, shiftKey } = event;
-  const digit = /^Digit[1-9]$/.test(code);
-  if (ctrlKey && !metaKey && !altKey && key === 'Tab') return true;
+  const { code, ctrlKey, metaKey, altKey, shiftKey } = event;
+  const mods = `${ctrlKey ? 'Ctrl+' : ''}${altKey ? 'Alt+' : ''}${shiftKey ? 'Shift+' : ''}${metaKey ? 'Meta+' : ''}`;
+  const digit = /^Digit[0-9]$/.test(code);
+  if (code === 'Tab' && (mods === 'Ctrl+' || mods === 'Ctrl+Shift+')) return true;
   if (isMac) {
     return (
-      (metaKey &&
-        !ctrlKey &&
-        !altKey &&
-        !shiftKey &&
-        (digit || code === 'KeyT' || code === 'KeyW')) ||
-      (metaKey && altKey && !ctrlKey && !shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight'))
+      (mods === 'Ctrl+' && digit) ||
+      (mods === 'Meta+' && ['KeyN', 'KeyW', 'Digit9'].includes(code)) ||
+      (mods === 'Shift+Meta+' && ['KeyT', 'BracketLeft', 'BracketRight'].includes(code)) ||
+      (mods === 'Alt+Meta+' && (code === 'ArrowLeft' || code === 'ArrowRight'))
     );
   }
   return (
-    (altKey && !ctrlKey && !metaKey && !shiftKey && digit) ||
-    (ctrlKey && !altKey && !metaKey && !shiftKey && (key === 'PageUp' || key === 'PageDown')) ||
-    (ctrlKey && shiftKey && !altKey && !metaKey && (code === 'KeyT' || code === 'KeyW'))
+    (mods === 'Alt+' && digit) ||
+    (mods === 'Ctrl+' && ['KeyN', 'PageUp', 'PageDown', 'F4'].includes(code)) ||
+    (mods === 'Ctrl+Shift+' && (code === 'KeyT' || code === 'KeyW'))
   );
 }
 

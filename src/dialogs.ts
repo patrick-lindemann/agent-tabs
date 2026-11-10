@@ -70,16 +70,16 @@ function profileIcon(
  */
 export async function manageProfiles(profiles: LaunchSpec[]): Promise<void> {
   const config = vscode.workspace.getConfiguration('agentTabs');
-  const inspected = config.inspect<Record<string, string>>('profiles');
+  const inspected = config.inspect<unknown[]>('profiles');
   const isSet = [
     inspected?.globalValue,
     inspected?.workspaceValue,
     inspected?.workspaceFolderValue
-  ].some((value) => value !== undefined && Object.keys(value).length > 0);
+  ].some((value) => Array.isArray(value) && value.length > 0);
   if (!isSet) {
     await config.update(
       'profiles',
-      Object.fromEntries(profiles.map((profile) => [profile.label, profile.commandLine])),
+      profiles.map((profile) => ({ name: profile.label, command: profile.commandLine })),
       vscode.ConfigurationTarget.Global
     );
   }
@@ -93,12 +93,29 @@ export interface TabEntry {
   detail?: string;
 }
 
-/** Quick pick over the open tabs with their status; returns the picked tab's id */
-export async function pickTab(entries: TabEntry[]): Promise<string | undefined> {
-  const picked = await vscode.window.showQuickPick(entries, {
-    placeHolder: 'Switch to terminal tab'
+/**
+ * Quick pick over the open tabs with their status, most recently used first,
+ * like Ctrl+Tab in the editor; returns the picked tab's id. `active` is the
+ * entry selected at first: 1, the previously used tab, or -1, the least
+ * recently used.
+ */
+export function pickTab(entries: TabEntry[], active: 1 | -1 = 1): Promise<string | undefined> {
+  const pick = vscode.window.createQuickPick<TabEntry>();
+  pick.placeholder = 'Switch to terminal tab';
+  pick.items = entries;
+  const preselected = active === 1 ? entries[1] : entries[entries.length - 1];
+  if (preselected) pick.activeItems = [preselected];
+  return new Promise((resolve) => {
+    pick.onDidAccept(() => {
+      resolve(pick.selectedItems[0]?.id);
+      pick.hide();
+    });
+    pick.onDidHide(() => {
+      resolve(undefined);
+      pick.dispose();
+    });
+    pick.show();
   });
-  return picked?.id;
 }
 
 export interface BusyTab {
@@ -106,22 +123,28 @@ export interface BusyTab {
   label: string;
   /** The profile's name, e.g. `Claude Code` */
   agent: string;
-  working: boolean;
+  /** Why closing would lose something */
+  reason: 'working' | 'waiting' | 'draft';
 }
 
+const REASONS: Record<BusyTab['reason'], string> = {
+  working: 'is still working',
+  waiting: 'is waiting for your input',
+  draft: 'has a message you have not sent'
+};
+
 /**
- * Asks before closing tabs whose agent is working or waiting for an answer.
+ * Asks before closing tabs whose agent is working, waiting for an answer or
+ * has unsent input.
  * "Don't Ask Again" turns off `agentTabs.confirmClose`.
  */
 export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
   const [first] = busy;
   const single = busy.length === 1 && first;
-  const message = single
-    ? `Close "${first.label}"?`
-    : `Close ${String(busy.length)} tabs with running agents?`;
+  const message = single ? `Close "${first.label}"?` : `Close ${String(busy.length)} tabs?`;
   const detail = single
-    ? `${first.agent} is ${first.working ? 'still working' : 'waiting for your input'}. Closing the tab ends its session.`
-    : 'Their agents are working or waiting for input. Closing the tabs ends their sessions.';
+    ? `${first.agent} ${REASONS[first.reason]}. Closing the tab ends its session.`
+    : 'Their agents are working, waiting for input or have a message you have not sent. Closing the tabs ends their sessions.';
   const close = busy.length === 1 ? 'Close' : 'Close All';
   const dontAsk = "Close and Don't Ask Again";
 

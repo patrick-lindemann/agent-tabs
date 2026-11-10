@@ -20,9 +20,17 @@ Tabs take their name from the agent's session: Claude Code's conversation summar
 
 ### Every agent, one place
 
-Open any agent from the `+ ⌄` menu, with its logo. Agent Tabs finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue`, `env MODEL=fast pi` or `tmux new-session codex` all work, and Custom Command runs anything else with completion for its flags.
+Open any agent from the `+ ⌄` menu, with its logo. Agent Tabs finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue` or `env MODEL=fast pi` work, and Custom Command runs anything else with completion for its flags.
 
 ![The profile menu with installed agents](media/screenshots/profiles.png)
+
+### Agents that keep running
+
+With `agentTabs.multiplexer` set to `tmux` or `abduco`, each tab runs its agent in its own session. The agent keeps working when you close the window or your laptop loses the connection to a remote, and the next window shows the same tabs again, with their status. Closing a tab ends its session.
+
+### Reopen closed tabs
+
+Closed a tab by accident? `Cmd+Shift+T` opens it again and continues its conversation, for Claude Code, pi and Cursor; press it again for the tab closed before. Agent Tabs gives each conversation an ID when the tab starts and remembers the last ten closed tabs of a workspace once a message was sent. A tab with a message you have not sent yet asks before it closes.
 
 ### Works like VS Code
 
@@ -44,19 +52,20 @@ Tabs use the keys you know from editors, clicking `src/app.ts:42` in an agent's 
 | Cursor | `agent` | From prompts | — |
 | Antigravity | `agy` | From prompts | Your title script |
 
-An agent is recognized anywhere in a profile's command line, also behind a wrapper such as `env`, `npx` or `tmux`. Any other program runs too, with a generic icon and prompt-based status. Claude Code reports no status inside tmux.
+An agent is recognized anywhere in a profile's command line, also behind a wrapper such as `env` or `npx`. Any other program runs too, with a generic icon and prompt-based status. To run agents in tmux, use `agentTabs.multiplexer` instead of `tmux` in the command line, which hides their status.
 
 ## Keyboard shortcuts
 
-Active while Agent Tabs has focus.
+The same keys as VS Code's editor tabs, active while Agent Tabs has focus. On Windows and Linux, closing is `Ctrl+Shift+W`, because `Ctrl+W` deletes a word in the agents.
 
 | Action | macOS | Windows / Linux |
 | --- | --- | --- |
-| New tab | `Cmd+T` | `Ctrl+Shift+T` |
-| Close tab | `Cmd+W` | `Ctrl+Shift+W` |
-| Next / previous tab | `Cmd+Alt+→` / `Cmd+Alt+←` | `Ctrl+PageDown` / `Ctrl+PageUp` |
-| Go to tab 1–8 / last tab | `Cmd+1` … `Cmd+9` | `Alt+1` … `Alt+9` |
-| Switch tab… | `Ctrl+Tab` | `Ctrl+Tab` |
+| New tab | `Cmd+N` | `Ctrl+N` |
+| Close tab | `Cmd+W` | `Ctrl+Shift+W`, `Ctrl+F4` (Windows) |
+| Reopen closed tab | `Cmd+Shift+T` | `Ctrl+Shift+T` |
+| Next / previous tab | `Cmd+Alt+→` / `Cmd+Alt+←`, `Cmd+Shift+]` / `Cmd+Shift+[` | `Ctrl+PageDown` / `Ctrl+PageUp` |
+| Go to tab 1–9 / last tab | `Ctrl+1` … `Ctrl+9` / `Ctrl+0`, `Cmd+9` | `Alt+1` … `Alt+9` / `Alt+0` |
+| Recently used tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 
 Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the line, `Cmd+Backspace` and `Option+Backspace` delete to the line start or the previous word, and `Shift+Enter` inserts a new line in agents that support it.
 
@@ -66,9 +75,10 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `agentTabs.profiles` | installed agents | Profile names and the command lines they run, in menu order. `+` opens the first. |
+| `agentTabs.profiles` | installed agents | Profiles in menu order, each with a `command` line and optionally a `name`, `env` and `multiplexer`. `+` opens the first. In a remote window, profiles come from the remote's settings. |
+| `agentTabs.multiplexer` | `none` | Run tabs in `tmux` (3.2+) or `abduco` sessions that outlive the window. |
 | `agentTabs.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
-| `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working or waiting for input. |
+| `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent. |
 
 **Tab names and icons**
 
@@ -118,6 +128,25 @@ curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-tabs/main/i
 - **An agent shows as not installed:** VS Code does not see it on its `PATH`. Start VS Code from a shell where the command works, or add its folder through `agentTabs.env`.
 - **An agent needs shell aliases or functions:** turn off `agentTabs.directMode`.
 - **The terminal stays blank after a VS Code update:** update Agent Tabs; its terminal module must match VS Code's version.
+
+## Sessions that outlive the window
+
+Set `agentTabs.multiplexer` in the settings of the machine the agents run on, e.g. in the remote's user settings, so they keep running while you are disconnected:
+
+```json
+"agentTabs.multiplexer": "tmux",
+"agentTabs.profiles": [
+  { "command": "claude" },
+  { "name": "Shell", "command": "bash", "multiplexer": "none" }
+]
+```
+
+- **tmux** (3.2 or later): sessions run on their own server, `tmux -L agent-tabs`, apart from yours; your `~/.tmux.conf` applies. tmux keeps the agents' status reports to itself, so Agent Tabs reads them from a control client. The output scrolls in tmux's history, with the mouse wheel; `prefix d` detaches the tab, Enter attaches it again.
+- **abduco**: passes everything through, so the tab's scrollback and status work as without a multiplexer. Agents with a full-screen interface redraw when the tab attaches again.
+
+Closing a tab ends its session. Closing the window, reloading it or losing the connection keeps the sessions, and the next window of the same workspace attaches to them, also from another computer. VS Code also keeps a remote's processes for a while after a connection drops; a multiplexer keeps them until you close their tabs. A status that changed while no window was attached shows once the agent reports again.
+
+Agent Tabs tags the sessions it starts with their workspace and profile, on the machine they run on, and only ever lists, attaches to or ends tagged sessions. When a window opens, sessions of other workspaces whose agent has exited are ended; running agents of a workspace keep running until you open it again and close their tabs.
 
 ## Contributing
 
