@@ -33,6 +33,17 @@ function run(
   });
 }
 
+/**
+ * Removes terminal escape sequences. On Windows, ConPTY mixes them into the
+ * output, such as the window title (OSC) and cursor moves (CSI).
+ */
+function plain(output: string): string {
+  return output
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1b[@-_]/g, '');
+}
+
 /** Words that a shell or cmd.exe would change if they were not escaped */
 const TRICKY = ['plain', 'two words', 'a&b|c', 'say "hi"', '100%', 'C:\\dir\\', '^caret', '(x)'];
 
@@ -52,7 +63,7 @@ describe('starting programs through node-pty', () => {
       'console.log(JSON.stringify(process.argv.slice(1)))',
       ...TRICKY
     ]);
-    expect(JSON.parse(output.trim().split(/\r?\n/).pop() ?? '')).toEqual(TRICKY);
+    expect(plain(output)).toContain(JSON.stringify(TRICKY));
   });
 
   describe.runIf(process.platform === 'win32')('on Windows', () => {
@@ -78,8 +89,7 @@ describe('starting programs through node-pty', () => {
       const launch = windowsLaunch(file ?? '', TRICKY, env.ComSpec);
       const { output, code } = await run(launch.file, launch.args, env);
       expect(code).toBe(0);
-      const line = output.split(/\r?\n/).find((text) => text.trim().startsWith('['));
-      expect(JSON.parse(line?.trim() ?? '')).toEqual(TRICKY);
+      expect(plain(output)).toContain(JSON.stringify(TRICKY));
     });
   });
 });
