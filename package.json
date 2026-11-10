@@ -281,11 +281,37 @@
                   "type": "string"
                 },
                 "markdownDescription": "Environment variables for this profile, added to `#agentTabs.env#`."
+              },
+              "multiplexer": {
+                "type": "string",
+                "enum": [
+                  "tmux",
+                  "abduco",
+                  "none"
+                ],
+                "markdownDescription": "Runs this profile in a terminal multiplexer, or not at all with `none`, instead of `#agentTabs.multiplexer#`."
               }
             }
           },
-          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and may have a `name` and `env`:\n\n```json\n[\n  { \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed.",
+          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and may have a `name`, `env` and `multiplexer`:\n\n```json\n[\n  { \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed.",
           "order": 0
+        },
+        "agentTabs.multiplexer": {
+          "type": "string",
+          "enum": [
+            "none",
+            "tmux",
+            "abduco"
+          ],
+          "default": "none",
+          "scope": "machine-overridable",
+          "enumDescriptions": [
+            "Programs end with their window.",
+            "Run each tab in a tmux session (3.2 or later), with status support.",
+            "Run each tab in an abduco session, with status support. Its output is not kept in the tab's scrollback."
+          ],
+          "markdownDescription": "Runs tabs in a terminal multiplexer, so their programs keep running when the window closes or loses its connection to a remote. The next window attaches to them again. Closing a tab ends its session. Profiles can choose their own with `multiplexer`.",
+          "order": 1
         },
         "agentTabs.onExit": {
           "type": "string",
@@ -303,19 +329,19 @@
           ],
           "default": "auto",
           "description": "What happens when the terminal's process exits (e.g. after /exit)",
-          "order": 1
+          "order": 2
         },
         "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
           "description": "Ask before closing a tab whose agent is working or waiting for input, since closing ends its session.",
-          "order": 2
+          "order": 3
         },
         "agentTabs.autoTabTitles": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the profile's name.",
-          "order": 3
+          "order": 4
         },
         "agentTabs.tabTitleWords": {
           "type": "integer",
@@ -323,31 +349,31 @@
           "minimum": 1,
           "maximum": 12,
           "markdownDescription": "Maximum number of words in a tab's name with `#agentTabs.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages.",
-          "order": 4
+          "order": 5
         },
         "agentTabs.monochromeIcons": {
           "type": "boolean",
           "default": false,
           "description": "Show agent logos in the text color instead of their brand colors.",
-          "order": 5
+          "order": 6
         },
         "agentTabs.programStatus": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show agent status (working, needs input, done, error) on tabs. Agents such as pi, Claude Code and Codex report it through the [Program Status Protocol (OSC 7501)](https://www.superlogical.com/rex/docs/build/program-status). Other programs fall back to `#agentTabs.promptNotification#`.",
-          "order": 6
+          "order": 7
         },
         "agentTabs.statusColors": {
           "type": "boolean",
           "default": true,
           "description": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color.",
-          "order": 7
+          "order": 8
         },
         "agentTabs.promptNotification": {
           "type": "boolean",
           "default": true,
           "description": "Show notification indicator on tab when terminal is waiting for user input",
-          "order": 8
+          "order": 9
         },
         "agentTabs.promptNotificationDelay": {
           "type": "number",
@@ -355,7 +381,7 @@
           "minimum": 100,
           "maximum": 2000,
           "description": "Delay in milliseconds before showing the notification after output stops",
-          "order": 9
+          "order": 10
         },
         "agentTabs.promptPatterns": {
           "type": "array",
@@ -364,32 +390,32 @@
           },
           "default": [],
           "description": "Additional regex patterns to detect when terminal is waiting for input (e.g., '^mybot> $'). Built-in patterns detect most CLI AI tools automatically.",
-          "order": 10
+          "order": 11
         },
         "agentTabs.directMode": {
           "type": "boolean",
           "default": true,
           "description": "Run command directly without shell wrapper (cleaner output, but no shell features)",
-          "order": 11
+          "order": 12
         },
         "agentTabs.shell": {
           "type": "string",
           "default": "",
           "description": "Custom shell path (empty = system default)",
-          "order": 12,
+          "order": 13,
           "scope": "machine-overridable"
         },
         "agentTabs.autoRun": {
           "type": "boolean",
           "default": true,
           "description": "With directMode off: run the profile's command in the shell when a tab opens",
-          "order": 13
+          "order": 14
         },
         "agentTabs.env": {
           "type": "object",
           "default": {},
           "description": "Additional environment variables",
-          "order": 14,
+          "order": 15,
           "scope": "machine-overridable"
         }
       }

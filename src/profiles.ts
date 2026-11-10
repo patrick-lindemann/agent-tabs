@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
+import { MULTIPLEXER_IDS, type MultiplexerId } from './terminal/multiplexer';
 import type { AgentId, LaunchSpec } from './types';
 
 interface AgentDefinition {
@@ -140,6 +141,12 @@ export interface ProfileSetting {
   command: string;
   name?: string;
   env?: Record<string, string>;
+  multiplexer?: MultiplexerId | 'none';
+}
+
+/** `agentTabs.multiplexer` or a profile's `multiplexer`, if valid */
+export function multiplexerSetting(value: unknown): MultiplexerId | 'none' {
+  return MULTIPLEXER_IDS.includes(value as MultiplexerId) ? (value as MultiplexerId) : 'none';
 }
 
 /**
@@ -158,7 +165,7 @@ export function migrateProfiles(setting: unknown): ProfileSetting[] | undefined 
 
 /**
  * Resolves `agentTabs.profiles`, a list of profiles with a command line and
- * optionally a name and environment variables, in the order of the setting.
+ * optionally a name, environment variables and a multiplexer, in the order of the setting.
  * Without a name, a profile is named after its agent or program. Invalid
  * entries are skipped and described in `problems`. The table format from 2.0
  * is still read.
@@ -178,7 +185,7 @@ export function resolveProfiles(
     problems.push('it must be a list of profiles');
   }
   for (const [index, entry] of (list ?? []).entries()) {
-    const { command, name, env } = (
+    const { command, name, env, multiplexer } = (
       typeof entry === 'object' && entry !== null ? entry : {}
     ) as Record<string, unknown>;
     const position = `profile ${index + 1}`;
@@ -197,10 +204,19 @@ export function resolveProfiles(
         Object.values(env).some((value) => typeof value !== 'string'))
     ) {
       problems.push(`the env of ${position} must map names to text`);
+    } else if (
+      multiplexer !== undefined &&
+      multiplexer !== 'none' &&
+      !MULTIPLEXER_IDS.includes(multiplexer as MultiplexerId)
+    ) {
+      problems.push(
+        `the multiplexer of ${position} must be ${[...MULTIPLEXER_IDS, 'none'].join(', ')}`
+      );
     } else {
       const launch = launchFromWords(name?.trim() ?? '', words, command.trim(), programStatus);
       launch.label ||= defaultLabel(launch);
       launch.env = { ...(env as Record<string, string> | undefined) };
+      if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
     }
   }

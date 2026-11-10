@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `agentTabs.multiplexer` runs tabs in tmux (3.2 or later) or abduco sessions that keep running when the window closes or loses its connection to a remote; the next window attaches to them again. Status works inside tmux too. Profiles can choose their own with `multiplexer`, or `none`
+
 ### Changed
 
 - `agentTabs.profiles` is a list again: each profile has a `command` and optionally a `name` and `env`, e.g. `[{ "command": "claude --continue" }, { "name": "Pi fast", "command": "pi", "env": { "MODEL": "fast" } }]`. A profile without a name is named after its agent or program. Tables of names and command lines from 2.0 are converted on startup

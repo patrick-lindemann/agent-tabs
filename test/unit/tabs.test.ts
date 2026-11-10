@@ -2,7 +2,13 @@ import { createRequire } from 'node:module';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConfigManager } from '../../src/config';
 import { launchForCommand } from '../../src/profiles';
-import { Tabs, type TabsHost } from '../../src/terminal/tabs';
+import {
+  type Multiplexer,
+  type OpenResult,
+  type SessionOptions,
+  setMultiplexer
+} from '../../src/terminal/multiplexer';
+import { type SavedTab, Tabs, type TabsHost } from '../../src/terminal/tabs';
 import type { ExtensionMessage, IPty, OnExitAction, TerminalConfig } from '../../src/types';
 import { status } from './agents';
 
@@ -83,7 +89,7 @@ afterAll(() => {
 });
 
 // Commands found on the PATH; the real missingCommand checks them through isInstalled
-const installed = vi.hoisted(() => new Set(['claude', 'codex', 'pi', 'tmux']));
+const installed = vi.hoisted(() => new Set(['claude', 'codex', 'pi', 'tmux', 'abduco']));
 vi.mock('node:fs', async (original) => {
   const fs = await original<typeof import('node:fs')>();
   const known = (file: string) => installed.has(file.split(/[\\/]/).pop() ?? '');
@@ -111,6 +117,7 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     confirmClose: true,
     monochromeIcons: false,
     profiles: [launchForCommand('claude', [], true)],
+    multiplexer: 'none',
     ...overrides
   };
 }
@@ -128,7 +135,14 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
     isAttached: () => host.attached
   };
   const manager = { getConfig: () => current } as unknown as ConfigManager;
-  const tabs = new Tabs(manager, host);
+  const store = {
+    saved: [] as SavedTab[],
+    get: () => store.saved,
+    set: (tabs: SavedTab[]) => {
+      store.saved = tabs;
+    }
+  };
+  const tabs = new Tabs(manager, host, store);
   const output = (id: string) =>
     posted
       .filter((m): m is Extract<ExtensionMessage, { type: 'output' }> => m.type === 'output')
@@ -138,6 +152,7 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
   return {
     tabs,
     host,
+    store,
     posted,
     output,
     setOnExit: (onExit: OnExitAction) => {
@@ -558,5 +573,228 @@ describe('reset', () => {
     expect(spawned.every((pty) => pty.killed)).toBe(true);
     expect(tabs.state.count).toBe(0);
     expect(tabs.state.getActiveId()).toBeUndefined();
+  });
+});
+
+/** A tmux-like multiplexer whose sessions live in memory */
+class FakeMultiplexer implements Multiplexer {
+  readonly id = 'tmux';
+  readonly command = 'tmux';
+  /** Running sessions and the exit code of their program once it ended */
+  readonly sessions = new Map<string, { options: SessionOptions; exitCode?: number }>();
+  readonly killed: string[] = [];
+  readonly replies: string[] = [];
+  tapData: (data: string) => void = () => {};
+  tapDisposed = 0;
+  fail: string | undefined;
+
+  open(options: SessionOptions, onData: (data: string) => void): Promise<OpenResult> {
+    if (this.fail) return Promise.reject(new Error(this.fail));
+    const existing = this.sessions.get(options.session);
+    if (existing?.exitCode !== undefined) return Promise.resolve({ exitCode: existing.exitCode });
+    if (!existing) this.sessions.set(options.session, { options });
+    this.tapData = onData;
+    return Promise.resolve({
+      client: { command: 'tmux', args: ['attach-session', '-t', options.session] },
+      tap: {
+        reply: (data) => this.replies.push(data),
+        dispose: () => this.tapDisposed++
+      },
+      created: !existing
+    });
+  }
+
+  exists(session: string): Promise<boolean> {
+    return Promise.resolve(this.sessions.has(session));
+  }
+
+  ended(session: string, clientCode: number): Promise<number | undefined> {
+    const entry = this.sessions.get(session);
+    return Promise.resolve(entry ? entry.exitCode : clientCode);
+  }
+
+  kill(session: string): Promise<void> {
+    this.killed.push(session);
+    this.sessions.delete(session);
+    return Promise.resolve();
+  }
+}
+
+describe('tabs in a multiplexer', () => {
+  let tmux: FakeMultiplexer;
+  beforeEach(() => {
+    tmux = new FakeMultiplexer();
+    setMultiplexer(tmux, 'tmux');
+  });
+  afterEach(() => {
+    setMultiplexer(undefined, 'tmux');
+  });
+
+  const sessionOf = (instance: { session?: { name: string } }) => instance.session?.name ?? '';
+
+  it('runs the profile in a session and shows it with the client', async () => {
+    const { tabs, instance, pty, store } = setup({ multiplexer: 'tmux', env: { A: '1' } });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    expect(session).toMatch(/^agent-tabs-/);
+    expect(tmux.sessions.get(session)?.options).toMatchObject({
+      command: 'claude',
+      args: [],
+      env: expect.objectContaining({ A: '1' }) as unknown
+    });
+    expect(pty().file).toBe('tmux');
+    expect(store.saved).toEqual([expect.objectContaining({ session: instance(id).session })]);
+  });
+
+  it('runs a profile without a session when it says none', async () => {
+    const { tabs, pty } = setup({ multiplexer: 'tmux' });
+    await tabs.create({ ...launchForCommand('claude', [], true), multiplexer: 'none' });
+    await vi.runAllTimersAsync();
+    expect(pty().file).toBe('claude');
+    expect(tmux.sessions.size).toBe(0);
+  });
+
+  it('reads status from the tap and replies through it', async () => {
+    const { tabs, pty, status: tabStatus } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    // What the client draws carries no signals of the program
+    pty().emit(status('state=error'));
+    expect(tabStatus(id)).toBeUndefined();
+    tmux.tapData(`\x1b]7501;?\x1b\\${status('state=working')}`);
+    expect(tabStatus(id)).toBe('working');
+    expect(tmux.replies).toEqual(['\x1b]7501;?\x1b\\']);
+    expect(pty().written).toEqual([]);
+  });
+
+  it('ends the session when the tab closes', async () => {
+    const { tabs, instance, store } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    tabs.close(id);
+    expect(tmux.killed).toEqual([session]);
+    expect(tmux.tapDisposed).toBe(1);
+    expect(store.saved).toHaveLength(1);
+  });
+
+  it('keeps sessions when the view goes away and attaches to them again', async () => {
+    const { tabs, instance, store } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    tabs.reset();
+    expect(tmux.killed).toEqual([]);
+    expect(store.saved).toHaveLength(1);
+
+    await expect(tabs.restore()).resolves.toBe(1);
+    await vi.runAllTimersAsync();
+    const [restored] = tabs.state.getAll();
+    expect(restored.session?.name).toBe(session);
+    expect(tmux.sessions.size).toBe(1);
+  });
+
+  it('drops saved sessions that ended meanwhile', async () => {
+    const { tabs, store } = setup({ multiplexer: 'tmux' });
+    store.saved = [
+      {
+        session: { multiplexer: 'tmux', name: 'gone' },
+        launch: launchForCommand('claude', [], true)
+      }
+    ];
+    await expect(tabs.restore()).resolves.toBe(0);
+    expect(store.saved).toEqual([]);
+  });
+
+  it('handles the end of the program like an exit', async () => {
+    const { tabs, instance, pty, output, store } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    const entry = tmux.sessions.get(session);
+    if (entry) entry.exitCode = 2;
+    pty().exit(0);
+    await vi.runAllTimersAsync();
+    expect(output(id)).toContain('Process exited with code 2');
+    expect(tmux.killed).toEqual([session]);
+    expect(store.saved).toEqual([]);
+
+    tabs.input(id, '\r');
+    await vi.runAllTimersAsync();
+    expect(sessionOf(instance(id))).not.toBe(session);
+    expect(tmux.sessions.size).toBe(1);
+  });
+
+  it('offers to attach again after the client was detached', async () => {
+    const { tabs, instance, pty, output, status: tabStatus } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    const first = pty();
+    first.exit(0);
+    await vi.runAllTimersAsync();
+    expect(output(id)).toContain('Detached');
+    expect(instance(id).detached).toBe(true);
+    expect(tabStatus(id)).toBeUndefined();
+
+    tabs.input(id, '\r');
+    await vi.runAllTimersAsync();
+    expect(pty()).not.toBe(first);
+    expect(sessionOf(instance(id))).toBe(session);
+
+    pty().exit(0);
+    await vi.runAllTimersAsync();
+    tabs.input(id, '\x1b');
+    expect(tabs.state.get(id)).toBeUndefined();
+    expect(tmux.killed).toEqual([session]);
+  });
+
+  it('shows a program that ended while no client was attached', async () => {
+    const { tabs, store, output } = setup({ multiplexer: 'tmux' });
+    tmux.sessions.set('done', { options: {} as SessionOptions, exitCode: 1 });
+    store.saved = [
+      {
+        session: { multiplexer: 'tmux', name: 'done' },
+        launch: launchForCommand('claude', [], true)
+      }
+    ];
+    await tabs.restore();
+    await vi.runAllTimersAsync();
+    const [tab] = tabs.state.getAll();
+    expect(output(tab.id)).toContain('Process exited with code 1');
+    expect(tmux.killed).toEqual(['done']);
+  });
+
+  it('explains a missing multiplexer', async () => {
+    installed.delete('tmux');
+    try {
+      const { tabs, output } = setup({ multiplexer: 'tmux' });
+      const id = await tabs.create();
+      expect(output(id)).toContain('`tmux` was not found');
+      expect(tmux.sessions.size).toBe(0);
+    } finally {
+      installed.add('tmux');
+    }
+  });
+
+  it('shows an error when the session cannot start', async () => {
+    tmux.fail = 'server exited unexpectedly';
+    const { tabs, output, store } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    expect(output(id)).toContain('server exited unexpectedly');
+    expect(store.saved).toEqual([]);
+  });
+
+  it('ends a session that started after its tab closed', async () => {
+    const { tabs } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await tabs.create();
+    tabs.close(id);
+    await vi.runAllTimersAsync();
+    expect(tmux.sessions.size).toBe(1);
+    expect(tmux.tapDisposed).toBe(1);
   });
 });

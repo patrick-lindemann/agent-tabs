@@ -3,11 +3,14 @@ import { ConfigManager } from '../config';
 import { confirmClose, manageProfiles, pickProfile, pickTab } from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
-import { Tabs } from '../terminal/tabs';
+import { type SavedTab, Tabs } from '../terminal/tabs';
 import type { ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
 import { dispatchMessage, type MessageHandlerContext } from './messages';
+
+/** Workspace state key of the tabs that run in multiplexer sessions */
+const SESSIONS_KEY = 'agentTabs.sessions';
 
 /**
  * The terminal view in the secondary sidebar: connects the webview to the
@@ -21,13 +24,23 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   private readonly picker = new CommandInputPicker();
   private readonly tabs: Tabs;
 
-  constructor(private readonly extensionUri: vscode.Uri) {
-    this.tabs = new Tabs(this.config, {
-      post: (message) => this.post(message),
-      refresh: () => this.refresh(),
-      isVisible: () => this.view?.visible === true,
-      isAttached: () => !this.disposed && this.view !== undefined
-    });
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    workspaceState?: vscode.Memento
+  ) {
+    this.tabs = new Tabs(
+      this.config,
+      {
+        post: (message) => this.post(message),
+        refresh: () => this.refresh(),
+        isVisible: () => this.view?.visible === true,
+        isAttached: () => !this.disposed && this.view !== undefined
+      },
+      workspaceState && {
+        get: () => workspaceState.get<SavedTab[]>(SESSIONS_KEY, []),
+        set: (tabs) => void workspaceState.update(SESSIONS_KEY, tabs)
+      }
+    );
 
     // Pre-load help for the custom command picker (missing commands are handled gracefully)
     const profileCommands = this.config.getConfig().profiles.map((p) => p.command);
@@ -61,9 +74,12 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   // --- Messages from the webview ---
 
+  /** Attaches to the sessions of the last window, or opens the first tab */
   handleReady(cols: number, rows: number): void {
     this.tabs.setSize(cols, rows);
-    void this.createTerminal();
+    void this.tabs.restore().then((restored) => {
+      if (restored === 0) void this.createTerminal();
+    });
   }
 
   handleInput(id: string, data: string): void {

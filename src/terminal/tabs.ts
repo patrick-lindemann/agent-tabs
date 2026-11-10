@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { type ConfigManager, promptConfig } from '../config';
-import { missingCommand } from '../profiles';
-import type { ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
+import { isInstalled, missingCommand } from '../profiles';
+import type { ExtensionMessage, LaunchSpec, SessionRef, TerminalInstance } from '../types';
+import { getMultiplexer, type Multiplexer, type MultiplexerId, type Tap } from './multiplexer';
 import { PromptDetector } from './prompt';
 import { PtyManager } from './pty';
 import { isTerminalReport } from './signals';
@@ -25,6 +26,20 @@ export interface TabsHost {
   isAttached(): boolean;
 }
 
+/** A tab whose program runs in a multiplexer session, kept across windows */
+export interface SavedTab {
+  session: SessionRef;
+  launch: LaunchSpec;
+  cwd?: string;
+  workspaceFolderIndex?: number;
+}
+
+/** Where the tabs with sessions are kept, e.g. the workspace state */
+export interface TabStore {
+  get(): SavedTab[];
+  set(tabs: SavedTab[]): void;
+}
+
 /**
  * The open tabs and their processes: opening, closing, switching, restarting
  * and what happens when a process exits.
@@ -34,17 +49,20 @@ export class Tabs {
   readonly pty: PtyManager;
   private readonly prompt: PromptDetector;
   private readonly status = new StatusTracker();
+  /** Raw output of tabs whose multiplexer hides status signals from the client */
+  private readonly taps = new Map<string, Tap>();
   private seenTimer: ReturnType<typeof setTimeout> | undefined;
   private cols = 80;
   private rows = 24;
 
   constructor(
     private readonly config: ConfigManager,
-    private readonly host: TabsHost
+    private readonly host: TabsHost,
+    private readonly store?: TabStore
   ) {
     this.pty = new PtyManager({
       onData: (id, data) => this.handleData(id, data),
-      onExit: (id, code, runtimeMs) => this.handleExit(id, code, runtimeMs),
+      onExit: (id, code, runtimeMs) => void this.clientExited(id, code, runtimeMs),
       onError: (id, error) => this.handleError(id, error)
     });
     this.prompt = new PromptDetector(promptConfig(), (id, waiting) => {
@@ -55,15 +73,43 @@ export class Tabs {
 
   /** Opens a tab. Without a launch it runs the first profile. */
   async create(launch?: LaunchSpec): Promise<string> {
-    const id = this.state.generateId();
     const { path: cwd, folderIndex } = await this.pty.selectWorkingDirectory();
-    const instance: TerminalInstance = {
-      id,
-      isActive: false,
-      workspaceFolderIndex: folderIndex,
+    return this.open({
+      launch: launch ?? this.config.getConfig().profiles[0],
       cwd,
-      launch: launch ?? this.config.getConfig().profiles[0]
-    };
+      workspaceFolderIndex: folderIndex
+    });
+  }
+
+  /**
+   * Opens the tabs whose sessions still run, e.g. after the window reloaded
+   * or reconnected to its remote, and returns how many there are. Sessions
+   * that ended meanwhile are dropped.
+   */
+  async restore(): Promise<number> {
+    const saved = this.store?.get() ?? [];
+    const alive: SavedTab[] = [];
+    for (const tab of saved) {
+      const multiplexer = getMultiplexer(tab.session.multiplexer);
+      if (await multiplexer.exists(tab.session.name).catch(() => false)) {
+        alive.push(tab);
+      }
+    }
+    for (const tab of alive) {
+      this.open({ ...tab, session: { ...tab.session } });
+    }
+    if (alive.length !== saved.length) this.save();
+    return alive.length;
+  }
+
+  private open(tab: {
+    launch: LaunchSpec;
+    cwd?: string;
+    workspaceFolderIndex?: number;
+    session?: SessionRef;
+  }): string {
+    const id = this.state.generateId();
+    const instance: TerminalInstance = { id, isActive: false, ...tab };
 
     // Add the instance first so setActive can find it
     this.state.set(id, instance);
@@ -77,12 +123,15 @@ export class Tabs {
 
   /** Closes a tab without asking; closing the last one opens a new one */
   close(id: string): void {
-    if (!this.state.get(id)) return;
+    const instance = this.state.get(id);
+    if (!instance) return;
 
     this.pty.kill(id);
+    this.endSession(instance);
     this.prompt.removeTerminal(id);
     this.status.forget(id);
     this.state.delete(id);
+    this.save();
     this.host.post({ type: 'removeTab', id });
 
     if (this.state.getActiveId() !== id) {
@@ -126,6 +175,14 @@ export class Tabs {
   /** Typed input. In an exited tab, Enter restarts and Esc closes. */
   input(id: string, data: string): void {
     const instance = this.state.get(id);
+    if (instance?.detached) {
+      if (data === '\r') {
+        this.attachAgain(instance);
+      } else if (data === '\x1b') {
+        this.close(id);
+      }
+      return;
+    }
     if (instance?.exited) {
       if (data === '\r') {
         this.restart(id);
@@ -187,10 +244,12 @@ export class Tabs {
 
   /**
    * Ends all processes and forgets the tabs, e.g. when the webview is
-   * destroyed; the next webview sends `ready` and starts cleanly.
+   * destroyed; the next webview sends `ready` and starts cleanly. Sessions
+   * keep running, and the next webview attaches to them again.
    */
   reset(): void {
     this.pty.killAll();
+    this.disposeTaps();
     this.prompt.dispose();
     this.status.clear();
     this.state.clear();
@@ -199,7 +258,13 @@ export class Tabs {
   dispose(): void {
     clearTimeout(this.seenTimer);
     this.pty.killAll();
+    this.disposeTaps();
     this.prompt.dispose();
+  }
+
+  private disposeTaps(): void {
+    for (const tap of this.taps.values()) tap.dispose();
+    this.taps.clear();
   }
 
   private isInView(instance: TerminalInstance): boolean {
@@ -213,6 +278,7 @@ export class Tabs {
   private restart(id: string): void {
     const instance = this.state.get(id);
     if (!instance) return;
+    this.endSession(instance);
     resetStatus(instance);
     this.status.forget(id);
     this.host.refresh();
@@ -227,15 +293,163 @@ export class Tabs {
    */
   private start(instance: TerminalInstance): void {
     const config = this.config.getConfig();
-    const missing = missingCommand(
-      instance.launch,
-      this.pty.getSearchPath(config, instance.launch)
-    );
+    const searchPath = this.pty.getSearchPath(config, instance.launch);
+    const multiplexer = this.multiplexerFor(instance);
+    if (multiplexer && !isInstalled(multiplexer.command, searchPath)) {
+      this.showNotInstalled(instance, multiplexer.command);
+      return;
+    }
+    // A running session's program was found when it started
+    const missing = instance.session ? undefined : missingCommand(instance.launch, searchPath);
     if (missing) {
       this.showNotInstalled(instance, missing);
       return;
     }
+    if (multiplexer) {
+      void this.startInSession(instance, multiplexer);
+      return;
+    }
     this.pty.spawn(instance.id, config, instance.launch, this.cols, this.rows, instance.cwd);
+  }
+
+  /**
+   * The multiplexer a tab runs in: its session's, or for a new run the
+   * profile's own or `agentTabs.multiplexer`.
+   */
+  private multiplexerFor(instance: TerminalInstance): Multiplexer | undefined {
+    if (instance.session) return getMultiplexer(instance.session.multiplexer);
+    const id = instance.launch.multiplexer ?? this.config.getConfig().multiplexer;
+    return id && id !== 'none' ? getMultiplexer(id) : undefined;
+  }
+
+  /**
+   * Starts the tab's session, or attaches to it when it runs already, and
+   * runs the multiplexer's client in the tab.
+   */
+  private async startInSession(
+    instance: TerminalInstance,
+    multiplexer: Multiplexer
+  ): Promise<void> {
+    const config = this.config.getConfig();
+    const { id, launch } = instance;
+    instance.session ??= { multiplexer: multiplexer.id as MultiplexerId, name: sessionName() };
+    const session = instance.session;
+    this.save();
+
+    let result: Awaited<ReturnType<Multiplexer['open']>>;
+    try {
+      result = await multiplexer.open(
+        {
+          session: session.name,
+          command: launch.command,
+          args: launch.args,
+          env: this.pty.sessionEnvironment(config, launch),
+          cwd: instance.cwd ?? this.pty.defaultWorkingDirectory(),
+          cols: this.cols,
+          rows: this.rows
+        },
+        (data) => this.handleTapData(id, data)
+      );
+    } catch (error) {
+      instance.session = undefined;
+      this.save();
+      this.handleError(id, error instanceof Error ? error.message : String(error));
+      return;
+    }
+
+    // The tab closed or restarted while the session started
+    if (this.state.get(id) !== instance || instance.session !== session) {
+      if ('tap' in result) result.tap?.dispose();
+      if (this.state.get(id) !== instance) void multiplexer.kill(session.name);
+      return;
+    }
+    if ('exitCode' in result) {
+      void this.sessionEnded(instance, result.exitCode, 0);
+      return;
+    }
+    if (result.tap) this.taps.set(id, result.tap);
+    this.pty.spawn(id, config, launch, this.cols, this.rows, instance.cwd, result.client);
+  }
+
+  /** After a tab's session was detached, Enter attaches the tab again */
+  private attachAgain(instance: TerminalInstance): void {
+    instance.detached = false;
+    this.host.refresh();
+    this.host.post({ type: 'clear', id: instance.id });
+    this.start(instance);
+  }
+
+  /** Ends the tab's session and its tap, e.g. when the tab closes */
+  private endSession(instance: TerminalInstance): void {
+    this.taps.get(instance.id)?.dispose();
+    this.taps.delete(instance.id);
+    instance.detached = false;
+    const { session } = instance;
+    if (!session) return;
+    instance.session = undefined;
+    this.save();
+    void getMultiplexer(session.multiplexer).kill(session.name);
+  }
+
+  /**
+   * A multiplexer client exited: the session's program ended, or the client
+   * was only detached, e.g. with tmux's prefix + d, and the program runs on.
+   */
+  private async clientExited(id: string, exitCode: number, runtimeMs: number): Promise<void> {
+    const instance = this.state.get(id);
+    const session = instance?.session;
+    if (!instance || !session) {
+      this.handleExit(id, exitCode, runtimeMs);
+      return;
+    }
+    this.taps.get(id)?.dispose();
+    this.taps.delete(id);
+    const ended = await getMultiplexer(session.multiplexer)
+      .ended(session.name, exitCode)
+      .catch(() => exitCode);
+    if (this.state.get(id) !== instance || instance.session !== session) return;
+    if (ended === undefined) {
+      this.showDetached(instance);
+      return;
+    }
+    await this.sessionEnded(instance, ended, runtimeMs);
+  }
+
+  private async sessionEnded(
+    instance: TerminalInstance,
+    exitCode: number,
+    runtimeMs: number
+  ): Promise<void> {
+    this.endSession(instance);
+    this.handleExit(instance.id, exitCode, runtimeMs);
+  }
+
+  private showDetached(instance: TerminalInstance): void {
+    instance.detached = true;
+    instance.programState = undefined;
+    instance.statusMessage = 'Detached';
+    instance.needsInput = false;
+    this.prompt.removeTerminal(instance.id);
+    this.host.refresh();
+    this.write(
+      instance.id,
+      `\r\n\x1b[2m[Detached; the session runs on. Press Enter to attach again or Esc to end it and close the tab.]\x1b[0m\r\n`
+    );
+  }
+
+  /** Keeps the tabs that run in sessions, to attach to them in the next window */
+  private save(): void {
+    this.store?.set(
+      this.state
+        .getAll()
+        .filter((instance) => instance.session)
+        .map((instance) => ({
+          session: instance.session as SessionRef,
+          launch: instance.launch,
+          cwd: instance.cwd,
+          workspaceFolderIndex: instance.workspaceFolderIndex
+        }))
+    );
   }
 
   /**
@@ -263,11 +477,18 @@ export class Tabs {
   }
 
   private handleData(id: string, data: string): void {
-    this.trackSignals(id, data);
+    // With a tap, the client's output is the multiplexer's drawing
+    if (!this.taps.has(id)) {
+      this.trackSignals(id, data);
+    }
     if (this.host.isAttached()) {
       this.write(id, data);
       this.prompt.onData(id, data);
     }
+  }
+
+  private handleTapData(id: string, data: string): void {
+    this.trackSignals(id, data);
   }
 
   private trackSignals(id: string, data: string): void {
@@ -276,7 +497,11 @@ export class Tabs {
     const changed = this.status.track(instance, data, {
       programStatus: this.config.getConfig().programStatus,
       inView: this.isInView(instance),
-      reply: (reply) => this.pty.write(id, reply)
+      reply: (reply) => {
+        const tap = this.taps.get(id);
+        if (tap) tap.reply(reply);
+        else this.pty.write(id, reply);
+      }
     });
     if (changed) {
       this.host.refresh();
@@ -338,4 +563,9 @@ export class Tabs {
       `\r\nError starting terminal: ${error}\r\n\x1b[2mPress Enter to retry or Esc to close.\x1b[0m\r\n`
     );
   }
+}
+
+/** A session name that tmux and abduco accept and that is unique per tab */
+function sessionName(): string {
+  return `agent-tabs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

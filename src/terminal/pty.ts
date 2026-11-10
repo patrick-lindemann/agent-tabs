@@ -34,6 +34,7 @@ export class PtyManager {
   /**
    * Spawns a new PTY process for the given terminal ID.
    * @param cwd Optional working directory. If not provided, uses default logic.
+   * @param client A multiplexer client to run directly instead of the launch
    */
   spawn(
     terminalId: string,
@@ -41,7 +42,8 @@ export class PtyManager {
     launch: LaunchSpec,
     cols: number,
     rows: number,
-    cwd?: string
+    cwd?: string,
+    client?: { command: string; args: string[] }
   ): void {
     // Kill existing PTY for this terminal if any
     this.kill(terminalId);
@@ -50,11 +52,18 @@ export class PtyManager {
       this.ensureNodePtyLoaded();
       const { shell, env, cwd: defaultCwd } = this.prepareSpawnOptions(config, launch);
       const workingDir = cwd ?? defaultCwd;
-      const pty = this.createPty(config, launch, shell, cols, rows, workingDir, env);
+      const pty = client
+        ? this.nodePty?.spawn(
+            client.command,
+            client.args,
+            this.spawnOptions(cols, rows, workingDir, env)
+          )
+        : this.createPty(config, launch, shell, cols, rows, workingDir, env);
+      if (!pty) throw new Error('node-pty not loaded');
 
       this.ptys.set(terminalId, pty);
       this.setupPtyEventHandlers(terminalId, pty);
-      this.handleAutoRun(pty, config, launch);
+      if (!client) this.handleAutoRun(pty, config, launch);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.callbacks.onError(terminalId, errorMessage);
@@ -155,6 +164,9 @@ export class PtyManager {
 
     // Remove CI flag so CLI agents don't think it's in CI
     delete env.CI;
+    // A tab is not inside the tmux session VS Code may have started in
+    delete env.TMUX;
+    delete env.TMUX_PANE;
 
     return env;
   }
@@ -172,18 +184,28 @@ export class PtyManager {
       throw new Error('node-pty not loaded');
     }
 
-    const spawnOptions = {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      cwd,
-      env
-    };
-
+    const spawnOptions = this.spawnOptions(cols, rows, cwd, env);
     if (config.directMode && launch.command) {
       return this.nodePty.spawn(launch.command, launch.args, spawnOptions);
     }
     return this.nodePty.spawn(shell, [], spawnOptions);
+  }
+
+  private spawnOptions(cols: number, rows: number, cwd: string, env: Record<string, string>) {
+    return { name: 'xterm-256color', cols, rows, cwd, env };
+  }
+
+  /**
+   * The environment variables a multiplexer session gets on top of its
+   * server's: the configured ones and the terminal's color support.
+   */
+  sessionEnvironment(config: TerminalConfig, launch: LaunchSpec): Record<string, string> {
+    return { COLORTERM: 'truecolor', FORCE_COLOR: '1', ...config.env, ...launch.env };
+  }
+
+  /** The working directory a tab starts in without its own */
+  defaultWorkingDirectory(): string {
+    return this.getWorkingDirectory();
   }
 
   private setupPtyEventHandlers(terminalId: string, pty: IPty): void {

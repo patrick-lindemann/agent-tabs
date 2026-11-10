@@ -49,6 +49,8 @@ export interface LaunchSpec {
   agent?: AgentId;
   /** The profile's command line as configured, for menus */
   commandLine: string;
+  /** The profile's own `multiplexer`, over `agentTabs.multiplexer` */
+  multiplexer?: MultiplexerId | 'none';
 }
 
 export interface TerminalConfig {
@@ -65,6 +67,8 @@ export interface TerminalConfig {
   monochromeIcons: boolean;
   /** Validated `agentTabs.profiles`; never empty, the first one opens with + */
   profiles: LaunchSpec[];
+  /** Multiplexer for profiles without their own */
+  multiplexer: MultiplexerId | 'none';
 }
 
 // Terminal instance for multi-tab support
@@ -91,6 +95,16 @@ export interface TerminalInstance {
   unseen?: 'done' | 'error';
   /** The command that could not be found, while the tab shows the hint */
   missing?: string;
+  /** The multiplexer session the tab shows, while one runs */
+  session?: SessionRef;
+  /** The client exited but the session runs on; Enter attaches again */
+  detached?: boolean;
+}
+
+/** A multiplexer session that runs a tab's program */
+export interface SessionRef {
+  multiplexer: MultiplexerId;
+  name: string;
 }
 
 // Host/webview protocol is defined once in the platform-neutral shared module.
@@ -103,6 +117,7 @@ export type {
 } from './protocol';
 
 import type { AgentId } from './protocol';
+import type { MultiplexerId } from './terminal/multiplexer';
 
 // Command help parsing types
 export interface CommandFlag {
