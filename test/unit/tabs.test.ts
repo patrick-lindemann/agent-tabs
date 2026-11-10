@@ -674,6 +674,37 @@ describe('showing the tabs in a view', () => {
     ]);
   });
 
+  it('shows each tab its recent output again and has its program redraw', async () => {
+    const { tabs, posted } = setup();
+    await tabs.attachView();
+    const [id] = tabs.state.getAllIds();
+    tabs.resize(id, 100, 30);
+    spawned[0].emit('hello\r\n');
+    posted.length = 0;
+
+    await tabs.attachView();
+    expect(posted.slice(0, 2)).toEqual([
+      { type: 'createTab', id },
+      { type: 'output', id, data: 'hello\r\n' }
+    ]);
+    expect(spawned[0].size).toEqual([100, 29]);
+    vi.advanceTimersByTime(50);
+    expect(spawned[0].size).toEqual([100, 30]);
+  });
+
+  it('forgets the output of a tab that restarted', async () => {
+    const { tabs, posted, output } = setup();
+    await tabs.attachView();
+    const [id] = tabs.state.getAllIds();
+    spawned[0].emit('old run');
+    spawned[0].exit(1);
+    tabs.input(id, '\r');
+    spawned[1].emit('new run');
+    posted.length = 0;
+    await tabs.attachView();
+    expect(output(id)).toBe('new run');
+  });
+
   it('restores again after the view was reset', async () => {
     const { tabs } = setup();
     await tabs.attachView();

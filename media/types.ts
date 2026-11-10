@@ -23,6 +23,8 @@ export interface TerminalEntry {
   element: HTMLDivElement;
   isAtBottom: boolean;
   lastScrollTop: number;
+  /** The program asked to be told when the color scheme changes (DECSET 2031) */
+  colorSchemeReports: boolean;
 }
 
 // xterm.js theme type (re-export for convenience)

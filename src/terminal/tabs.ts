@@ -39,6 +39,12 @@ const COMMAND_NOT_FOUND = 127;
 /** How long restoring waits for the clients of a previous view to detach */
 const DETACH_WAIT_MS = 1000;
 
+/**
+ * How much of each tab's recent output is kept, in characters, to show it
+ * again in a webview that loaded again, e.g. after Reload Webviews
+ */
+const HISTORY_CHARS = 512 * 1024;
+
 /** How long output that may start a program's notice waits for the rest of it */
 const NOTICE_FLUSH_MS = 100;
 
@@ -94,6 +100,8 @@ export class Tabs {
   /** Hide a notice a tab's program prints when it starts */
   private readonly notices = new Map<string, NoticeFilter>();
   private seenTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Each tab's recent output, as the webview showed it */
+  private readonly history = new Map<string, string>();
   /** Shows output a notice filter held back, when no more came */
   private readonly noticeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tab IDs, most recently shown first */
@@ -178,10 +186,16 @@ export class Tabs {
     }
   }
 
-  /** Sends all open tabs to a view that does not know them yet */
+  /**
+   * Sends all open tabs to a view that does not know them yet, with their
+   * recent output, and asks their programs to draw their screen again
+   */
   private showAll(): void {
     for (const id of this.state.getAllIds()) {
       this.host.post({ type: 'createTab', id });
+      const history = this.history.get(id);
+      if (history) this.host.post({ type: 'output', id, data: history });
+      this.pty.redraw(id);
     }
     const active = this.state.getActiveId();
     if (active) this.host.post({ type: 'switchTab', id: active });
@@ -404,6 +418,7 @@ export class Tabs {
     this.prompt.removeTerminal(id);
     this.status.forget(id);
     this.notices.delete(id);
+    this.history.delete(id);
     this.state.delete(id);
     this.recent = this.recent.filter((other) => other !== id);
     this.host.post({ type: 'removeTab', id });
@@ -594,6 +609,7 @@ export class Tabs {
     this.prompt.dispose();
     this.status.clear();
     this.notices.clear();
+    this.history.clear();
     this.clearNoticeTimers();
     this.state.clear();
     this.recent = [];
@@ -636,7 +652,7 @@ export class Tabs {
     instance.conversation = undefined;
     this.status.forget(id);
     this.refresh();
-    this.host.post({ type: 'clear', id });
+    this.clear(id);
     this.start(instance);
   }
 
@@ -764,7 +780,7 @@ export class Tabs {
   private attachAgain(instance: TerminalInstance): void {
     instance.detached = false;
     this.refresh();
-    this.host.post({ type: 'clear', id: instance.id });
+    this.clear(instance.id);
     this.start(instance);
   }
 
@@ -861,7 +877,27 @@ export class Tabs {
   }
 
   private write(id: string, data: string): void {
+    this.remember(id, data);
     this.host.post({ type: 'output', id, data });
+  }
+
+  private clear(id: string): void {
+    this.history.delete(id);
+    this.host.post({ type: 'clear', id });
+  }
+
+  /**
+   * Keeps a tab's recent output, cut at a line start so it does not begin
+   * inside an escape sequence
+   */
+  private remember(id: string, data: string): void {
+    let history = (this.history.get(id) ?? '') + data;
+    if (history.length > HISTORY_CHARS) {
+      const kept = history.slice(-HISTORY_CHARS);
+      const line = kept.indexOf('\n');
+      history = line >= 0 ? kept.slice(line + 1) : kept;
+    }
+    this.history.set(id, history);
   }
 
   private handleData(id: string, received: string): void {

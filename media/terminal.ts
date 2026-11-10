@@ -42,17 +42,29 @@ export class Terminals {
     this.applyAppearance();
   }
 
-  /** Applies the current colors and font to every terminal */
+  /**
+   * Applies the current colors and font to every terminal, and tells the
+   * programs that asked for it whether the scheme is light or dark now
+   */
   private applyAppearance(): void {
     const theme = this.theme.getTheme();
     const options = this.options();
-    for (const { terminal } of this.entries.values()) {
+    const report = this.colorSchemeReport();
+    for (const [id, entry] of this.entries) {
+      const { terminal } = entry;
+      const changed = terminal.options.theme?.background !== theme.background;
       terminal.options.theme = theme;
       terminal.options.fontSize = options.fontSize;
       terminal.options.fontFamily = options.fontFamily;
       terminal.options.lineHeight = options.lineHeight;
+      if (changed && entry.colorSchemeReports) this.post({ type: 'input', id, data: report });
     }
     this.fitActive();
+  }
+
+  /** The answer to DSR 996: `CSI ? 997 ; 1 n` for dark, `2` for light */
+  private colorSchemeReport(): string {
+    return `\x1b[?997;${this.theme.isLight() ? 2 : 1}n`;
   }
 
   create(id: string): void {
@@ -80,13 +92,30 @@ export class Terminals {
     terminal.loadAddon(new WebLinksAddon(openLink));
     terminal.open(element);
     terminal.registerLinkProvider(new FileLinkProvider(terminal, id, this.post));
+    // Programs ask to be told when the color scheme changes (DECSET 2031),
+    // e.g. pi to switch its own theme; xterm.js does not support it
+    const toggleSchemeReports = (enabled: boolean) => (params: (number | number[])[]) => {
+      if (!params.includes(2031)) return false;
+      entry.colorSchemeReports = enabled;
+      // Other modes in the same sequence still apply
+      return params.length === 1;
+    };
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'h' }, toggleSchemeReports(true));
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'l' }, toggleSchemeReports(false));
+    // And query it (DSR 996), answered like a terminal that supports it
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'n' }, (params) => {
+      if (params[0] !== 996) return false;
+      this.post({ type: 'input', id, data: this.colorSchemeReport() });
+      return true;
+    });
 
     const entry: TerminalEntry = {
       terminal,
       fitAddon,
       element,
       isAtBottom: true,
-      lastScrollTop: 0
+      lastScrollTop: 0,
+      colorSchemeReports: false
     };
     terminal.attachCustomKeyEventHandler((event) => this.handleKey(terminal, id, event));
     terminal.onData((data) => {

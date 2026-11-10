@@ -48,6 +48,12 @@ export class ThemeBuilder {
     };
   }
 
+  /** Whether the theme is light, by VS Code's class on the page */
+  isLight(): boolean {
+    const classes = document.body.classList;
+    return classes.contains('vscode-light') || classes.contains('vscode-high-contrast-light');
+  }
+
   /**
    * Calls `onChange` when VS Code switches the color theme, which changes
    * the classes and variables of the page

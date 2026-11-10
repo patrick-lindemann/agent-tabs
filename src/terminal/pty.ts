@@ -23,6 +23,9 @@ export interface WorkingDirectorySelection {
   folderIndex: number | undefined;
 }
 
+/** How long a redraw keeps the smaller size, so the program notices it */
+const REDRAW_DELAY_MS = 50;
+
 /**
  * Variables of the extension host that would change how programs in a tab
  * run, e.g. `ELECTRON_RUN_AS_NODE` makes Electron apps such as `code` run
@@ -54,6 +57,8 @@ export function hostEnvironment(source: NodeJS.ProcessEnv = process.env): Record
 export class PtyManager {
   private nodePty: INodePty | undefined;
   private readonly ptys = new Map<string, IPty>();
+  /** The size each PTY has now */
+  private readonly sizes = new Map<string, { cols: number; rows: number }>();
   /** The listeners of each PTY, ended with it */
   private readonly listeners = new Map<IPty, IDisposable[]>();
 
@@ -91,6 +96,7 @@ export class PtyManager {
       if (!pty) throw new Error('node-pty not loaded');
 
       this.ptys.set(terminalId, pty);
+      this.sizes.set(terminalId, { cols, rows });
       this.setupPtyEventHandlers(terminalId, pty);
       if (!client) this.handleAutoRun(pty, config, launch, shell);
     } catch (error) {
@@ -254,6 +260,7 @@ export class PtyManager {
           return;
         }
         this.ptys.delete(terminalId);
+        this.sizes.delete(terminalId);
         this.disposeListeners(pty);
         this.callbacks.onExit(terminalId, exitCode, Date.now() - startedAt);
       })
@@ -298,6 +305,22 @@ export class PtyManager {
    */
   resize(terminalId: string, cols: number, rows: number): void {
     this.ptys.get(terminalId)?.resize(cols, rows);
+    this.sizes.set(terminalId, { cols, rows });
+  }
+
+  /**
+   * Makes the program draw its screen again, by changing the terminal's
+   * size for a moment, which programs answer with a redraw
+   */
+  redraw(terminalId: string): void {
+    const pty = this.ptys.get(terminalId);
+    const size = this.sizes.get(terminalId);
+    if (!pty || !size || size.rows < 2) return;
+    pty.resize(size.cols, size.rows - 1);
+    setTimeout(() => {
+      const current = this.sizes.get(terminalId);
+      if (this.ptys.get(terminalId) === pty && current) pty.resize(current.cols, current.rows);
+    }, REDRAW_DELAY_MS);
   }
 
   /**
@@ -313,6 +336,7 @@ export class PtyManager {
         // Ignore errors when killing
       }
       this.ptys.delete(terminalId);
+      this.sizes.delete(terminalId);
     }
   }
 
