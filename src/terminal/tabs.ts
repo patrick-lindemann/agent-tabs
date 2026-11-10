@@ -41,6 +41,13 @@ const DETACH_WAIT_MS = 1000;
 /** How long a tab must stay in view before its result counts as seen */
 const SEEN_DELAY_MS = 1000;
 
+/**
+ * A process that exits sooner did not start properly, e.g. a wrong option;
+ * its tab stays open with the exit code instead of closing or restarting,
+ * which could loop
+ */
+const QUICK_EXIT_MS = 3000;
+
 /** What the tabs need from the view that shows them */
 export interface TabsHost {
   post(message: ExtensionMessage): void;
@@ -50,6 +57,8 @@ export interface TabsHost {
   isVisible(): boolean;
   /** Whether the view exists, so process output has somewhere to go */
   isAttached(): boolean;
+  /** Closes tabs the user asked to close, asking first when they would lose something */
+  requestClose(ids: string[]): void;
 }
 
 /** Where closed tabs are kept for reopening, e.g. the workspace state */
@@ -87,6 +96,13 @@ export class Tabs {
   private savedOpen: string | undefined;
   /** Tabs are being restored; they are kept once all are open */
   private restoring = false;
+  /** The first view's restore; later views of the same tabs only show them */
+  private restored: Promise<void> | undefined;
+  /**
+   * Counts resets of the view, so work that started before one, e.g. a
+   * session that is still starting, does not treat its tab as closed
+   */
+  private generation = 0;
   private cols = 80;
   private rows = 24;
 
@@ -115,14 +131,55 @@ export class Tabs {
     this.host.refresh();
   }
 
-  /** Opens a tab. Without a launch it runs the first profile. */
-  async create(launch?: LaunchSpec): Promise<string> {
-    const { path: cwd, folderIndex } = await this.pty.selectWorkingDirectory();
+  /**
+   * Opens a tab. Without a launch it runs the first profile. Returns
+   * undefined when the user cancelled choosing its folder.
+   */
+  async create(launch?: LaunchSpec): Promise<string | undefined> {
+    const folder = await this.pty.selectWorkingDirectory();
+    if (!folder) return undefined;
+    const { path: cwd, folderIndex } = folder;
     return this.open({
       launch: launch ?? this.config.getConfig().defaultProfile,
       cwd,
       workspaceFolderIndex: folderIndex
     });
+  }
+
+  /**
+   * The view is ready to show tabs. The first time, the tabs of the last
+   * window open again, or the first profile when there are none. A view
+   * that loads again while the tabs still run, e.g. after its webview was
+   * reloaded, gets the open tabs instead.
+   */
+  async attachView(): Promise<void> {
+    if (this.restored) {
+      await this.restored;
+      this.showAll();
+      return;
+    }
+    const generation = this.generation;
+    const restoring = this.restore().then(async () => {
+      // A tab the user opened while restoring waited for sessions counts too
+      if (this.generation === generation && this.state.count === 0) await this.create();
+    });
+    this.restored = restoring;
+    try {
+      await restoring;
+    } catch (error) {
+      if (this.restored === restoring) this.restored = undefined;
+      throw error;
+    }
+  }
+
+  /** Sends all open tabs to a view that does not know them yet */
+  private showAll(): void {
+    for (const id of this.state.getAllIds()) {
+      this.host.post({ type: 'createTab', id });
+    }
+    const active = this.state.getActiveId();
+    if (active) this.host.post({ type: 'switchTab', id: active });
+    this.host.refresh();
   }
 
   /**
@@ -143,6 +200,7 @@ export class Tabs {
    */
   async restore(): Promise<number> {
     const saved = this.config.getConfig().restoreTabs ? (this.openTabs?.get() ?? []) : [];
+    const generation = this.generation;
     let entries = await this.listSessions();
     // Clients of the previous view may still be detaching, e.g. after the
     // window reconnected to its remote
@@ -150,6 +208,8 @@ export class Tabs {
       await new Promise((resolve) => setTimeout(resolve, DETACH_WAIT_MS));
       entries = await this.listSessions();
     }
+    // The view went away meanwhile; the next one restores
+    if (this.generation !== generation) return 0;
     for (const entry of entries) {
       if (!this.isOwn(entry) && entry.ended && !entry.attached) {
         void getMultiplexer(entry.multiplexer).kill(entry.name);
@@ -363,14 +423,18 @@ export class Tabs {
     this.switchTo(ids[(current + step + ids.length) % ids.length]);
   }
 
-  /** Typed input. In an exited tab, Enter restarts and Esc closes. */
+  /**
+   * Typed input. In an exited tab, Enter restarts and Esc closes. In a
+   * detached one, Enter attaches again and Esc closes it and ends its
+   * session, after asking, since the program may still be working.
+   */
   input(id: string, data: string): void {
     const instance = this.state.get(id);
     if (instance?.detached) {
       if (data === '\r') {
         this.attachAgain(instance);
       } else if (data === '\x1b') {
-        this.close(id);
+        this.host.requestClose([id]);
       }
       return;
     }
@@ -457,6 +521,9 @@ export class Tabs {
    * keep running, and the next webview attaches to them again.
    */
   reset(): void {
+    this.generation++;
+    this.restored = undefined;
+    clearTimeout(this.seenTimer);
     this.pty.killAll();
     this.disposeTaps();
     this.prompt.dispose();
@@ -564,6 +631,7 @@ export class Tabs {
       created: Date.now()
     };
     const session = instance.session;
+    const generation = this.generation;
     // The next window attaches to the session instead of starting a new one
     this.saveOpen();
 
@@ -595,10 +663,13 @@ export class Tabs {
       return;
     }
 
-    // The tab closed or restarted while the session started
+    // The tab closed or restarted while the session started. When the
+    // view went away instead, the session runs on for the next view.
     if (this.state.get(id) !== instance || instance.session !== session) {
       if ('tap' in result) result.tap?.dispose();
-      if (this.state.get(id) !== instance) void multiplexer.kill(session.name);
+      if (this.state.get(id) !== instance && this.generation === generation) {
+        void multiplexer.kill(session.name);
+      }
       return;
     }
     if ('exitCode' in result) {
@@ -736,8 +807,9 @@ export class Tabs {
 
   /**
    * `onExit: auto` closes the tab after a clean exit (e.g. `/exit`) and keeps
-   * failed runs open so their output stays readable. `restart` falls back to
-   * the prompt when the process dies right after starting, to avoid a loop.
+   * failed runs open so their output stays readable. A process that dies
+   * right after starting keeps its tab with every setting: closing the last
+   * tab opens a new one and `restart` starts it again, which would loop.
    */
   private handleExit(id: string, exitCode: number, runtimeMs: number): void {
     const instance = this.state.get(id);
@@ -752,11 +824,12 @@ export class Tabs {
     }
 
     const { onExit } = this.config.getConfig();
-    if (onExit === 'close' || (onExit === 'auto' && exitCode === 0)) {
+    const quick = runtimeMs < QUICK_EXIT_MS;
+    if (!quick && (onExit === 'close' || (onExit === 'auto' && exitCode === 0))) {
       this.close(id);
       return;
     }
-    if (onExit === 'restart' && runtimeMs >= 3000) {
+    if (!quick && onExit === 'restart') {
       this.restart(id);
       return;
     }

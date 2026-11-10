@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A new pi tab no longer shows pi's warning that no project session has the tab's conversation ID; the ID is new on purpose
+- A program that exits right after starting no longer opens again and again with `agentTabs.onExit` set to `auto` or `close`: its tab stays open with the exit code, as with `restart`
+- Esc in a detached tab asks before it ends the session, since its agent may still be working
+- Reloading the view's webview shows the open tabs instead of opening them all a second time
+- A session that is still starting when the view closes keeps running for the next view
+- Cancelling the folder choice in a multi-root workspace no longer opens the tab in the first folder
+- No extra tab opens when one was opened while the last window's tabs were restored
 
 ## [3.1.0] - 2026-11-10
 

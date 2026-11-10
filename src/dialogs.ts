@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { missingCommand } from './profiles';
+import type { CloseRisk } from './terminal/state';
 import type { AgentId, LaunchSpec } from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
@@ -125,13 +126,14 @@ export interface BusyTab {
   /** The profile's name, e.g. `Claude Code` */
   agent: string;
   /** Why closing would lose something */
-  reason: 'working' | 'waiting' | 'draft';
+  reason: CloseRisk;
 }
 
 const REASONS: Record<BusyTab['reason'], string> = {
   working: 'is still working',
   waiting: 'is waiting for your input',
-  draft: 'has a message you have not sent'
+  draft: 'has a message you have not sent',
+  session: 'still runs in its detached session'
 };
 
 /**
@@ -145,7 +147,7 @@ export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
   const message = single ? `Close "${first.label}"?` : `Close ${String(busy.length)} tabs?`;
   const detail = single
     ? `${first.agent} ${REASONS[first.reason]}. Closing the tab ends its session.`
-    : 'Their agents are working, waiting for input or have a message you have not sent. Closing the tabs ends their sessions.';
+    : 'Their agents are working, waiting for input, have a message you have not sent or still run in a detached session. Closing the tabs ends their sessions.';
   const close = busy.length === 1 ? 'Close' : 'Close All';
   const dontAsk = "Close and Don't Ask Again";
 

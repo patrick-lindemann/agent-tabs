@@ -3,6 +3,9 @@ import type { TabInfo, TabStatus, TerminalInstance } from '../types';
 import { WORKSPACE_ACCENT_COLORS } from '../types';
 import { hasDraft } from './draft';
 
+/** Why closing a tab would lose something */
+export type CloseRisk = 'working' | 'waiting' | 'draft' | 'session';
+
 const STATUS_LABELS: Record<TabStatus, string> = {
   working: 'Working',
   blocked: 'Needs input',
@@ -179,13 +182,15 @@ export class TerminalStateManager {
 
   /**
    * Why closing a tab would lose something: its agent is working, waiting
-   * for an answer, or has input that was not sent; undefined when nothing.
+   * for an answer, or has input that was not sent, or its detached session
+   * still runs and would end; undefined when nothing.
    */
-  closeRisk(instance: TerminalInstance): 'working' | 'waiting' | 'draft' | undefined {
+  closeRisk(instance: TerminalInstance): CloseRisk | undefined {
+    if (instance.detached) return 'session';
     if (this.isBusy(instance)) {
       return instance.programState === 'working' && !instance.needsInput ? 'working' : 'waiting';
     }
-    if (!instance.exited && !instance.detached && hasDraft(instance.draft)) return 'draft';
+    if (!instance.exited && hasDraft(instance.draft)) return 'draft';
     return undefined;
   }
 

@@ -15,6 +15,7 @@ import type {
   ClosedTab,
   ExtensionMessage,
   IPty,
+  LaunchSpec,
   OnExitAction,
   OpenTab,
   TerminalConfig
@@ -138,17 +139,33 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
   };
 }
 
+/** Tabs whose `create` fails the test instead of returning no tab */
+class TestTabs extends Tabs {
+  override async create(launch?: LaunchSpec): Promise<string> {
+    const id = await super.create(launch);
+    if (!id) throw new Error('no tab opened');
+    return id;
+  }
+}
+
 function setup(overrides: Partial<TerminalConfig> = {}) {
   let current = config(overrides);
   const posted: ExtensionMessage[] = [];
-  const host: TabsHost & { visible: boolean; attached: boolean; refreshes: number } = {
+  const host: TabsHost & {
+    visible: boolean;
+    attached: boolean;
+    refreshes: number;
+    closeRequests: string[][];
+  } = {
     visible: true,
     attached: true,
     refreshes: 0,
+    closeRequests: [],
     post: (message) => posted.push(message),
     refresh: () => host.refreshes++,
     isVisible: () => host.visible,
-    isAttached: () => host.attached
+    isAttached: () => host.attached,
+    requestClose: (ids) => host.closeRequests.push(ids)
   };
   const manager = { getConfig: () => current } as unknown as ConfigManager;
   const closed = {
@@ -165,7 +182,7 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
       open.tabs = tabs;
     }
   };
-  const tabs = new Tabs(manager, host, WORKSPACE, closed, open);
+  const tabs = new TestTabs(manager, host, WORKSPACE, closed, open);
   const output = (id: string) =>
     posted
       .filter((m): m is Extract<ExtensionMessage, { type: 'output' }> => m.type === 'output')
@@ -443,9 +460,33 @@ describe('process exit', () => {
     const { tabs, pty } = setup({ onExit });
     const id = await tabs.create();
     await tabs.create();
+    vi.advanceTimersByTime(3000);
     spawned[0].exit(code);
     expect(tabs.state.get(id) !== undefined).toBe(kept);
     expect(pty()).toBe(spawned[1]);
+  });
+
+  it.each(['auto', 'close'] as const)(
+    'onExit %s keeps a process that exits at once, instead of opening it again',
+    async (onExit) => {
+      const { tabs, output } = setup({ onExit });
+      const id = await tabs.create();
+      spawned[0].exit(0);
+      await vi.runAllTimersAsync();
+      expect(spawned).toHaveLength(1);
+      expect(tabs.state.getAllIds()).toEqual([id]);
+      expect(output(id)).toContain('Process exited with code 0');
+    }
+  );
+
+  it('opens a new tab when the last one closes after a clean run', async () => {
+    const { tabs } = setup({ onExit: 'auto' });
+    const id = await tabs.create();
+    vi.advanceTimersByTime(3000);
+    spawned[0].exit(0);
+    await vi.runAllTimersAsync();
+    expect(spawned).toHaveLength(2);
+    expect(tabs.state.getAllIds()).not.toContain(id);
   });
 
   it('shows the exit code, and Enter restarts the same command', async () => {
@@ -598,6 +639,58 @@ describe('spawn errors', () => {
     tabs.input(id, '\r');
     expect(spawned).toHaveLength(1);
     expect(tabStatus(id)).toBeUndefined();
+  });
+});
+
+describe('showing the tabs in a view', () => {
+  it('opens the first profile when there is nothing to restore', async () => {
+    const { tabs } = setup();
+    await tabs.attachView();
+    expect(tabs.state.count).toBe(1);
+  });
+
+  it('shows the open tabs to a view that loads again, without restoring twice', async () => {
+    const { tabs, open, posted } = setup();
+    open.tabs = [{ launch: CLAUDE }, { launch: CLAUDE, active: true }];
+    await tabs.attachView();
+    const ids = tabs.state.getAllIds();
+    expect(ids).toHaveLength(2);
+    posted.length = 0;
+
+    await tabs.attachView();
+    expect(tabs.state.getAllIds()).toEqual(ids);
+    expect(spawned).toHaveLength(2);
+    expect(posted).toEqual([
+      { type: 'createTab', id: ids[0] },
+      { type: 'createTab', id: ids[1] },
+      { type: 'switchTab', id: ids[1] }
+    ]);
+  });
+
+  it('restores again after the view was reset', async () => {
+    const { tabs } = setup();
+    await tabs.attachView();
+    tabs.reset();
+    await tabs.attachView();
+    expect(tabs.state.count).toBe(1);
+    expect(spawned).toHaveLength(2);
+  });
+
+  it('opens no extra tab when one was opened while restoring', async () => {
+    const tmux = new FakeMultiplexer();
+    setMultiplexer(tmux, 'tmux');
+    try {
+      const { tabs } = setup();
+      tmux.add('other-window', { workspace: '/other' }, { attached: true });
+      tmux.add('mine', {}, { attached: true });
+      const attaching = tabs.attachView();
+      await tabs.create();
+      await vi.advanceTimersByTimeAsync(1000);
+      await attaching;
+      expect(tabs.state.count).toBe(1);
+    } finally {
+      setMultiplexer(undefined, 'tmux');
+    }
   });
 });
 
@@ -858,9 +951,32 @@ describe('tabs in a multiplexer', () => {
 
     pty().exit(0);
     await vi.runAllTimersAsync();
-    tabs.input(id, '\x1b');
+    tabs.close(id);
     expect(tabs.state.get(id)).toBeUndefined();
     expect(tmux.killed).toEqual([session]);
+  });
+
+  it('asks before Esc ends a detached session', async () => {
+    const { tabs, instance, pty, host } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    pty().exit(0);
+    await vi.runAllTimersAsync();
+    tabs.input(id, '\x1b');
+    expect(host.closeRequests).toEqual([[id]]);
+    expect(tabs.state.get(id)).toBeDefined();
+    expect(tmux.killed).toEqual([]);
+    expect(tabs.state.closeRisk(instance(id))).toBe('session');
+  });
+
+  it('keeps a session that started after the view went away', async () => {
+    const { tabs } = setup({ multiplexer: 'tmux' });
+    await tabs.create();
+    tabs.reset();
+    await vi.runAllTimersAsync();
+    expect(tmux.sessions.size).toBe(1);
+    expect(tmux.killed).toEqual([]);
+    expect(tmux.tapDisposed).toBe(1);
   });
 
   it('shows a program of this workspace that ended while no client was attached', async () => {

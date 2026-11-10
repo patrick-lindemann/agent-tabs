@@ -28,6 +28,8 @@ export class Terminals {
   }
 
   create(id: string): void {
+    // A view that loaded again is sent the open tabs, which it may know already
+    if (this.entries.has(id)) return;
     const element = document.createElement('div');
     element.className = 'terminal-wrapper';
     element.id = `terminal-${id}`;

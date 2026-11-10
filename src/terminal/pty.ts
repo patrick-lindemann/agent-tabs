@@ -72,9 +72,10 @@ export class PtyManager {
 
   /**
    * Prompts the user to select a workspace folder if multiple are available.
-   * Returns the selected folder path and its index for color mapping.
+   * Returns the selected folder path and its index for color mapping, or
+   * undefined when the user cancelled.
    */
-  async selectWorkingDirectory(): Promise<WorkingDirectorySelection> {
+  async selectWorkingDirectory(): Promise<WorkingDirectorySelection | undefined> {
     const folders = vscode.workspace.workspaceFolders;
 
     // If no folders or only one, use default behavior (no color indexing)
@@ -98,18 +99,8 @@ export class PtyManager {
       title: 'Choose Working Directory'
     });
 
-    if (selected) {
-      return {
-        path: selected.folder.uri.fsPath,
-        folderIndex: selected.index
-      };
-    }
-
-    // User cancelled - use first folder as default
-    return {
-      path: folders[0].uri.fsPath,
-      folderIndex: 0
-    };
+    // Undefined when the user cancelled, so no tab opens
+    return selected && { path: selected.folder.uri.fsPath, folderIndex: selected.index };
   }
 
   private ensureNodePtyLoaded(): void {

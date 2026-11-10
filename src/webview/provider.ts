@@ -48,7 +48,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         post: (message) => this.post(message),
         refresh: () => this.refresh(),
         isVisible: () => this.view?.visible === true,
-        isAttached: () => !this.disposed && this.view !== undefined
+        isAttached: () => !this.disposed && this.view !== undefined,
+        requestClose: (ids) => void this.requestClose(ids)
       },
       workspaceKey(),
       workspaceState && {
@@ -93,12 +94,13 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   // --- Messages from the webview ---
 
-  /** Attaches to the sessions of the last window, or opens the first tab */
+  /**
+   * Restores the tabs of the last window or opens the first one; a webview
+   * that loaded again gets the tabs that are open
+   */
   handleReady(cols: number, rows: number): void {
     this.tabs.setSize(cols, rows);
-    void this.tabs.restore().then((restored) => {
-      if (restored === 0) void this.createTerminal();
-    });
+    void this.tabs.attachView();
   }
 
   handleInput(id: string, data: string): void {
@@ -150,7 +152,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   // --- Commands ---
 
-  createTerminal(launch?: LaunchSpec): Promise<string> {
+  createTerminal(launch?: LaunchSpec): Promise<string | undefined> {
     return this.tabs.create(launch);
   }
 
@@ -232,7 +234,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         busy.map(({ instance, reason }) => ({
           label: state.getLabel(instance, autoTabTitles, tabTitleWords),
           agent: instance.launch.label,
-          reason: reason as 'working' | 'waiting' | 'draft'
+          reason: reason as NonNullable<typeof reason>
         }))
       );
       // The dialog took focus; the webview focuses the active tab again
