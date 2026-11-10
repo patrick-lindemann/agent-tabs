@@ -99,16 +99,40 @@ describe('recognizing agents', () => {
 describe('the plain terminal', () => {
   it('starts a POSIX shell as a login shell on macOS, like VS Code', () => {
     expect(terminalLaunch('/bin/zsh', 'darwin')).toMatchObject({
-      label: 'zsh',
+      label: 'Terminal',
       command: '/bin/zsh',
       args: ['-l'],
+      commandLine: '/bin/zsh -l',
       terminal: true
     });
     expect(terminalLaunch('/bin/bash', 'linux').args).toEqual([]);
-    expect(terminalLaunch('C:\\Windows\\System32\\cmd.exe', 'win32')).toMatchObject({
-      label: 'cmd',
-      args: []
-    });
+    expect(terminalLaunch('C:\\Windows\\System32\\cmd.exe', 'win32').args).toEqual([]);
+  });
+
+  it('comes after the agents when no profile is configured', () => {
+    const terminal = terminalLaunch('/bin/zsh', 'linux');
+    const { profiles } = resolveProfiles(undefined, false, terminal);
+    expect(profiles.at(-1)).toBe(terminal);
+    expect(profiles[0].agent).toBeDefined();
+    // Configured profiles replace it, so it can be removed
+    const configured = resolveProfiles([{ name: 'P', command: 'pi' }], false, terminal);
+    expect(configured.profiles.map((p) => p.label)).toEqual(['P']);
+  });
+
+  it.each([
+    ['zsh', true],
+    ['/bin/bash -l', true],
+    ['fish --login', true],
+    ['pwsh -NoLogo', true],
+    ['env A=1 zsh', true],
+    ['bash build.sh', false],
+    ['sh -c "echo hi"', false],
+    ['bash -lc pi', false],
+    ['ssh devbox bash', false],
+    ['htop', false]
+  ])('shows %s with the terminal icon: %s', (line, terminal) => {
+    const [profile] = resolveProfiles([{ name: 'P', command: line }], false).profiles;
+    expect(profile.terminal === true).toBe(terminal);
   });
 
   it('has no agent', () => {

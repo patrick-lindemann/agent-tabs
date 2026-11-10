@@ -10,14 +10,12 @@ export type ProfileChoice = { profile: LaunchSpec } | 'custom' | 'manage' | unde
 
 /**
  * Use Profile…: the profiles in their configured order with their logos,
- * then a plain terminal with VS Code's default shell and Custom Command…,
- * then Manage Profiles. VS Code's native view menus cannot follow a
- * setting's order or list user-defined profiles.
+ * then Custom Command…, then Manage Profiles…. VS Code's native view menus
+ * cannot follow a setting's order or list user-defined profiles.
  */
 export async function pickProfile(
   profiles: LaunchSpec[],
   defaultProfile: LaunchSpec,
-  terminal: LaunchSpec,
   monochrome: boolean,
   searchPath: (profile: LaunchSpec) => string,
   extensionUri: vscode.Uri
@@ -37,15 +35,9 @@ export async function pickProfile(
       choice: { profile }
     })),
     { label: '', kind: vscode.QuickPickItemKind.Separator },
-    {
-      label: 'Terminal',
-      description: terminal.commandLine,
-      iconPath: new vscode.ThemeIcon('terminal'),
-      choice: { profile: terminal }
-    },
     { label: 'Custom Command…', iconPath: new vscode.ThemeIcon('edit'), choice: 'custom' },
     { label: '', kind: vscode.QuickPickItemKind.Separator },
-    { label: 'Manage Profiles', choice: 'manage' }
+    { label: 'Manage Profiles…', choice: 'manage' }
   ];
 
   const picked = await vscode.window.showQuickPick(items, {
@@ -65,7 +57,7 @@ function profileIcon(
   extensionUri: vscode.Uri
 ): vscode.IconPath {
   if (!profile.agent) {
-    return new vscode.ThemeIcon('sparkle-filled');
+    return new vscode.ThemeIcon(profile.terminal ? 'terminal' : 'sparkle-filled');
   }
   const icon = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.png`);
   if (!monochrome && BRAND_COLORED.has(profile.agent)) {

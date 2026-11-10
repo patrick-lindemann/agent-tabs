@@ -7,6 +7,7 @@ const vscode = vi.hoisted(() => ({
 }));
 
 vi.mock('vscode', () => ({
+  env: { shell: '/bin/zsh' },
   workspace: {
     getConfiguration: () => ({
       get: (key: string, fallback: unknown) => vscode.settings[key] ?? fallback

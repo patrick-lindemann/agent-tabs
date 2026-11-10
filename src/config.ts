@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { defaultProfile, multiplexerSetting, resolveProfiles } from './profiles';
+import { defaultProfile, multiplexerSetting, resolveProfiles, terminalLaunch } from './profiles';
 import type { PromptDetectorConfig } from './terminal/prompt';
 import type { OnExitAction, TerminalConfig } from './types';
 
@@ -33,7 +33,11 @@ export class ConfigManager {
 
     const config = vscode.workspace.getConfiguration('agentTabs');
     const programStatus = config.get<boolean>('programStatus', true);
-    const { profiles, problems } = resolveProfiles(config.get('profiles'), programStatus);
+    const { profiles, problems } = resolveProfiles(
+      config.get('profiles'),
+      programStatus,
+      terminalLaunch(defaultShell())
+    );
     const fallback = defaultProfile(profiles, config.get('defaultProfile'));
     if (fallback.problem) problems.push(fallback.problem);
     const shown = problems.join('; ');
@@ -79,6 +83,13 @@ export class ConfigManager {
     });
     this.disposables.length = 0;
   }
+}
+
+/** The shell of VS Code's own terminal, or the user's */
+function defaultShell(): string {
+  if (vscode.env.shell) return vscode.env.shell;
+  if (process.platform === 'win32') return process.env.COMSPEC || 'cmd.exe';
+  return process.env.SHELL || '/bin/sh';
 }
 
 const ON_EXIT_ACTIONS: readonly OnExitAction[] = ['auto', 'close', 'restart', 'keep'];

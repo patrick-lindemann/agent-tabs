@@ -158,11 +158,6 @@ export class PtyManager {
     return { shell, env, cwd };
   }
 
-  /** The user's shell, from the environment */
-  defaultShell(): string {
-    return this.getDefaultShell();
-  }
-
   private getDefaultShell(): string {
     if (process.platform === 'win32') {
       return process.env.COMSPEC || 'cmd.exe';

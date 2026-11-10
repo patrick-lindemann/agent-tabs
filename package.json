@@ -152,7 +152,7 @@
       },
       {
         "command": "agentTabs.manageProfiles",
-        "title": "Manage Profiles",
+        "title": "Manage Profiles…",
         "category": "Agent Tabs"
       }
     ],
@@ -362,7 +362,7 @@
               }
             }
           },
-          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and a unique `name`, and may have `env` and `multiplexer`:\n\n```json\n[\n  { \"name\": \"Claude\", \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`) as the program the command line runs, also behind a wrapper such as `env`, `npx` or `ssh <host>`, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed.",
+          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and a unique `name`, and may have `env` and `multiplexer`:\n\n```json\n[\n  { \"name\": \"Claude\", \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`) as the program the command line runs, also behind a wrapper such as `env`, `npx` or `ssh <host>`, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed, then a Terminal profile with VS Code's default shell.",
           "order": 0
         },
         "agentTabs.defaultProfile": {

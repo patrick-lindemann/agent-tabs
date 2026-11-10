@@ -283,7 +283,47 @@ function launchFromWords(
   if (program && statusArgs.length > 0 && !program.shell) {
     all.splice(program.index + 1, 0, ...statusArgs);
   }
-  return { label, command: all[0], args: all.slice(1), env: {}, agent, commandLine };
+  const launch: LaunchSpec = {
+    label,
+    command: all[0],
+    args: all.slice(1),
+    env: {},
+    agent,
+    commandLine
+  };
+  if (program && isInteractiveShell(program, words)) launch.terminal = true;
+  return launch;
+}
+
+/** Shells a tab can run interactively, which get the terminal icon */
+const SHELLS = new Set([
+  'bash',
+  'zsh',
+  'fish',
+  'sh',
+  'dash',
+  'ksh',
+  'mksh',
+  'tcsh',
+  'csh',
+  'nu',
+  'elvish',
+  'xonsh',
+  'pwsh',
+  'powershell',
+  'cmd'
+]);
+
+/**
+ * Whether the program is a shell for typing into, e.g. `zsh -l`, and not
+ * one that runs a script or command, e.g. `bash build.sh` or `sh -c …`
+ */
+function isInteractiveShell(program: Program, words: string[]): boolean {
+  if (program.shell || program.remote || program.package) return false;
+  if (!SHELLS.has(program.name.toLowerCase())) return false;
+  return words
+    .slice(program.index + 1)
+    .every((word) => /^-[^c]*$/i.test(word) && !/^\/c$/i.test(word));
 }
 
 /**
@@ -389,11 +429,12 @@ export function defaultProfile(
  * `problems`.
  *
  * Without any profile, there is one for each known agent that is installed,
- * or for all of them when none is found.
+ * or for all of them when none is found, then `terminal`, a plain shell.
  */
 export function resolveProfiles(
   setting: unknown,
-  programStatus: boolean
+  programStatus: boolean,
+  terminal?: LaunchSpec
 ): { profiles: LaunchSpec[]; problems: string[] } {
   const problems: string[] = [];
   const profiles: LaunchSpec[] = [];
@@ -449,6 +490,7 @@ export function resolveProfiles(
       const { label, command } = AGENTS[agent];
       profiles.push(launchFromWords(label, [command], command, programStatus));
     }
+    if (terminal) profiles.push(terminal);
   }
   return { profiles, problems };
 }
@@ -504,8 +546,9 @@ export function isInstalled(command: string, searchPath = process.env.PATH ?? ''
 }
 
 /**
- * A plain shell, as VS Code's terminal opens it: `shell` is VS Code's
- * default shell. On macOS, POSIX shells start as login shells, as there.
+ * The Terminal profile: a plain shell, as VS Code's terminal opens it.
+ * `shell` is VS Code's default shell. On macOS, POSIX shells start as login
+ * shells, as there.
  */
 export function terminalLaunch(
   shell: string,
@@ -513,12 +556,13 @@ export function terminalLaunch(
 ): LaunchSpec {
   const name = programName(shell);
   const login = platform === 'darwin' && /^(?:bash|zsh|fish|sh|ksh|dash)$/.test(name);
+  const args = login ? ['-l'] : [];
   return {
-    label: name,
+    label: 'Terminal',
     command: shell,
-    args: login ? ['-l'] : [],
+    args,
     env: {},
-    commandLine: shell,
+    commandLine: [shell, ...args].map(quoteWord).join(' '),
     terminal: true
   };
 }
