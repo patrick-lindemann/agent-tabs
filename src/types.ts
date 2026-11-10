@@ -1,4 +1,4 @@
-import type { AgentId } from './protocol';
+import type { AgentId, ProfileIcon } from './protocol';
 import type { Draft } from './terminal/draft';
 import type { MultiplexerId } from './terminal/multiplexer';
 
@@ -61,8 +61,11 @@ export interface LaunchSpec {
   commandLine: string;
   /** The profile's own `multiplexer`, over `agentTabs.multiplexer` */
   multiplexer?: MultiplexerId | 'none';
-  /** VS Code's default shell, from the Terminal entry of the profile menu */
-  terminal?: boolean;
+  /**
+   * The icon of the profile and its tabs: the profile's `icon`, or the
+   * agent's logo, the terminal icon for a shell, else the sparkle
+   */
+  icon: ProfileIcon;
   /**
    * The name of the profile in `agentTabs.profiles` it comes from, so a
    * restored tab runs the profile as it is now; none for a custom command
@@ -164,6 +167,7 @@ export interface SessionRef {
 export type {
   AgentId,
   ExtensionMessage,
+  ProfileIcon,
   TabInfo,
   TabStatus,
   WebviewMessage

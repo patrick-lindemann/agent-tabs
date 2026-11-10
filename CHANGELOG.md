@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The tabs of the last window open again when VS Code starts, in their order and with the same tab active, like editor tabs: Claude Code, pi and Cursor continue their conversation once a message was sent, other tabs start their profile again in their folder. Turn it off with `agentTabs.restoreTabs`
 - A **Terminal** profile, after the agents' profiles, opens VS Code's default shell. Like the others, it is only there while `agentTabs.profiles` is empty, and Manage Profiles… writes it into the setting, where it can be moved or removed
+- A profile's `icon` sets the icon in the menu and on its tabs: an agent's logo, `terminal`, or `sparkle` (also `null`). Without it, the command line decides, as before
 - Profiles that run a shell, e.g. `sh`, `zsh -l` or `bash build.sh`, show the terminal icon, unless the shell runs a known agent
 
 ### Changed

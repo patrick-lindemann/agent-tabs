@@ -140,14 +140,15 @@ export class TabBar {
 
     // The agent's logo, replaced by the status icon while there is a status;
     // replaced only when it changes, so the working animation keeps running
-    const logo = !tab.status && tab.agent !== undefined;
+    const { icon } = tab;
+    const logo = !tab.status && icon !== 'terminal' && icon !== 'sparkle';
     const html = tab.status
       ? STATUS_ICONS[tab.status]
-      : tab.agent
-        ? AGENT_ICONS[tab.agent][monochromeIcons ? 'mono' : 'color']
-        : tab.terminal
-          ? TERMINAL_ICON
-          : IDLE_ICON;
+      : icon === 'terminal'
+        ? TERMINAL_ICON
+        : icon === 'sparkle'
+          ? IDLE_ICON
+          : AGENT_ICONS[icon][monochromeIcons ? 'mono' : 'color'];
     status.className = logo ? 'tab-status tab-logo' : 'tab-status';
     if (html !== element.statusHtml) {
       status.innerHTML = html;

@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
+import { PROFILE_ICONS } from './protocol';
 import { MULTIPLEXER_IDS, type MultiplexerId } from './terminal/multiplexer';
 import { resolveExecutable } from './terminal/windows';
-import type { AgentId, LaunchSpec } from './types';
+import type { AgentId, LaunchSpec, ProfileIcon } from './types';
 import { innerProgram, type Program, programName } from './wrappers';
 
 interface AgentDefinition {
@@ -283,19 +284,11 @@ function launchFromWords(
   if (program && statusArgs.length > 0 && !program.shell) {
     all.splice(program.index + 1, 0, ...statusArgs);
   }
-  const launch: LaunchSpec = {
-    label,
-    command: all[0],
-    args: all.slice(1),
-    env: {},
-    agent,
-    commandLine
-  };
   // A shell, also around a command string, e.g. `sh` in `sh -c 'echo hi'`;
   // a known agent in the string gets the agent's logo instead
   const shell = program?.shell ? innerProgram(words.slice(0, program.index)) : program;
-  if (!agent && shell && isShell(shell)) launch.terminal = true;
-  return launch;
+  const icon: ProfileIcon = agent ?? (shell && isShell(shell) ? 'terminal' : 'sparkle');
+  return { label, command: all[0], args: all.slice(1), env: {}, agent, commandLine, icon };
 }
 
 /** Shells, whose profiles get the terminal icon */
@@ -391,6 +384,8 @@ function agentOfProgram(program: Program): AgentId | undefined {
 export interface ProfileSetting {
   command: string;
   name?: string;
+  /** An icon in place of the one the command line gets; `null` for the sparkle */
+  icon?: ProfileIcon | null;
   env?: Record<string, string>;
   multiplexer?: MultiplexerId | 'none';
 }
@@ -442,7 +437,7 @@ export function resolveProfiles(
     );
   }
   for (const [index, entry] of list.entries()) {
-    const { command, name, env, multiplexer } = (
+    const { command, name, env, multiplexer, icon } = (
       typeof entry === 'object' && entry !== null ? entry : {}
     ) as Record<string, unknown>;
     const position = `profile ${index + 1}`;
@@ -471,10 +466,17 @@ export function resolveProfiles(
       problems.push(
         `the multiplexer of ${position} must be ${[...MULTIPLEXER_IDS, 'none'].join(', ')}`
       );
+    } else if (
+      icon !== undefined &&
+      icon !== null &&
+      !PROFILE_ICONS.includes(icon as ProfileIcon)
+    ) {
+      problems.push(`the icon of ${position} must be one of ${PROFILE_ICONS.join(', ')} or null`);
     } else {
       const launch = launchFromWords(name.trim(), words, command.trim(), programStatus);
       launch.env = { ...(env as Record<string, string> | undefined) };
       launch.profile = launch.label;
+      if (icon !== undefined) launch.icon = (icon as ProfileIcon | null) ?? 'sparkle';
       if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
     }
@@ -559,7 +561,7 @@ export function terminalLaunch(
     args,
     env: {},
     commandLine: [shell, ...args].map(quoteWord).join(' '),
-    terminal: true
+    icon: 'terminal'
   };
 }
 

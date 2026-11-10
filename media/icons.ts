@@ -14,14 +14,14 @@ import hermesIcon from './icons/hermes.svg';
 import opencodeIcon from './icons/opencode.svg';
 import piIcon from './icons/pi.svg';
 import piMonoIcon from './icons/pi-mono.svg';
-import type { TabInfo } from './types';
+import type { AgentId, TabInfo } from './types';
 /**
  * Agent logos (media/icons), from Lobe Icons (MIT,
  * https://github.com/lobehub/lobe-icons) except pi's (https://pi.dev). Each
  * has a version in its brand colors and one in the text color; logos without
  * brand colors only have the latter.
  */
-export const AGENT_ICONS: Record<NonNullable<TabInfo['agent']>, { color: string; mono: string }> = {
+export const AGENT_ICONS: Record<AgentId, { color: string; mono: string }> = {
   claude: { color: claudeIcon, mono: claudeMonoIcon },
   codex: { color: codexIcon, mono: codexIcon },
   antigravity: { color: antigravityIcon, mono: antigravityMonoIcon },

@@ -12,15 +12,35 @@ export type AgentId =
   | 'hermes'
   | 'devin';
 
+/**
+ * The icon of a profile and its tabs: an agent's logo, the terminal icon,
+ * or `sparkle` for any other program
+ */
+export type ProfileIcon = AgentId | 'terminal' | 'sparkle';
+
+export const PROFILE_ICONS: readonly ProfileIcon[] = [
+  'claude',
+  'codex',
+  'antigravity',
+  'gemini',
+  'opencode',
+  'pi',
+  'cursor',
+  'copilot',
+  'grok',
+  'hermes',
+  'devin',
+  'terminal',
+  'sparkle'
+];
+
 export type TabStatus = 'working' | 'blocked' | 'done' | 'error';
 
 export interface TabInfo {
   id: string;
   label: string;
   description: string;
-  agent?: AgentId;
-  /** A shell, shown with the terminal icon */
-  terminal?: boolean;
+  icon: ProfileIcon;
   isActive: boolean;
   accentColor?: string;
   status?: TabStatus;

@@ -55,14 +55,14 @@ function profileIcon(
   monochrome: boolean,
   extensionUri: vscode.Uri
 ): vscode.IconPath {
-  if (!profile.agent) {
-    return new vscode.ThemeIcon(profile.terminal ? 'terminal' : 'sparkle-filled');
+  const { icon } = profile;
+  if (icon === 'terminal') return new vscode.ThemeIcon('terminal');
+  if (icon === 'sparkle') return new vscode.ThemeIcon('sparkle-filled');
+  const file = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.png`);
+  if (!monochrome && BRAND_COLORED.has(icon)) {
+    return file(icon);
   }
-  const icon = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.png`);
-  if (!monochrome && BRAND_COLORED.has(profile.agent)) {
-    return icon(profile.agent);
-  }
-  return { light: icon(`${profile.agent}-light`), dark: icon(`${profile.agent}-dark`) };
+  return { light: file(`${icon}-light`), dark: file(`${icon}-dark`) };
 }
 
 /**

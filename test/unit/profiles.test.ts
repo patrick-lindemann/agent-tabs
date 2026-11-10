@@ -103,7 +103,7 @@ describe('the plain terminal', () => {
       command: '/bin/zsh',
       args: ['-l'],
       commandLine: '/bin/zsh -l',
-      terminal: true
+      icon: 'terminal'
     });
     expect(terminalLaunch('/bin/bash', 'linux').args).toEqual([]);
     expect(terminalLaunch('C:\\Windows\\System32\\cmd.exe', 'win32').args).toEqual([]);
@@ -134,7 +134,32 @@ describe('the plain terminal', () => {
     ['htop', false]
   ])('shows %s with the terminal icon: %s', (line, terminal) => {
     const [profile] = resolveProfiles([{ name: 'P', command: line }], false).profiles;
-    expect(profile.terminal === true).toBe(terminal);
+    expect(profile.icon === 'terminal').toBe(terminal);
+  });
+
+  it.each([
+    [undefined, 'claude'],
+    ['terminal', 'terminal'],
+    ['pi', 'pi'],
+    [null, 'sparkle']
+  ] as const)('uses the icon %s of a profile', (icon, shown) => {
+    const { profiles, problems } = resolveProfiles([{ name: 'P', command: 'claude', icon }], false);
+    expect(problems).toEqual([]);
+    expect(profiles[0].icon).toBe(shown);
+    // The icon changes nothing else
+    expect(profiles[0].agent).toBe('claude');
+  });
+
+  it('skips a profile with an unknown icon, like other invalid entries', () => {
+    const { profiles, problems } = resolveProfiles(
+      [
+        { name: 'P', command: 'claude', icon: 'rocket' },
+        { name: 'Q', command: 'pi' }
+      ],
+      false
+    );
+    expect(profiles.map((profile) => profile.label)).toEqual(['Q']);
+    expect(problems).toEqual([expect.stringContaining('the icon of profile 1 must be one of')]);
   });
 
   it('has no agent', () => {
