@@ -52,6 +52,12 @@ describe('command help', () => {
     expect(calls[0].options.shell).toBeUndefined();
   });
 
+  it('looks for the command on the PATH by default', async () => {
+    const result = await new HelpExecutor({}, spawn).getHelp('no-such-command-agent-tabs');
+    expect(calls).toEqual([]);
+    expect(result.parseErrors).toEqual(['Command not found']);
+  });
+
   it('does not run a command that is not installed', async () => {
     const result = await executor(false).getHelp('make');
     expect(calls).toEqual([]);

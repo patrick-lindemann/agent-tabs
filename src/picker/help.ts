@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { isInstalled } from '../profiles';
+import { isInstalled as onPath } from '../profiles';
 import type { ParsedHelp } from '../types';
 import { CommandHelpParser } from './parser';
 
@@ -25,7 +25,7 @@ export class HelpExecutor {
   constructor(
     options: HelpExecutorOptions = {},
     private readonly spawnHelp: typeof spawn = spawn,
-    private readonly isInstalled: (command: string) => boolean = (command) => isInstalled(command)
+    private readonly isInstalled: (command: string) => boolean = (command) => onPath(command)
   ) {
     this.options = {
       timeout: options.timeout ?? 5000,
