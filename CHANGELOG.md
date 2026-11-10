@@ -5,6 +5,16 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `agentTabs.profiles` is a list again: each profile has a `command` and optionally a `name` and `env`, e.g. `[{ "command": "claude --continue" }, { "name": "Pi fast", "command": "pi", "env": { "MODEL": "fast" } }]`. A profile without a name is named after its agent or program. Tables of names and command lines from 2.0 are converted on startup
+
+### Fixed
+
+- In a remote window, profiles from the local settings no longer mix with the remote's: `agentTabs.profiles`, `agentTabs.shell` and `agentTabs.env` are read from the remote's settings (or the workspace's)
+
 ## [2.0.1] - 2026-11-08
 
 ### Fixed

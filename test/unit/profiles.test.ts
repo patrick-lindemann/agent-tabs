@@ -6,6 +6,7 @@ import {
   isInstalled,
   labelFromTitle,
   launchForCommand,
+  migrateProfiles,
   missingCommand,
   resolveProfiles,
   shortTitle,
@@ -66,7 +67,7 @@ describe('recognizing agents', () => {
     ['claudette', undefined],
     ['zsh', undefined]
   ] as Array<[string, AgentId | undefined]>)('reads %s as %s', (line, agent) => {
-    expect(resolveProfiles({ Profile: line }, false).profiles[0].agent).toBe(agent);
+    expect(resolveProfiles([{ command: line }], false).profiles[0].agent).toBe(agent);
   });
 
   it('labels a custom command with the agent name or the executable', () => {
@@ -89,7 +90,7 @@ describe('status arguments', () => {
   });
 
   it('adds them after codex inside a wrapper', () => {
-    const [profile] = resolveProfiles({ Codex: 'env A=1 codex resume' }, true).profiles;
+    const [profile] = resolveProfiles([{ command: 'env A=1 codex resume' }], true).profiles;
     expect([profile.command, ...profile.args]).toEqual([
       'env',
       'A=1',
@@ -102,7 +103,7 @@ describe('status arguments', () => {
   it.each(['bash -c "codex --full-auto"', 'bash -lc codex'])(
     'leaves a shell command string alone: %s',
     (line) => {
-      const [profile] = resolveProfiles({ Codex: line }, true).profiles;
+      const [profile] = resolveProfiles([{ command: line }], true).profiles;
       expect(profile.agent).toBe('codex');
       expect([profile.command, ...profile.args]).toEqual(splitCommandLine(line));
     }
@@ -116,7 +117,13 @@ describe('status arguments', () => {
 
 describe('resolving the profiles setting', () => {
   it('keeps the order of the settings and their command lines', () => {
-    const { profiles, problems } = resolveProfiles({ B: 'pi', A: 'claude --continue' }, false);
+    const { profiles, problems } = resolveProfiles(
+      [
+        { name: 'B', command: 'pi' },
+        { name: 'A', command: 'claude --continue' }
+      ],
+      false
+    );
     expect(problems).toEqual([]);
     expect(profiles.map((p) => [p.label, p.commandLine])).toEqual([
       ['B', 'pi'],
@@ -124,24 +131,60 @@ describe('resolving the profiles setting', () => {
     ]);
   });
 
+  it('names a profile without a name after its agent or program', () => {
+    const { profiles } = resolveProfiles(
+      [
+        { command: 'env A=1 claude' },
+        { command: '/usr/bin/htop -d 5' },
+        { name: ' ', command: 'pi' }
+      ],
+      false
+    );
+    expect(profiles.map((p) => p.label)).toEqual(['Claude Code', 'htop', 'Pi']);
+  });
+
+  it('keeps the environment of a profile', () => {
+    const [profile] = resolveProfiles([{ command: 'pi', env: { MODEL: 'fast' } }], false).profiles;
+    expect(profile.env).toEqual({ MODEL: 'fast' });
+  });
+
   it('skips invalid entries and says why', () => {
     const { profiles, problems } = resolveProfiles(
-      { ' ': 'pi', Empty: '', Number: 3, Open: "pi 'x", Good: 'pi' },
+      [
+        { name: 'Empty', command: '' },
+        { command: 3 },
+        'pi',
+        { command: "pi 'x" },
+        { name: 4, command: 'pi' },
+        { command: 'pi', env: { A: 1 } },
+        { name: 'Good', command: 'pi' }
+      ],
       false
     );
     expect(profiles.map((p) => p.label)).toEqual(['Good']);
     expect(problems).toEqual([
-      'a profile has no name',
-      '"Empty" needs a command',
-      '"Number" needs a command',
-      'the command of "Open" has an unclosed quote'
+      'profile 1 needs a command',
+      'profile 2 needs a command',
+      'profile 3 needs a command',
+      'the command of profile 4 has an unclosed quote',
+      'the name of profile 5 must be text',
+      'the env of profile 6 must map names to text'
     ]);
   });
 
-  it('rejects a setting that is not a table', () => {
-    expect(resolveProfiles('claude', false).problems).toEqual([
-      'it must map names to command lines'
+  it('still reads the table of names and command lines from 2.0', () => {
+    const { profiles, problems } = resolveProfiles({ B: 'pi', A: 'claude' }, false);
+    expect(problems).toEqual([]);
+    expect(profiles.map((p) => [p.label, p.commandLine])).toEqual([
+      ['B', 'pi'],
+      ['A', 'claude']
     ]);
+    expect(migrateProfiles({ B: 'pi' })).toEqual([{ name: 'B', command: 'pi' }]);
+    expect(migrateProfiles([{ command: 'pi' }])).toBeUndefined();
+  });
+
+  it('rejects a setting that is not a list', () => {
+    expect(resolveProfiles('claude', false).problems).toEqual(['it must be a list of profiles']);
   });
 
   it('offers every agent when none is configured or installed', () => {
@@ -165,12 +208,6 @@ describe('resolving the profiles setting', () => {
     } finally {
       process.env.PATH = saved;
     }
-  });
-
-  it('rejects a list', () => {
-    expect(resolveProfiles([{ id: 'pi' }], false).problems).toEqual([
-      'it must map names to command lines'
-    ]);
   });
 });
 

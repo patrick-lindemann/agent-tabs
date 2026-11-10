@@ -66,7 +66,7 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `agentTabs.profiles` | installed agents | Profile names and the command lines they run, in menu order. `+` opens the first. |
+| `agentTabs.profiles` | installed agents | Profiles in menu order, each with a `command` line and optionally a `name` and `env`. `+` opens the first. In a remote window, profiles come from the remote's settings. |
 | `agentTabs.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
 | `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working or waiting for input. |
 

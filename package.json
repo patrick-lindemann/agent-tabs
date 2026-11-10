@@ -256,12 +256,35 @@
       "title": "Agent Tabs",
       "properties": {
         "agentTabs.profiles": {
-          "type": "object",
-          "default": {},
-          "additionalProperties": {
-            "type": "string"
+          "type": "array",
+          "default": [],
+          "scope": "machine-overridable",
+          "items": {
+            "type": "object",
+            "required": [
+              "command"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "type": "string",
+                "minLength": 1,
+                "markdownDescription": "The command line the tab runs, with arguments written as in a shell, e.g. `claude --continue`."
+              },
+              "name": {
+                "type": "string",
+                "markdownDescription": "Name in the menu and on new tabs. Defaults to the agent's name, e.g. `Claude Code`, or the program's name."
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "markdownDescription": "Environment variables for this profile, added to `#agentTabs.env#`."
+              }
+            }
           },
-          "markdownDescription": "Profiles for new tabs: a name and the command line it runs, in the order listed here. The first one opens with `+`; `⌄` lists all of them. Write arguments as in a shell, with quotes where needed. To set environment variables for one profile, put them before the command with `env`, e.g. `env NAME=value command` (macOS and Linux); `#agentTabs.env#` sets them for all profiles. A known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nWhen empty, there is a profile for each known agent that is installed.",
+          "markdownDescription": "Profiles for new tabs, in menu order. The first one opens with `+`; `⌄` lists all of them. Each profile needs a `command`, the command line it runs with arguments written as in a shell, and may have a `name` and `env`:\n\n```json\n[\n  { \"command\": \"claude --continue\" },\n  { \"name\": \"Pi fast\", \"command\": \"pi\", \"env\": { \"MODEL\": \"fast\" } }\n]\n```\n\nA known agent in the command line (`claude`, `codex`, `agy`, `gemini`, `opencode`, `pi`, `agent`, `copilot`, `grok`, `hermes`, `devin`), also behind a wrapper such as tmux, gives the tab its logo and status support.\n\nIn a remote window, profiles come from the remote's settings, not the local ones. When empty, there is a profile for each known agent that is installed.",
           "order": 0
         },
         "agentTabs.onExit": {
@@ -353,7 +376,8 @@
           "type": "string",
           "default": "",
           "description": "Custom shell path (empty = system default)",
-          "order": 12
+          "order": 12,
+          "scope": "machine-overridable"
         },
         "agentTabs.autoRun": {
           "type": "boolean",
@@ -365,7 +389,8 @@
           "type": "object",
           "default": {},
           "description": "Additional environment variables",
-          "order": 14
+          "order": 14,
+          "scope": "machine-overridable"
         }
       }
     }

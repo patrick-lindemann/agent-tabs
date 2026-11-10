@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { missingCommand } from './profiles';
+import { migrateProfiles, missingCommand } from './profiles';
 import type { AgentId, LaunchSpec } from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
@@ -70,20 +70,44 @@ function profileIcon(
  */
 export async function manageProfiles(profiles: LaunchSpec[]): Promise<void> {
   const config = vscode.workspace.getConfiguration('agentTabs');
-  const inspected = config.inspect<Record<string, string>>('profiles');
+  const inspected = config.inspect<unknown[]>('profiles');
   const isSet = [
     inspected?.globalValue,
     inspected?.workspaceValue,
     inspected?.workspaceFolderValue
-  ].some((value) => value !== undefined && Object.keys(value).length > 0);
+  ].some((value) => Array.isArray(value) && value.length > 0);
   if (!isSet) {
     await config.update(
       'profiles',
-      Object.fromEntries(profiles.map((profile) => [profile.label, profile.commandLine])),
+      profiles.map((profile) => ({ name: profile.label, command: profile.commandLine })),
       vscode.ConfigurationTarget.Global
     );
   }
   await vscode.commands.executeCommand('workbench.action.openSettings', 'agentTabs.profiles');
+}
+
+/**
+ * Rewrites `agentTabs.profiles` from the table of 2.0 into the list, in the
+ * user and workspace settings that still have a table. Profiles written as a
+ * table keep working until then.
+ */
+export async function migrateProfileSettings(): Promise<void> {
+  const config = vscode.workspace.getConfiguration('agentTabs');
+  const inspected = config.inspect('profiles');
+  const targets: Array<[unknown, vscode.ConfigurationTarget]> = [
+    [inspected?.globalValue, vscode.ConfigurationTarget.Global],
+    [inspected?.workspaceValue, vscode.ConfigurationTarget.Workspace]
+  ];
+  for (const [value, target] of targets) {
+    const list = migrateProfiles(value);
+    if (list) {
+      try {
+        await config.update('profiles', list, target);
+      } catch {
+        // A read-only settings file keeps the table, which is still read
+      }
+    }
+  }
 }
 
 export interface TabEntry {

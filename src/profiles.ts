@@ -135,10 +135,33 @@ function agentOf(word: string): AgentId | undefined {
   return AGENT_IDS.find((id) => AGENTS[id].command === name || AGENTS[id].aliases?.includes(name));
 }
 
+/** A profile as written in `agentTabs.profiles` */
+export interface ProfileSetting {
+  command: string;
+  name?: string;
+  env?: Record<string, string>;
+}
+
 /**
- * Resolves `agentTabs.profiles`, a table of names and command lines, in
- * the order of the settings. Invalid entries are skipped and described in
- * `problems`.
+ * Converts the table of names and command lines from 2.0 into the list of
+ * profiles, or returns undefined for anything else.
+ */
+export function migrateProfiles(setting: unknown): ProfileSetting[] | undefined {
+  if (typeof setting !== 'object' || setting === null || Array.isArray(setting)) {
+    return undefined;
+  }
+  return Object.entries(setting).map(([name, command]) => ({
+    name,
+    command: typeof command === 'string' ? command : ''
+  }));
+}
+
+/**
+ * Resolves `agentTabs.profiles`, a list of profiles with a command line and
+ * optionally a name and environment variables, in the order of the setting.
+ * Without a name, a profile is named after its agent or program. Invalid
+ * entries are skipped and described in `problems`. The table format from 2.0
+ * is still read.
  *
  * Without any profile, there is one for each known agent that is installed,
  * or for all of them when none is found.
@@ -149,25 +172,36 @@ export function resolveProfiles(
 ): { profiles: LaunchSpec[]; problems: string[] } {
   const problems: string[] = [];
   const profiles: LaunchSpec[] = [];
-  const table = setting;
+  const list = Array.isArray(setting) ? setting : migrateProfiles(setting);
 
-  if (
-    table !== undefined &&
-    (typeof table !== 'object' || table === null || Array.isArray(table))
-  ) {
-    problems.push('it must map names to command lines');
-  } else {
-    for (const [name, line] of Object.entries(table ?? {})) {
-      const words = typeof line === 'string' ? splitCommandLine(line) : undefined;
-      if (!name.trim()) {
-        problems.push('a profile has no name');
-      } else if (typeof line !== 'string' || !line.trim()) {
-        problems.push(`"${name}" needs a command`);
-      } else if (!words?.length) {
-        problems.push(`the command of "${name}" has an unclosed quote`);
-      } else {
-        profiles.push(launchFromWords(name.trim(), words, line.trim(), programStatus));
-      }
+  if (setting !== undefined && list === undefined) {
+    problems.push('it must be a list of profiles');
+  }
+  for (const [index, entry] of (list ?? []).entries()) {
+    const { command, name, env } = (
+      typeof entry === 'object' && entry !== null ? entry : {}
+    ) as Record<string, unknown>;
+    const position = `profile ${index + 1}`;
+    const words = typeof command === 'string' ? splitCommandLine(command) : undefined;
+    if (typeof command !== 'string' || !command.trim()) {
+      problems.push(`${position} needs a command`);
+    } else if (!words?.length) {
+      problems.push(`the command of ${position} has an unclosed quote`);
+    } else if (name !== undefined && typeof name !== 'string') {
+      problems.push(`the name of ${position} must be text`);
+    } else if (
+      env !== undefined &&
+      (typeof env !== 'object' ||
+        env === null ||
+        Array.isArray(env) ||
+        Object.values(env).some((value) => typeof value !== 'string'))
+    ) {
+      problems.push(`the env of ${position} must map names to text`);
+    } else {
+      const launch = launchFromWords(name?.trim() ?? '', words, command.trim(), programStatus);
+      launch.label ||= defaultLabel(launch);
+      launch.env = { ...(env as Record<string, string> | undefined) };
+      profiles.push(launch);
     }
   }
 
@@ -179,6 +213,11 @@ export function resolveProfiles(
     }
   }
   return { profiles, problems };
+}
+
+/** The agent's name, e.g. `Claude Code`, or the program's, e.g. `htop` */
+function defaultLabel(launch: LaunchSpec): string {
+  return launch.agent ? AGENTS[launch.agent].label : path.basename(launch.command);
 }
 
 /**
@@ -232,9 +271,9 @@ export function launchForCommand(
   programStatus: boolean
 ): LaunchSpec {
   const words = [command, ...args];
-  const agent = agentOf(command);
-  const label = agent ? AGENTS[agent].label : path.basename(command);
-  return launchFromWords(label, words, words.map(quoteWord).join(' '), programStatus);
+  const launch = launchFromWords('', words, words.map(quoteWord).join(' '), programStatus);
+  launch.label = defaultLabel(launch);
+  return launch;
 }
 
 type StopwordLanguage = Exclude<keyof typeof stopword, 'removeStopwords'>;
