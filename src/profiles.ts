@@ -160,6 +160,8 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
     noStatus: true,
     subcommands: [
       'about',
+      'agent',
+      'bedrock',
       'create-chat',
       'generate-rule',
       'help',
@@ -168,19 +170,25 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
       'logout',
       'ls',
       'mcp',
+      'models',
+      'persist',
+      'plugin',
       'resume',
       'rule',
       'status',
+      'team',
       'uninstall-shell-integration',
       'update',
       'upgrade',
-      'whoami'
+      'whoami',
+      'worker'
     ],
-    // An unknown ID starts a chat with that ID
+    // `--new-session-id` (not in `--help`) creates the chat with a UUIDv4
+    // the caller chooses; `--resume` opens an existing chat by its ID
     conversation: {
-      start: (id) => ['--resume', id],
+      start: (id) => ['--new-session-id', id],
       resume: (id) => ['--resume', id],
-      conflicts: ['--resume', '--continue', 'resume', 'ls', 'create-chat', '-p', '--print']
+      conflicts: ['--new-session-id', '--resume', '--continue', '-w', '--worktree', '-p', '--print']
     }
   },
   copilot: {

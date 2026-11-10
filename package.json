@@ -524,6 +524,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:pty": "vitest run --config vitest.pty.config.mts",
+    "test:agents": "docker build --quiet --tag agent-tabs-agents test/agents && docker run --rm -v \"$PWD/test/agents:/probe:ro\" agent-tabs-agents sh /probe/probe.sh",
     "test:integration": "sh scripts/headless.sh",
     "test:integration:visible": "npm run compile:tests && vscode-test",
     "compile:tests": "npm run compile && tsc -p tsconfig.tests.json",

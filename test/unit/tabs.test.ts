@@ -1133,11 +1133,13 @@ describe('reopening closed tabs', () => {
       const { tabs, closed, pty } = setup();
       const id = await tabs.create(launchForCommand('cursor-agent', [], true));
       const conversation = args(pty())[1];
-      expect(args(pty())[0]).toBe('--resume');
+      expect(args(pty())[0]).toBe('--new-session-id');
       tabs.input(id, 'fix it');
       tabs.input(id, '\r');
       tabs.close(id);
       expect(closed.tabs).toEqual([expect.objectContaining({ conversation })]);
+      tabs.reopenClosed();
+      expect(args(pty())).toEqual(['--resume', conversation]);
     } finally {
       installed.delete('cursor-agent');
     }

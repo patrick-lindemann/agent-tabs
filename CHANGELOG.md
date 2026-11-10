@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Switch Tab… also finds tabs by their full title and status
 - Custom Command starts with the default profile's whole command line, e.g. `env A=1 pi`, not only its first word
 - Only agents get `FORCE_COLOR=1`, not every program
+- A new Cursor tab starts its chat with `--new-session-id`, which creates a chat with the tab's ID, instead of `--resume` with an ID no chat has; reopening it still uses `--resume`
 - A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
 ### Security
