@@ -211,6 +211,14 @@ describe('tmux sessions', () => {
     await new Tmux(execute).kill('s');
     expect(calls).toEqual([['tmux', '-L', 'agent-tabs', 'kill-session', '-t', '=s']]);
   });
+
+  it('replaces the tag of a session', async () => {
+    const { calls, execute } = fakeRun();
+    await new Tmux(execute).updateTag('s', TAG);
+    expect(calls).toEqual([
+      ['tmux', '-L', 'agent-tabs', 'set-option', '-t', '=s:', '@agent-tabs', encodeTag(TAG)]
+    ]);
+  });
 });
 
 describe('abduco sessions', () => {
@@ -272,6 +280,16 @@ describe('abduco sessions', () => {
       ['pkill', '-f', 'abduco -A running ']
     ]);
     expect(fs.readdirSync(tags)).toEqual([]);
+  });
+
+  it('replaces the tag file of a session', async () => {
+    const abduco = new Abduco(fakeRun([['', LIST]]).execute, tags);
+    await abduco.open({ ...OPTIONS, session: 'detached' });
+    const started = { ...TAG, conversation: { id: 'c', started: true } };
+    await abduco.updateTag('detached', started);
+    await expect(abduco.list()).resolves.toEqual([
+      { name: 'detached', tag: started, ended: false, attached: false }
+    ]);
   });
 });
 

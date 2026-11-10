@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only the program a command line runs counts as its agent: `tmux new -s claude`, `docker run --name codex img` or `git log --author pi` no longer get an agent's arguments, and `python -m agent` is not taken for Cursor
 - No conversation arguments are added in front of a subcommand, e.g. `claude doctor`, `pi install` or `agent login`
 - The example in the description of `agentTabs.profiles` has the `name` every profile needs
+- With `agentTabs.programStatus` off, or before an agent first reports its status, Enter sends a message: closing the tab no longer asks about an unsent message, and the tab can be reopened with its conversation
+- A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
 ## [3.1.0] - 2026-11-10
 

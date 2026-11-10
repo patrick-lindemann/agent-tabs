@@ -35,8 +35,12 @@ export interface SessionTag {
   workspaceFolderIndex?: number;
   /** When the session started, to restore tabs in order */
   created: number;
-  /** The agent's conversation, to reopen the tab after it closes */
-  conversation?: { id: string };
+  /**
+   * The agent's conversation, to reopen the tab after it closes, and whether
+   * a message was sent in it; tags written before 3.2 do not say, and count
+   * as started
+   */
+  conversation?: { id: string; started?: boolean };
 }
 
 /** A session the extension started */
@@ -125,6 +129,8 @@ export interface Multiplexer {
    */
   ended(session: string, clientCode: number): Promise<number | undefined>;
   kill(session: string): Promise<void>;
+  /** Replaces the session's tag, e.g. once its conversation started */
+  updateTag(session: string, tag: SessionTag): Promise<void>;
 }
 
 /** Runs a command and resolves with its output, or rejects when it fails */
@@ -433,6 +439,10 @@ export class Tmux implements Multiplexer {
     await this.tmux(['kill-session', '-t', `=${session}`]).catch(() => undefined);
   }
 
+  async updateTag(session: string, tag: SessionTag): Promise<void> {
+    await this.tmux(['set-option', '-t', paneTarget(session), Tmux.TAG, encodeTag(tag)]);
+  }
+
   private tmux(args: string[]): Promise<string> {
     return this.execute(this.command, ['-L', Tmux.SOCKET, ...args]);
   }
@@ -507,6 +517,10 @@ export class Abduco implements Multiplexer {
       if (tag) entries.push({ name, tag, ended: session.ended, attached: session.attached });
     }
     return entries;
+  }
+
+  async updateTag(session: string, tag: SessionTag): Promise<void> {
+    await fs.promises.writeFile(this.tagFile(session), encodeTag(tag), { mode: 0o600 });
   }
 
   private tagFile(session: string): string {

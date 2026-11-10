@@ -23,6 +23,7 @@ import {
   type Multiplexer,
   type MultiplexerId,
   type SessionEntry,
+  type SessionTag,
   type Tap
 } from './multiplexer';
 import { NoticeFilter } from './notice';
@@ -266,9 +267,12 @@ export class Tabs {
       launch: tag.launch,
       cwd: tag.cwd,
       workspaceFolderIndex: tag.workspaceFolderIndex,
-      session: { multiplexer, name, created: tag.created },
-      // Messages may have been sent since the window closed
-      conversation: tag.conversation && { id: tag.conversation.id, started: true }
+      session: { multiplexer, name, created: tag.created, started: tag.conversation?.started },
+      // Tags of older versions do not say whether a message was sent
+      conversation: tag.conversation && {
+        id: tag.conversation.id,
+        started: tag.conversation.started ?? true
+      }
     });
   }
 
@@ -466,20 +470,54 @@ export class Tabs {
   }
 
   /**
-   * Counts unsent input. For agents that report their status, a message
-   * counts as sent when the agent starts working, since Enter may only
-   * answer a question or pick an entry; for the others on Enter.
+   * Counts unsent input. Once the agent reported its status, a message
+   * counts as sent when it starts working, since Enter may only answer a
+   * question or pick an entry. Before that, and with `programStatus` off,
+   * Enter sends it. An agent that should report but has not yet, e.g. an
+   * older version, gets its conversation marked only by a report, since
+   * Enter may answer a dialog before the first message.
    */
   private trackDraft(instance: TerminalInstance, data: string): void {
     if (data !== '\r') {
       instance.draft = typed(instance.draft ?? 0, data);
-    } else if (!instance.reportsStatus && !reportsStatus(instance.launch.agent)) {
-      instance.draft = 0;
-      if (instance.conversation && !instance.conversation.started) {
-        instance.conversation.started = true;
-        this.saveOpen();
-      }
+      return;
     }
+    const { programStatus } = this.config.getConfig();
+    if (programStatus && instance.reportsStatus) return;
+    instance.draft = 0;
+    if (programStatus && reportsStatus(instance.launch.agent)) return;
+    if (instance.conversation && !instance.conversation.started) {
+      instance.conversation.started = true;
+      this.conversationStarted(instance);
+      this.saveOpen();
+    }
+  }
+
+  /**
+   * Stores in the tab's session that its conversation started, so a window
+   * that attaches to it later continues the conversation
+   */
+  private conversationStarted(instance: TerminalInstance): void {
+    const { session, conversation } = instance;
+    if (!session || !conversation?.started || session.started) return;
+    session.started = true;
+    void getMultiplexer(session.multiplexer)
+      .updateTag(session.name, this.sessionTag(instance, session))
+      .catch(() => {
+        session.started = undefined;
+      });
+  }
+
+  /** What a session stores about its tab */
+  private sessionTag(instance: TerminalInstance, session: SessionRef): SessionTag {
+    return {
+      workspace: this.workspace,
+      launch: instance.launch,
+      conversation: instance.conversation && { ...instance.conversation },
+      cwd: instance.cwd,
+      workspaceFolderIndex: instance.workspaceFolderIndex,
+      created: session.created
+    };
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -632,6 +670,7 @@ export class Tabs {
     };
     const session = instance.session;
     const generation = this.generation;
+    const tag = this.sessionTag(instance, session);
     // The next window attaches to the session instead of starting a new one
     this.saveOpen();
 
@@ -646,14 +685,7 @@ export class Tabs {
           cwd: instance.cwd ?? this.pty.defaultWorkingDirectory(),
           cols: this.cols,
           rows: this.rows,
-          tag: {
-            workspace: this.workspace,
-            launch: instance.launch,
-            conversation: instance.conversation,
-            cwd: instance.cwd,
-            workspaceFolderIndex: instance.workspaceFolderIndex,
-            created: session.created
-          }
+          tag
         },
         (data) => this.handleTapData(id, data)
       );
@@ -677,6 +709,10 @@ export class Tabs {
       return;
     }
     if (result.tap) this.taps.set(id, result.tap);
+    // A new session's tag says what the conversation was when it started;
+    // a message may have been sent since
+    if (result.created && tag.conversation?.started) session.started = true;
+    this.conversationStarted(instance);
     this.pty.spawn(id, config, launch, this.cols, this.rows, instance.cwd, result.client);
   }
 
@@ -801,6 +837,7 @@ export class Tabs {
       }
     });
     if (changed) {
+      this.conversationStarted(instance);
       this.refresh();
     }
   }

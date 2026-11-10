@@ -780,6 +780,12 @@ class FakeMultiplexer implements Multiplexer {
     this.sessions.delete(session);
     return Promise.resolve();
   }
+
+  updateTag(session: string, tag: SessionTag): Promise<void> {
+    const entry = this.sessions.get(session);
+    if (entry) entry.options = { ...entry.options, tag };
+    return Promise.resolve();
+  }
 }
 
 /** An abduco-like multiplexer without sessions */
@@ -790,7 +796,8 @@ const noSessions: Multiplexer = {
   exists: () => Promise.resolve(false),
   list: () => Promise.resolve([]),
   ended: (_session, code) => Promise.resolve(code),
-  kill: () => Promise.resolve()
+  kill: () => Promise.resolve(),
+  updateTag: () => Promise.resolve()
 };
 
 describe('tabs in a multiplexer', () => {
@@ -1010,6 +1017,35 @@ describe('tabs in a multiplexer', () => {
     expect(instance(id).session).toBeUndefined();
   });
 
+  it('stores in the session tag once its conversation started', async () => {
+    const { tabs, instance, pty } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create();
+    await vi.runAllTimersAsync();
+    const session = sessionOf(instance(id));
+    const tag = () => tmux.sessions.get(session)?.options.tag;
+    expect(tag()?.conversation).toEqual({ id: instance(id).conversation?.id, started: false });
+
+    tmux.tapData(status('state=working'));
+    await vi.runAllTimersAsync();
+    expect(tag()?.conversation?.started).toBe(true);
+    expect(pty().file).toBe('tmux');
+  });
+
+  it('attaches to a session whose conversation never started without resuming it', async () => {
+    const { tabs, instance } = setup();
+    tmux.add('fresh', { conversation: { id: 'c1', started: false } });
+    tmux.add('used', { conversation: { id: 'c2', started: true }, created: 2 });
+    tmux.add('old', { conversation: { id: 'c3' }, created: 3 });
+    await tabs.restore();
+    expect(tabs.state.getAll().map((tab) => tab.conversation?.started)).toEqual([
+      false,
+      true,
+      true
+    ]);
+    tabs.close(tabs.state.getAllIds()[0]);
+    expect(instance(tabs.state.getAllIds()[0]).conversation?.id).toBe('c2');
+  });
+
   it('ends a session that started after its tab closed', async () => {
     const { tabs } = setup({ multiplexer: 'tmux' });
     const id = await tabs.create();
@@ -1195,6 +1231,27 @@ describe('asking before closing', () => {
     expect(tabs.state.closeRisk(instance(id))).toBe('working');
     pty().emit(status('state=done'));
     expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it.each([
+    ['with programStatus off', { programStatus: false }, 'claude'],
+    ['for an agent that has not reported yet', {}, 'codex']
+  ] as const)('counts Enter as sending %s', async (_case, overrides, command) => {
+    const { tabs, instance } = setup(overrides);
+    const id = await tabs.create(launchForCommand(command, [], false));
+    tabs.input(id, 'go');
+    tabs.input(id, '\r');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it('starts the conversation on Enter with programStatus off', async () => {
+    const { tabs, instance, closed } = setup({ programStatus: false });
+    const id = await tabs.create();
+    tabs.input(id, 'go');
+    tabs.input(id, '\r');
+    expect(instance(id).conversation?.started).toBe(true);
+    tabs.close(id);
+    expect(closed.tabs).toHaveLength(1);
   });
 
   it('counts Enter as sending for agents without status', async () => {

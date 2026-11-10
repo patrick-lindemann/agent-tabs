@@ -139,6 +139,8 @@ export interface SessionRef {
   name: string;
   /** When the session started, stored in its tag */
   created: number;
+  /** The session's tag says that the conversation started */
+  started?: boolean;
 }
 
 // Host/webview protocol is defined once in the platform-neutral shared module.
