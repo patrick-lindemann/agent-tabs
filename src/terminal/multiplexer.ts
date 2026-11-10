@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -65,6 +66,32 @@ export interface SessionOptions {
   rows: number;
   /** Stored with a new session */
   tag: SessionTag;
+}
+
+/** A word for `sh` that it reads back unchanged */
+function shWord(word: string): string {
+  return `'${word.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Writes environment variables to a new file only the user can read, as
+ * `sh` commands that export them, so their values, e.g. API keys, do not
+ * appear on a command line where every user sees them in `ps`. Returns
+ * its path, or undefined without variables. Names `sh` cannot export are
+ * skipped.
+ */
+export function writeEnvironmentFile(
+  env: Record<string, string>,
+  folder = os.tmpdir()
+): string | undefined {
+  const lines = Object.entries(env)
+    .filter(([key]) => /^[A-Za-z_]\w*$/.test(key))
+    .map(([key, value]) => `export ${key}=${shWord(value)}\n`);
+  if (lines.length === 0) return undefined;
+  const file = path.join(folder, `agent-tabs-env-${randomBytes(8).toString('hex')}`);
+  // `wx` fails on an existing file or link instead of writing through it
+  fs.writeFileSync(file, lines.join(''), { mode: 0o600, flag: 'wx' });
+  return file;
 }
 
 /** Encodes a tag for storing it in one tmux option or file */
@@ -239,14 +266,21 @@ export class Tmux implements Multiplexer {
   constructor(
     private readonly execute: Run = run,
     private readonly spawnControl: (args: string[]) => ChildProcessWithoutNullStreams = (args) =>
-      spawn('tmux', args, { env: clientEnvironment() })
+      spawn('tmux', args, { env: clientEnvironment() }),
+    private readonly envFolder = os.tmpdir()
   ) {}
 
   async open(options: SessionOptions, onData: (data: string) => void): Promise<OpenResult> {
     const { session } = options;
     const created = !(await this.exists(session));
     if (created) {
-      await this.tmux(this.newSession(options));
+      const envFile = writeEnvironmentFile(options.env, this.envFolder);
+      try {
+        await this.tmux(this.newSession(options, envFile));
+      } catch (error) {
+        if (envFile) fs.rmSync(envFile, { force: true });
+        throw error;
+      }
       await this.configureServer();
     } else {
       const exitCode = await this.deadPaneStatus(session);
@@ -265,18 +299,19 @@ export class Tmux implements Multiplexer {
 
   /**
    * The session runs `sh`, which waits for the control client's signal on
-   * the session's channel, runs the program, then stores its exit code and
-   * detaches the clients. `sh` keeps running through Ctrl+C, which the
-   * program handles.
+   * the session's channel, reads and deletes the file with the environment
+   * variables, runs the program, then stores its exit code and detaches the
+   * clients. `sh` keeps running through Ctrl+C, which the program handles.
    */
-  newSession(options: SessionOptions): string[] {
-    const { session, command, args, env, cwd, cols, rows } = options;
+  newSession(options: SessionOptions, envFile = '-'): string[] {
+    const { session, command, args, cwd, cols, rows } = options;
     const tmux = `"$0" -L ${Tmux.SOCKET}`;
     const hold = [
       'trap : INT QUIT',
       `${tmux} wait-for "$1"`,
       'session=$1',
-      'shift',
+      'if [ "$2" != - ]; then . "$2"; rm -f "$2"; fi',
+      'shift 2',
       '"$@"',
       'code=$?',
       `${tmux} set-option -t "=$session:" ${Tmux.EXIT} "$code" ";" detach-client -s "=$session"`,
@@ -294,13 +329,13 @@ export class Tmux implements Multiplexer {
       String(rows),
       '-c',
       cwd,
-      ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
       '--',
       'sh',
       '-c',
       hold,
       this.command,
       session,
+      envFile,
       command,
       ...args,
       ';',
@@ -459,6 +494,9 @@ export class Abduco implements Multiplexer {
   readonly command = 'abduco';
 
   /**
+   * The session gets the environment of the client that starts it, so the
+   * variables pass through the tab's process and not its command line.
+   *
    * @param tags Folder with a file per session holding its tag, since abduco
    *   cannot store one itself
    */

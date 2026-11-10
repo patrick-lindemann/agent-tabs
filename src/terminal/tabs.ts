@@ -234,7 +234,7 @@ export class Tabs {
         } else {
           opened.push(
             this.open({
-              launch: tab.launch,
+              launch: this.current(tab.launch),
               cwd: tab.cwd,
               workspaceFolderIndex: tab.workspaceFolderIndex,
               conversation: tab.conversation ? { id: tab.conversation, started: true } : undefined
@@ -264,7 +264,7 @@ export class Tabs {
     tag
   }: SessionEntry & { multiplexer: MultiplexerId }): string {
     return this.open({
-      launch: tag.launch,
+      launch: this.current(tag.launch),
       cwd: tag.cwd,
       workspaceFolderIndex: tag.workspaceFolderIndex,
       session: { multiplexer, name, created: tag.created, started: tag.conversation?.started },
@@ -284,7 +284,7 @@ export class Tabs {
     if (!this.openTabs || this.restoring || !this.host.isAttached()) return;
     const activeId = this.state.getActiveId();
     const tabs: OpenTab[] = this.state.getAll().map((instance) => ({
-      launch: instance.launch,
+      launch: stored(instance.launch),
       cwd: instance.cwd,
       workspaceFolderIndex: instance.workspaceFolderIndex,
       conversation: instance.conversation?.started ? instance.conversation.id : undefined,
@@ -324,7 +324,7 @@ export class Tabs {
     if (!tab) return false;
     this.closedTabs?.set(rest);
     this.open({
-      launch: tab.launch,
+      launch: this.current(tab.launch),
       cwd: tab.cwd,
       workspaceFolderIndex: tab.workspaceFolderIndex,
       conversation: { id: tab.conversation, started: true }
@@ -332,11 +332,24 @@ export class Tabs {
     return true;
   }
 
+  /**
+   * A stored launch as its profile is now, e.g. after the profile's
+   * command or environment changed. As stored when the profile is gone, it
+   * was a custom command, or the profile now runs another agent, which
+   * could not continue the conversation. A stored launch has no environment.
+   */
+  private current(launch: LaunchSpec): LaunchSpec {
+    if (!launch.profile) return launch;
+    const { profiles } = this.config.getConfig();
+    const profile = profiles.find((other) => other.label === launch.profile);
+    return profile && profile.agent === launch.agent ? profile : launch;
+  }
+
   /** Keeps a closed tab whose conversation can be continued */
   private rememberClosed(instance: TerminalInstance): void {
     if (!this.closedTabs || !instance.conversation?.started) return;
     const tab: ClosedTab = {
-      launch: instance.launch,
+      launch: stored(instance.launch),
       conversation: instance.conversation.id,
       cwd: instance.cwd,
       workspaceFolderIndex: instance.workspaceFolderIndex
@@ -512,7 +525,7 @@ export class Tabs {
   private sessionTag(instance: TerminalInstance, session: SessionRef): SessionTag {
     return {
       workspace: this.workspace,
-      launch: instance.launch,
+      launch: stored(instance.launch),
       conversation: instance.conversation && { ...instance.conversation },
       cwd: instance.cwd,
       workspaceFolderIndex: instance.workspaceFolderIndex,
@@ -899,6 +912,15 @@ export class Tabs {
       `\r\nError starting terminal: ${error}\r\n\x1b[2mPress Enter to retry or Esc to close.\x1b[0m\r\n`
     );
   }
+}
+
+/**
+ * A launch as it is stored for later, in the workspace state or a session's
+ * tag: without its environment, where secrets such as API keys go. The
+ * profile it came from gives it again.
+ */
+function stored(launch: LaunchSpec): LaunchSpec {
+  return { ...launch, env: {} };
 }
 
 /** A session name that tmux and abduco accept and that is unique per tab */

@@ -432,6 +432,7 @@ export function resolveProfiles(
     } else {
       const launch = launchFromWords(name.trim(), words, command.trim(), programStatus);
       launch.env = { ...(env as Record<string, string> | undefined) };
+      launch.profile = launch.label;
       if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
     }

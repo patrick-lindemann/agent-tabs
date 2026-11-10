@@ -51,6 +51,11 @@ export interface LaunchSpec {
   commandLine: string;
   /** The profile's own `multiplexer`, over `agentTabs.multiplexer` */
   multiplexer?: MultiplexerId | 'none';
+  /**
+   * The name of the profile in `agentTabs.profiles` it comes from, so a
+   * restored tab runs the profile as it is now; none for a custom command
+   */
+  profile?: string;
 }
 
 export interface TerminalConfig {

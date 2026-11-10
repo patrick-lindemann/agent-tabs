@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With `agentTabs.programStatus` off, or before an agent first reports its status, Enter sends a message: closing the tab no longer asks about an unsent message, and the tab can be reopened with its conversation
 - A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
+### Security
+
+- A profile's environment variables, e.g. API keys, no longer appear on tmux's command line, where every user of the machine could read them with `ps`; the session reads them from a file only the user can read, and deletes it
+- The open and closed tabs kept in the workspace state and the tags of multiplexer sessions no longer contain a profile's environment variables. A restored or reopened tab runs its profile as it is now, so changes to its command line, environment or multiplexer apply
+
 ## [3.1.0] - 2026-11-10
 
 ### Added

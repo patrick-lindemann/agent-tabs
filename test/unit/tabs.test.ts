@@ -199,6 +199,9 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
     setOnExit: (onExit: OnExitAction) => {
       current = { ...current, onExit };
     },
+    setConfig: (overrides: Partial<TerminalConfig>) => {
+      current = { ...current, ...overrides };
+    },
     instance: (id: string) => {
       const instance = tabs.state.get(id);
       if (!instance) throw new Error(`no tab ${id}`);
@@ -1318,6 +1321,38 @@ describe('restoring the tabs of the last window', () => {
     ]);
     tabs.close(second);
     expect(open.tabs).toHaveLength(1);
+  });
+
+  const profile = (command: string, env?: Record<string, string>) =>
+    resolveProfiles([{ name: 'Mine', command, env }], true).profiles[0];
+
+  it('keeps no environment variables, and takes them from the profile again', async () => {
+    const { tabs, open, closed, setConfig } = setup({ multiplexer: 'tmux' });
+    const id = await tabs.create(profile('claude', { API_KEY: 'old' }));
+    await vi.runAllTimersAsync();
+    tmux.tapData(working);
+    expect(open.tabs[0].launch.env).toEqual({});
+    expect([...tmux.sessions.values()][0].options.tag.launch.env).toEqual({});
+    expect([...tmux.sessions.values()][0].options.env).toMatchObject({ API_KEY: 'old' });
+    tabs.close(id);
+    expect(closed.tabs[0].launch.env).toEqual({});
+
+    setConfig({ profiles: [profile('claude --model x', { API_KEY: 'new' })] });
+    tabs.reopenClosed();
+    await vi.runAllTimersAsync();
+    const [session] = [...tmux.sessions.values()];
+    expect(session.options.env).toMatchObject({ API_KEY: 'new' });
+    expect(session.options.args).toContain('--model');
+  });
+
+  it('runs a restored tab as its profile is now, or as stored when it is gone', async () => {
+    const { tabs, open, setConfig } = setup({ multiplexer: 'none' });
+    open.tabs = [{ launch: { ...profile('claude'), env: {} } }, { launch: profile('pi') }];
+    setConfig({ profiles: [profile('claude --model x')] });
+    await tabs.restore();
+    expect(spawned).toHaveLength(2);
+    expect(spawned[0].args).toContain('--model');
+    expect(spawned[1].file).toBe('pi');
   });
 
   it('opens them again in the next window and continues their conversations', async () => {

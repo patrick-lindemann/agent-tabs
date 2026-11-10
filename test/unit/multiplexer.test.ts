@@ -14,7 +14,8 @@ import {
   type Run,
   type SessionOptions,
   type SessionTag,
-  Tmux
+  Tmux,
+  writeEnvironmentFile
 } from '../../src/terminal/multiplexer';
 
 const TAG: SessionTag = {
@@ -97,24 +98,39 @@ describe('tmux sessions', () => {
   it('starts a held session on its own server and releases it once tapped', async () => {
     const { calls, execute } = fakeRun([['has-session', new Error('no session')]]);
     const control = fakeControl();
-    const tmux = new Tmux(execute, (args) => {
-      control.args = args;
-      return control.child as never;
-    });
-    const result = await tmux.open(OPTIONS, () => {});
+    const envFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tabs-env-'));
+    const tmux = new Tmux(
+      execute,
+      (args) => {
+        control.args = args;
+        return control.child as never;
+      },
+      envFolder
+    );
+    const result = await tmux.open(
+      { ...OPTIONS, env: { A: '1', API_KEY: "s3cret 'x'" } },
+      () => {}
+    );
     if (!('client' in result)) throw new Error('no client');
 
     const newSession = calls.find((call) => call.includes('new-session')) ?? [];
     expect(newSession.slice(0, 3)).toEqual(['tmux', '-L', 'agent-tabs']);
-    expect(newSession).toEqual(expect.arrayContaining(['-e', 'A=1', '-c', '/work', '-x', '100']));
+    expect(newSession).toEqual(expect.arrayContaining(['-c', '/work', '-x', '100']));
+    // Values stay off the command line, where `ps` would show them
+    expect(newSession.join(' ')).not.toContain('s3cret');
+    expect(newSession).not.toContain('-e');
     const program = newSession.indexOf('--');
-    expect(newSession.slice(program + 4, program + 9)).toEqual([
+    const [envFile] = fs.readdirSync(envFolder);
+    expect(newSession.slice(program + 4, program + 10)).toEqual([
       'tmux',
       'agent-tabs-1',
+      path.join(envFolder, envFile),
       'claude',
       '--continue',
       ';'
     ]);
+    expect(fs.statSync(path.join(envFolder, envFile)).mode & 0o777).toBe(0o600);
+    fs.rmSync(envFolder, { recursive: true, force: true });
     expect(result.client).toEqual({
       command: 'tmux',
       args: ['-L', 'agent-tabs', 'attach-session', '-t', '=agent-tabs-1']
@@ -291,6 +307,70 @@ describe('abduco sessions', () => {
       { name: 'detached', tag: started, ended: false, attached: false }
     ]);
   });
+});
+
+describe('the session shell', () => {
+  it.skipIf(process.platform === 'win32')(
+    'waits for the tap, runs the program with the variables and stores its exit code',
+    async () => {
+      const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tabs-hold-'));
+      try {
+        // A tmux that records its arguments
+        const log = path.join(folder, 'tmux.log');
+        const fakeTmux = path.join(folder, 'tmux');
+        fs.writeFileSync(fakeTmux, `#!/bin/sh\necho "$*" >> '${log}'\n`, { mode: 0o755 });
+        const envFile = writeEnvironmentFile({ SECRET: 'a b' }, folder);
+        const args = new Tmux().newSession(OPTIONS, envFile);
+        const program = args.indexOf('--');
+        const [, , hold] = args.slice(program + 1);
+        const { spawnSync } = await import('node:child_process');
+        const run = (file: string) =>
+          spawnSync(
+            'sh',
+            ['-c', hold, fakeTmux, 'agent-tabs-1', file, 'sh', '-c', 'echo "[$SECRET]"; exit 3'],
+            { encoding: 'utf8' }
+          );
+
+        const result = run(envFile ?? '');
+        expect(result.stdout).toBe('[a b]\n');
+        expect(result.status).toBe(3);
+        expect(fs.existsSync(envFile ?? '')).toBe(false);
+        expect(fs.readFileSync(log, 'utf8').split('\n')).toEqual([
+          '-L agent-tabs wait-for agent-tabs-1',
+          '-L agent-tabs set-option -t =agent-tabs-1: @agent-tabs-exit 3 ; detach-client -s =agent-tabs-1',
+          ''
+        ]);
+        expect(run('-').stdout).toBe('[]\n');
+      } finally {
+        fs.rmSync(folder, { recursive: true, force: true });
+      }
+    }
+  );
+});
+
+describe('environment files', () => {
+  it.skipIf(process.platform === 'win32')(
+    'exports the variables to sh exactly as given',
+    async () => {
+      const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tabs-env-'));
+      try {
+        const env = { A: "it's $HOME `x` \\n", B: '', 'NOT-VALID': 'x' };
+        const file = writeEnvironmentFile(env, folder) ?? '';
+        const { execFileSync } = await import('node:child_process');
+        const output = execFileSync(
+          'sh',
+          ['-c', '. "$0"; printf "%s|%s|%s" "$A" "$B" "${#B}"', file],
+          {
+            encoding: 'utf8'
+          }
+        );
+        expect(output).toBe(`${env.A}||0`);
+        expect(writeEnvironmentFile({}, folder)).toBeUndefined();
+      } finally {
+        fs.rmSync(folder, { recursive: true, force: true });
+      }
+    }
+  );
 });
 
 describe('session tags', () => {
