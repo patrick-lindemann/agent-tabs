@@ -35,6 +35,8 @@ suite('Agent Tabs extension', () => {
       await vscode.commands.executeCommand(command);
     }
     await vscode.commands.executeCommand('agentTabs.switchToTabAt', 1);
+    await vscode.commands.executeCommand('agentTabs.switchToTabAt', 0);
+    await vscode.commands.executeCommand('agentTabs.reopenClosedTab');
   });
 
   test('reads its configuration defaults', () => {

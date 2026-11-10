@@ -1,6 +1,7 @@
 import { shortTitle } from '../profiles';
 import type { TabInfo, TabStatus, TerminalInstance } from '../types';
 import { WORKSPACE_ACCENT_COLORS } from '../types';
+import { hasDraft } from './draft';
 
 const STATUS_LABELS: Record<TabStatus, string> = {
   working: 'Working',
@@ -174,6 +175,18 @@ export class TerminalStateManager {
         instance.programState === 'working' ||
         instance.programState === 'blocked')
     );
+  }
+
+  /**
+   * Why closing a tab would lose something: its agent is working, waiting
+   * for an answer, or has input that was not sent; undefined when nothing.
+   */
+  closeRisk(instance: TerminalInstance): 'working' | 'waiting' | 'draft' | undefined {
+    if (this.isBusy(instance)) {
+      return instance.programState === 'working' && !instance.needsInput ? 'working' : 'waiting';
+    }
+    if (!instance.exited && !instance.detached && hasDraft(instance.draft)) return 'draft';
+    return undefined;
   }
 
   /**

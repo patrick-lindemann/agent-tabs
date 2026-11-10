@@ -95,6 +95,11 @@
         "category": "Agent Tabs"
       },
       {
+        "command": "agentTabs.reopenClosedTab",
+        "title": "Reopen Closed Tab",
+        "category": "Agent Tabs"
+      },
+      {
         "command": "agentTabs.nextTab",
         "title": "Next Terminal Tab",
         "category": "Agent Tabs"
@@ -107,6 +112,11 @@
       {
         "command": "agentTabs.switchTab",
         "title": "Switch Tab…",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.switchTabBack",
+        "title": "Switch Tab… (Previous)",
         "category": "Agent Tabs"
       },
       {
@@ -133,14 +143,25 @@
     "keybindings": [
       {
         "command": "agentTabs.newTab",
-        "key": "ctrl+shift+t",
-        "mac": "cmd+t",
+        "key": "ctrl+n",
+        "mac": "cmd+n",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.closeTab",
         "key": "ctrl+shift+w",
         "mac": "cmd+w",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.closeTab",
+        "win": "ctrl+f4",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.reopenClosedTab",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
@@ -156,71 +177,101 @@
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
-        "command": "agentTabs.switchTab",
-        "key": "ctrl+tab",
+        "command": "agentTabs.nextTab",
+        "mac": "cmd+shift+]",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.previousTab",
+        "mac": "cmd+shift+[",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+1",
-        "mac": "cmd+1",
+        "mac": "ctrl+1",
         "args": 1,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+2",
-        "mac": "cmd+2",
+        "mac": "ctrl+2",
         "args": 2,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+3",
-        "mac": "cmd+3",
+        "mac": "ctrl+3",
         "args": 3,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+4",
-        "mac": "cmd+4",
+        "mac": "ctrl+4",
         "args": 4,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+5",
-        "mac": "cmd+5",
+        "mac": "ctrl+5",
         "args": 5,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+6",
-        "mac": "cmd+6",
+        "mac": "ctrl+6",
         "args": 6,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+7",
-        "mac": "cmd+7",
+        "mac": "ctrl+7",
         "args": 7,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+8",
-        "mac": "cmd+8",
+        "mac": "ctrl+8",
         "args": 8,
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {
         "command": "agentTabs.switchToTabAt",
         "key": "alt+9",
-        "mac": "cmd+9",
+        "mac": "ctrl+9",
         "args": 9,
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.switchToTabAt",
+        "key": "alt+0",
+        "mac": "ctrl+0",
+        "args": 0,
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.switchToTabAt",
+        "mac": "cmd+9",
+        "args": 0,
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.switchTab",
+        "key": "ctrl+tab",
+        "mac": "ctrl+tab",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.switchTabBack",
+        "key": "ctrl+shift+tab",
+        "mac": "ctrl+shift+tab",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       }
     ],
@@ -334,7 +385,7 @@
         "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
-          "description": "Ask before closing a tab whose agent is working or waiting for input, since closing ends its session.",
+          "description": "Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent, since closing ends its session.",
           "order": 3
         },
         "agentTabs.autoTabTitles": {

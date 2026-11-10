@@ -99,6 +99,21 @@ export interface TerminalInstance {
   session?: SessionRef;
   /** The client exited but the session runs on; Enter attaches again */
   detached?: boolean;
+  /**
+   * The agent's conversation, with an ID the extension chose, and whether a
+   * message was sent in it, so the tab can be reopened after it closes
+   */
+  conversation?: { id: string; started: boolean };
+  /** Characters typed since the last message; see `terminal/draft.ts` */
+  draft?: Draft;
+}
+
+/** A closed tab that can be reopened with its conversation */
+export interface ClosedTab {
+  launch: LaunchSpec;
+  conversation: string;
+  cwd?: string;
+  workspaceFolderIndex?: number;
 }
 
 /** A multiplexer session that runs a tab's program */
@@ -119,6 +134,7 @@ export type {
 } from './protocol';
 
 import type { AgentId } from './protocol';
+import type { Draft } from './terminal/draft';
 import type { MultiplexerId } from './terminal/multiplexer';
 
 // Command help parsing types

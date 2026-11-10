@@ -35,6 +35,8 @@ export interface SessionTag {
   workspaceFolderIndex?: number;
   /** When the session started, to restore tabs in order */
   created: number;
+  /** The agent's conversation, to reopen the tab after it closes */
+  conversation?: { id: string };
 }
 
 /** A session the extension started */

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
@@ -21,6 +22,18 @@ interface AgentDefinition {
    * report `idle` after `working` only when the user cancels.
    */
   idleWhenDone?: boolean;
+  /** Reports no status; its tab's status comes from prompt detection */
+  noStatus?: boolean;
+  /**
+   * Arguments that start a conversation with an ID the extension chooses
+   * and that continue it, so a closed tab can be reopened. Not added when
+   * the command line already picks a conversation with one of `conflicts`.
+   */
+  conversation?: {
+    start: (id: string) => string[];
+    resume: (id: string) => string[];
+    conflicts: string[];
+  };
 }
 
 /**
@@ -28,7 +41,26 @@ interface AgentDefinition {
  * format and status options. Everything else is configured in the agent.
  */
 const AGENTS: Record<AgentId, AgentDefinition> = {
-  claude: { label: 'Claude Code', command: 'claude' },
+  claude: {
+    label: 'Claude Code',
+    command: 'claude',
+    conversation: {
+      start: (id) => ['--session-id', id],
+      resume: (id) => ['--resume', id],
+      conflicts: [
+        '--session-id',
+        '-r',
+        '--resume',
+        '-c',
+        '--continue',
+        '--fork-session',
+        '--from-pr',
+        '--teleport',
+        '-p',
+        '--print'
+      ]
+    }
+  },
   codex: {
     label: 'Codex',
     command: 'codex',
@@ -41,18 +73,58 @@ const AGENTS: Record<AgentId, AgentDefinition> = {
       'tui.notification_condition="always"'
     ]
   },
-  antigravity: { label: 'Antigravity', command: 'agy' },
-  gemini: { label: 'Gemini CLI', command: 'gemini' },
+  antigravity: { label: 'Antigravity', command: 'agy', noStatus: true },
+  gemini: { label: 'Gemini CLI', command: 'gemini', noStatus: true },
   opencode: { label: 'OpenCode', command: 'opencode', idleWhenDone: true },
-  pi: { label: 'Pi', command: 'pi' },
-  cursor: { label: 'Cursor', command: 'agent', aliases: ['cursor-agent'] },
-  copilot: { label: 'GitHub Copilot', command: 'copilot' },
+  pi: {
+    label: 'Pi',
+    command: 'pi',
+    // Opens the conversation with the ID, or starts it
+    conversation: {
+      start: (id) => ['--session-id', id],
+      resume: (id) => ['--session-id', id],
+      conflicts: [
+        '--session-id',
+        '--session',
+        '-c',
+        '--continue',
+        '-r',
+        '--resume',
+        '--fork',
+        '--no-session',
+        '-p',
+        '--print',
+        '--export'
+      ]
+    }
+  },
+  cursor: {
+    label: 'Cursor',
+    command: 'agent',
+    aliases: ['cursor-agent'],
+    noStatus: true,
+    // An unknown ID starts a chat with that ID
+    conversation: {
+      start: (id) => ['--resume', id],
+      resume: (id) => ['--resume', id],
+      conflicts: ['--resume', '--continue', 'resume', 'ls', 'create-chat', '-p', '--print']
+    }
+  },
+  copilot: { label: 'GitHub Copilot', command: 'copilot', noStatus: true },
   grok: { label: 'Grok Build', command: 'grok' },
   hermes: { label: 'Hermes Agent', command: 'hermes' },
   devin: { label: 'Devin', command: 'devin' }
 };
 
 const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
+
+/**
+ * Whether an agent reports its status (OSC 7501), so that a message counts
+ * as sent when it starts working rather than on Enter
+ */
+export function reportsStatus(agent: AgentId | undefined): boolean {
+  return agent !== undefined && !AGENTS[agent].noStatus;
+}
 
 /** Whether an agent reports `idle` instead of `done` when a turn completes */
 export function idleWhenDone(agent: AgentId | undefined): boolean {
@@ -128,6 +200,46 @@ function launchFromWords(
     all.splice(index + 1, 0, ...statusArgs);
   }
   return { label, command: all[0], args: all.slice(1), env: {}, agent, commandLine };
+}
+
+/**
+ * A new conversation ID for a launch, when its agent can start a
+ * conversation with a given ID and the command line does not pick one
+ * already.
+ */
+export function newConversation(launch: LaunchSpec): string | undefined {
+  const conversation = launch.agent && AGENTS[launch.agent].conversation;
+  if (!conversation || agentIndex(launch) === undefined) return undefined;
+  const conflict = launch.args.some((arg) =>
+    conversation.conflicts.some((flag) => arg === flag || arg.startsWith(`${flag}=`))
+  );
+  return conflict ? undefined : randomUUID();
+}
+
+/**
+ * The launch with the arguments that start (`resume` false) or continue a
+ * conversation, right after the agent's executable.
+ */
+export function withConversation(launch: LaunchSpec, id: string, resume: boolean): LaunchSpec {
+  const conversation = launch.agent && AGENTS[launch.agent].conversation;
+  const index = agentIndex(launch);
+  if (!conversation || index === undefined) return launch;
+  const words = [launch.command, ...launch.args];
+  words.splice(index + 1, 0, ...(resume ? conversation.resume(id) : conversation.start(id)));
+  return { ...launch, command: words[0], args: words.slice(1) };
+}
+
+/**
+ * Where the agent's executable is in a launch's words, unless it only runs
+ * inside a command string, e.g. `bash -c "claude"`
+ */
+function agentIndex(launch: LaunchSpec): number | undefined {
+  const words = [launch.command, ...launch.args];
+  const index = words.findIndex((word) => agentOf(word) !== undefined);
+  if (index < 0 || /\s/.test(words[index]) || (index > 0 && /^-\w*c$/.test(words[index - 1]))) {
+    return undefined;
+  }
+  return index;
 }
 
 /** The agent a word runs: its executable, also as a path or inside a quoted command */

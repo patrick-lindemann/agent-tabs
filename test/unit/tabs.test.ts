@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConfigManager } from '../../src/config';
-import { launchForCommand } from '../../src/profiles';
+import { launchForCommand, resolveProfiles } from '../../src/profiles';
 import {
   type Multiplexer,
   type OpenResult,
@@ -11,7 +11,13 @@ import {
   setMultiplexer
 } from '../../src/terminal/multiplexer';
 import { Tabs, type TabsHost } from '../../src/terminal/tabs';
-import type { ExtensionMessage, IPty, OnExitAction, TerminalConfig } from '../../src/types';
+import type {
+  ClosedTab,
+  ExtensionMessage,
+  IPty,
+  OnExitAction,
+  TerminalConfig
+} from '../../src/types';
 import { status } from './agents';
 
 const vscode = vi.hoisted(() => ({
@@ -37,6 +43,7 @@ vi.mock('vscode', () => ({
 /** A process started by node-pty, controlled by the test */
 interface FakePty extends IPty {
   file: string;
+  args: string[];
   written: string[];
   size: [number, number];
   killed: boolean;
@@ -49,12 +56,13 @@ const spawned: FakePty[] = [];
 // PtyManager loads node-pty with require(), which vi.mock does not see
 const nodePty = {
   fail: undefined as string | undefined,
-  spawn: (file: string, _args: string[], options: { cols: number; rows: number }) => {
+  spawn: (file: string, args: string[], options: { cols: number; rows: number }) => {
     if (nodePty.fail) throw new Error(nodePty.fail);
     let onData: (data: string) => void = () => {};
     let onExit: (event: { exitCode: number }) => void = () => {};
     const pty: FakePty = {
       file,
+      args,
       written: [],
       killed: false,
       onData: (callback) => {
@@ -91,7 +99,7 @@ afterAll(() => {
 });
 
 // Commands found on the PATH; the real missingCommand checks them through isInstalled
-const installed = vi.hoisted(() => new Set(['claude', 'codex', 'pi', 'tmux', 'abduco']));
+const installed = vi.hoisted(() => new Set(['claude', 'codex', 'pi', 'env', 'tmux', 'abduco']));
 vi.mock('node:fs', async (original) => {
   const fs = await original<typeof import('node:fs')>();
   const known = (file: string) => installed.has(file.split(/[\\/]/).pop() ?? '');
@@ -139,7 +147,14 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
     isAttached: () => host.attached
   };
   const manager = { getConfig: () => current } as unknown as ConfigManager;
-  const tabs = new Tabs(manager, host, WORKSPACE);
+  const closed = {
+    tabs: [] as ClosedTab[],
+    get: () => closed.tabs,
+    set: (tabs: ClosedTab[]) => {
+      closed.tabs = tabs;
+    }
+  };
+  const tabs = new Tabs(manager, host, WORKSPACE, closed);
   const output = (id: string) =>
     posted
       .filter((m): m is Extract<ExtensionMessage, { type: 'output' }> => m.type === 'output')
@@ -149,6 +164,7 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
   return {
     tabs,
     host,
+    closed,
     posted,
     output,
     setOnExit: (onExit: OnExitAction) => {
@@ -245,17 +261,30 @@ describe('switching tabs', () => {
     expect(tabs.state.getActiveId()).toBe(b);
   });
 
-  it('switches by position, with 9 as the last tab', async () => {
+  it('switches by position, with 0 as the last tab', async () => {
     const { tabs } = setup();
     const a = await tabs.create();
-    await tabs.create();
+    const b = await tabs.create();
     const c = await tabs.create();
     tabs.switchToPosition(1);
     expect(tabs.state.getActiveId()).toBe(a);
-    tabs.switchToPosition(9);
+    tabs.switchToPosition(0);
     expect(tabs.state.getActiveId()).toBe(c);
+    tabs.switchToPosition(2);
+    expect(tabs.state.getActiveId()).toBe(b);
     tabs.switchToPosition(5);
-    expect(tabs.state.getActiveId()).toBe(c);
+    expect(tabs.state.getActiveId()).toBe(b);
+  });
+
+  it('lists tabs most recently used first', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const c = await tabs.create();
+    tabs.switchTo(a);
+    expect(tabs.recentlyUsed()).toEqual([a, c, b]);
+    tabs.close(c);
+    expect(tabs.recentlyUsed()).toEqual([a, b]);
   });
 });
 
@@ -681,7 +710,7 @@ describe('tabs in a multiplexer', () => {
     expect(session).toMatch(/^agent-tabs-/);
     expect(tmux.sessions.get(session)?.options).toMatchObject({
       command: 'claude',
-      args: [],
+      args: ['--session-id', instance(id).conversation?.id],
       env: expect.objectContaining({ A: '1' }) as unknown,
       tag: { workspace: WORKSPACE, launch: { command: 'claude' } }
     });
@@ -861,5 +890,172 @@ describe('tabs in a multiplexer', () => {
     await vi.runAllTimersAsync();
     expect(tmux.sessions.size).toBe(1);
     expect(tmux.tapDisposed).toBe(1);
+  });
+});
+
+describe('reopening closed tabs', () => {
+  const args = (pty: { args?: string[] } | undefined) => pty?.args ?? [];
+  const working = status('state=working');
+
+  it('starts Claude with a conversation ID and continues it when reopened', async () => {
+    const { tabs, pty, instance, closed } = setup();
+    const id = await tabs.create();
+    const conversation = instance(id).conversation?.id ?? '';
+    expect(conversation).toMatch(/^[0-9a-f-]{36}$/);
+    expect(args(pty())).toEqual(['--session-id', conversation]);
+    pty().emit(working);
+    tabs.close(id);
+    expect(closed.tabs).toEqual([expect.objectContaining({ conversation })]);
+
+    expect(tabs.reopenClosed()).toBe(true);
+    expect(args(pty())).toEqual(['--resume', conversation]);
+    expect(closed.tabs).toEqual([]);
+    expect(tabs.reopenClosed()).toBe(false);
+  });
+
+  it('does not remember a tab before a message was sent', async () => {
+    const { tabs, closed } = setup();
+    const id = await tabs.create();
+    tabs.input(id, 'h');
+    tabs.input(id, '\r');
+    tabs.close(id);
+    expect(closed.tabs).toEqual([]);
+  });
+
+  it('remembers an agent without status once Enter was pressed', async () => {
+    installed.add('cursor-agent');
+    try {
+      const { tabs, closed, pty } = setup();
+      const id = await tabs.create(launchForCommand('cursor-agent', [], true));
+      const conversation = args(pty())[1];
+      expect(args(pty())[0]).toBe('--resume');
+      tabs.input(id, 'fix it');
+      tabs.input(id, '\r');
+      tabs.close(id);
+      expect(closed.tabs).toEqual([expect.objectContaining({ conversation })]);
+    } finally {
+      installed.delete('cursor-agent');
+    }
+  });
+
+  it('reopens several closed tabs, newest first', async () => {
+    const { tabs, pty, instance } = setup();
+    const ids = [await tabs.create(), await tabs.create(), await tabs.create()];
+    const conversations = ids.map((id) => instance(id).conversation?.id);
+    for (const process of spawned) process.emit(working);
+    tabs.close(ids[0]);
+    tabs.close(ids[1]);
+    tabs.reopenClosed();
+    expect(args(pty())).toEqual(['--resume', conversations[1]]);
+    tabs.reopenClosed();
+    expect(args(pty())).toEqual(['--resume', conversations[0]]);
+  });
+
+  it('keeps at most ten closed tabs', async () => {
+    const { tabs, closed } = setup();
+    for (let i = 0; i < 12; i++) {
+      const id = await tabs.create();
+      spawned[spawned.length - 1].emit(working);
+      tabs.close(id);
+      await vi.runAllTimersAsync();
+    }
+    expect(closed.tabs).toHaveLength(10);
+  });
+
+  it('starts a new conversation on restart and keeps the old one for reopening', async () => {
+    const { tabs, pty, instance, closed } = setup();
+    const id = await tabs.create();
+    const first = instance(id).conversation?.id;
+    pty().emit(working);
+    pty().exit(1);
+    tabs.input(id, '\r');
+    const second = instance(id).conversation?.id;
+    expect(second).not.toBe(first);
+    expect(args(pty())).toEqual(['--session-id', second]);
+    expect(closed.tabs).toEqual([expect.objectContaining({ conversation: first })]);
+  });
+
+  it('leaves command lines alone that pick a conversation themselves', async () => {
+    const { tabs, pty, instance } = setup();
+    const id = await tabs.create(launchForCommand('claude', ['--continue'], true));
+    expect(instance(id).conversation).toBeUndefined();
+    expect(args(pty())).toEqual(['--continue']);
+    await tabs.create(launchForCommand('codex', [], false));
+    expect(args(pty())).toEqual([]);
+  });
+
+  it('adds the arguments after an agent behind a wrapper', async () => {
+    const { tabs, pty, instance } = setup();
+    const [profile] = resolveProfiles([{ command: 'env A=1 pi --model x' }], false).profiles;
+    const id = await tabs.create(profile);
+    const conversation = instance(id).conversation?.id;
+    expect([pty().file, ...args(pty())]).toEqual([
+      'env',
+      'A=1',
+      'pi',
+      '--session-id',
+      conversation,
+      '--model',
+      'x'
+    ]);
+  });
+});
+
+describe('asking before closing', () => {
+  it('asks for typed but unsent input, not after it was deleted', async () => {
+    const { tabs, instance } = setup();
+    const id = await tabs.create();
+    const risk = () => tabs.state.closeRisk(instance(id));
+    expect(risk()).toBeUndefined();
+    tabs.input(id, 'hi');
+    expect(risk()).toBe('draft');
+    tabs.input(id, '\x7f');
+    tabs.input(id, '\x7f');
+    expect(risk()).toBeUndefined();
+  });
+
+  it('counts a message as sent when the agent starts working, not on Enter', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    pty().emit(status('state=idle'));
+    tabs.input(id, 'do it');
+    tabs.input(id, '\r');
+    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
+    pty().emit(status('state=working'));
+    expect(tabs.state.closeRisk(instance(id))).toBe('working');
+    pty().emit(status('state=done'));
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it('counts Enter as sending for agents without status', async () => {
+    installed.add('gemini');
+    const { tabs, instance } = setup();
+    const id = await tabs.create(launchForCommand('gemini', [], false));
+    installed.delete('gemini');
+    tabs.input(id, 'go');
+    tabs.input(id, '\r');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it('asks after editing it cannot follow, until the next message', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    tabs.input(id, 'hello');
+    tabs.input(id, '\x17');
+    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
+    pty().emit(status('state=working'));
+    pty().emit(status('state=done'));
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+  });
+
+  it('ignores mouse and focus reports and does not ask after an exit', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    tabs.input(id, '\x1b[I');
+    tabs.input(id, '\x1b[<0;3;4M');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+    tabs.input(id, 'x');
+    pty().exit(1);
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });
 });

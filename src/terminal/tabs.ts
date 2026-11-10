@@ -1,7 +1,20 @@
 import * as vscode from 'vscode';
 import { type ConfigManager, promptConfig } from '../config';
-import { isInstalled, missingCommand } from '../profiles';
-import type { ExtensionMessage, LaunchSpec, SessionRef, TerminalInstance } from '../types';
+import {
+  isInstalled,
+  missingCommand,
+  newConversation,
+  reportsStatus,
+  withConversation
+} from '../profiles';
+import type {
+  ClosedTab,
+  ExtensionMessage,
+  LaunchSpec,
+  SessionRef,
+  TerminalInstance
+} from '../types';
+import { typed } from './draft';
 import {
   getMultiplexer,
   MULTIPLEXER_IDS,
@@ -36,6 +49,15 @@ export interface TabsHost {
   isAttached(): boolean;
 }
 
+/** Where closed tabs are kept for reopening, e.g. the workspace state */
+export interface ClosedTabStore {
+  get(): ClosedTab[];
+  set(tabs: ClosedTab[]): void;
+}
+
+/** How many closed tabs can be reopened */
+const MAX_CLOSED_TABS = 10;
+
 /**
  * The open tabs and their processes: opening, closing, switching, restarting
  * and what happens when a process exits.
@@ -48,6 +70,8 @@ export class Tabs {
   /** Raw output of tabs whose multiplexer hides status signals from the client */
   private readonly taps = new Map<string, Tap>();
   private seenTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Tab IDs, most recently shown first */
+  private recent: string[] = [];
   private cols = 80;
   private rows = 24;
 
@@ -55,7 +79,8 @@ export class Tabs {
     private readonly config: ConfigManager,
     private readonly host: TabsHost,
     /** Identifies the workspace in the tags of its sessions */
-    private readonly workspace = ''
+    private readonly workspace = '',
+    private readonly closedTabs?: ClosedTabStore
   ) {
     this.pty = new PtyManager({
       onData: (id, data) => this.handleData(id, data),
@@ -110,7 +135,9 @@ export class Tabs {
         launch: tag.launch,
         cwd: tag.cwd,
         workspaceFolderIndex: tag.workspaceFolderIndex,
-        session: { multiplexer, name, created: tag.created }
+        session: { multiplexer, name, created: tag.created },
+        // Messages may have been sent since the window closed
+        conversation: tag.conversation && { id: tag.conversation.id, started: true }
       });
     }
     return restore.length;
@@ -133,17 +160,50 @@ export class Tabs {
     return entry.tag.workspace === this.workspace;
   }
 
+  /**
+   * Reopens the most recently closed tab that had a conversation, and
+   * continues it. Returns whether there was one.
+   */
+  reopenClosed(): boolean {
+    const closed = this.closedTabs?.get() ?? [];
+    const [tab, ...rest] = closed;
+    if (!tab) return false;
+    this.closedTabs?.set(rest);
+    this.open({
+      launch: tab.launch,
+      cwd: tab.cwd,
+      workspaceFolderIndex: tab.workspaceFolderIndex,
+      conversation: { id: tab.conversation, started: true }
+    });
+    return true;
+  }
+
+  /** Keeps a closed tab whose conversation can be continued */
+  private rememberClosed(instance: TerminalInstance): void {
+    if (!this.closedTabs || !instance.conversation?.started) return;
+    const tab: ClosedTab = {
+      launch: instance.launch,
+      conversation: instance.conversation.id,
+      cwd: instance.cwd,
+      workspaceFolderIndex: instance.workspaceFolderIndex
+    };
+    const others = this.closedTabs.get().filter((other) => other.conversation !== tab.conversation);
+    this.closedTabs.set([tab, ...others].slice(0, MAX_CLOSED_TABS));
+  }
+
   private open(tab: {
     launch: LaunchSpec;
     cwd?: string;
     workspaceFolderIndex?: number;
     session?: SessionRef;
+    conversation?: TerminalInstance['conversation'];
   }): string {
     const id = this.state.generateId();
     const instance: TerminalInstance = { id, isActive: false, ...tab };
 
     // Add the instance first so setActive can find it
     this.state.set(id, instance);
+    this.recent = [id, ...this.recent];
     this.state.setActive(id);
     this.host.post({ type: 'createTab', id });
     this.host.refresh();
@@ -157,11 +217,13 @@ export class Tabs {
     const instance = this.state.get(id);
     if (!instance) return;
 
+    this.rememberClosed(instance);
     this.pty.kill(id);
     this.endSession(instance);
     this.prompt.removeTerminal(id);
     this.status.forget(id);
     this.state.delete(id);
+    this.recent = this.recent.filter((other) => other !== id);
     this.host.post({ type: 'removeTab', id });
 
     if (this.state.getActiveId() !== id) {
@@ -179,19 +241,25 @@ export class Tabs {
 
   switchTo(id: string): void {
     if (!this.state.get(id)) return;
+    this.recent = [id, ...this.recent.filter((other) => other !== id)];
     this.state.setActive(id);
     this.scheduleSeen();
     this.host.post({ type: 'switchTab', id });
     this.host.refresh();
   }
 
-  /** Switches to the tab at a 1-based position; 9 is always the last tab */
+  /** Switches to the tab at a 1-based position; 0 is the last tab */
   switchToPosition(position: number): void {
     const ids = this.state.getAllIds();
-    const id = position >= 9 ? ids[ids.length - 1] : ids[position - 1];
+    const id = position === 0 ? ids[ids.length - 1] : ids[position - 1];
     if (id) {
       this.switchTo(id);
     }
+  }
+
+  /** Tab IDs, most recently shown first */
+  recentlyUsed(): string[] {
+    return [...this.recent];
   }
 
   /** Switches to the next (1) or previous (-1) tab, wrapping around */
@@ -224,6 +292,7 @@ export class Tabs {
     this.pty.write(id, data);
     // Focus and mouse reports from clicking into the terminal are not answers
     if (isTerminalReport(data)) return;
+    if (instance) this.trackDraft(instance, data);
 
     this.prompt.onUserInput(id);
     // A question is answered with Enter or dismissed with Esc; arrow keys and
@@ -236,6 +305,20 @@ export class Tabs {
     if (instance?.unseen && this.isInView(instance)) {
       instance.unseen = undefined;
       this.host.refresh();
+    }
+  }
+
+  /**
+   * Counts unsent input. For agents that report their status, a message
+   * counts as sent when the agent starts working, since Enter may only
+   * answer a question or pick an entry; for the others on Enter.
+   */
+  private trackDraft(instance: TerminalInstance, data: string): void {
+    if (data !== '\r') {
+      instance.draft = typed(instance.draft ?? 0, data);
+    } else if (!instance.reportsStatus && !reportsStatus(instance.launch.agent)) {
+      instance.draft = 0;
+      if (instance.conversation) instance.conversation.started = true;
     }
   }
 
@@ -283,6 +366,7 @@ export class Tabs {
     this.prompt.dispose();
     this.status.clear();
     this.state.clear();
+    this.recent = [];
   }
 
   dispose(): void {
@@ -310,6 +394,9 @@ export class Tabs {
     if (!instance) return;
     this.endSession(instance);
     resetStatus(instance);
+    // A restart is a new conversation; the previous one can still be reopened
+    this.rememberClosed(instance);
+    instance.conversation = undefined;
     this.status.forget(id);
     this.host.refresh();
     this.host.post({ type: 'clear', id });
@@ -323,6 +410,10 @@ export class Tabs {
    */
   private start(instance: TerminalInstance): void {
     const config = this.config.getConfig();
+    if (!instance.session && !instance.conversation) {
+      const id = newConversation(instance.launch);
+      if (id) instance.conversation = { id, started: false };
+    }
     const searchPath = this.pty.getSearchPath(config, instance.launch);
     const multiplexer = this.multiplexerFor(instance);
     if (multiplexer && !isInstalled(multiplexer.command, searchPath)) {
@@ -339,7 +430,7 @@ export class Tabs {
       void this.startInSession(instance, multiplexer);
       return;
     }
-    this.pty.spawn(instance.id, config, instance.launch, this.cols, this.rows, instance.cwd);
+    this.pty.spawn(instance.id, config, runLaunch(instance), this.cols, this.rows, instance.cwd);
   }
 
   /**
@@ -361,7 +452,8 @@ export class Tabs {
     multiplexer: Multiplexer
   ): Promise<void> {
     const config = this.config.getConfig();
-    const { id, launch } = instance;
+    const { id } = instance;
+    const launch = runLaunch(instance);
     instance.session ??= {
       multiplexer: multiplexer.id as MultiplexerId,
       name: sessionName(),
@@ -382,7 +474,8 @@ export class Tabs {
           rows: this.rows,
           tag: {
             workspace: this.workspace,
-            launch,
+            launch: instance.launch,
+            conversation: instance.conversation,
             cwd: instance.cwd,
             workspaceFolderIndex: instance.workspaceFolderIndex,
             created: session.created
@@ -591,4 +684,13 @@ export class Tabs {
 /** A session name that tmux and abduco accept and that is unique per tab */
 function sessionName(): string {
   return `agent-tabs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * What a tab runs: its profile, with the arguments that start or continue
+ * its conversation
+ */
+function runLaunch(instance: TerminalInstance): LaunchSpec {
+  const { conversation, launch } = instance;
+  return conversation ? withConversation(launch, conversation.id, conversation.started) : launch;
 }
