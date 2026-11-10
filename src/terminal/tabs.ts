@@ -2,7 +2,14 @@ import * as vscode from 'vscode';
 import { type ConfigManager, promptConfig } from '../config';
 import { isInstalled, missingCommand } from '../profiles';
 import type { ExtensionMessage, LaunchSpec, SessionRef, TerminalInstance } from '../types';
-import { getMultiplexer, type Multiplexer, type MultiplexerId, type Tap } from './multiplexer';
+import {
+  getMultiplexer,
+  MULTIPLEXER_IDS,
+  type Multiplexer,
+  type MultiplexerId,
+  type SessionEntry,
+  type Tap
+} from './multiplexer';
 import { PromptDetector } from './prompt';
 import { PtyManager } from './pty';
 import { isTerminalReport } from './signals';
@@ -11,6 +18,9 @@ import { resetStatus, StatusTracker } from './status';
 
 /** Exit code of a shell or wrapper that could not find a command */
 const COMMAND_NOT_FOUND = 127;
+
+/** How long restoring waits for the clients of a previous view to detach */
+const DETACH_WAIT_MS = 1000;
 
 /** How long a tab must stay in view before its result counts as seen */
 const SEEN_DELAY_MS = 1000;
@@ -24,20 +34,6 @@ export interface TabsHost {
   isVisible(): boolean;
   /** Whether the view exists, so process output has somewhere to go */
   isAttached(): boolean;
-}
-
-/** A tab whose program runs in a multiplexer session, kept across windows */
-export interface SavedTab {
-  session: SessionRef;
-  launch: LaunchSpec;
-  cwd?: string;
-  workspaceFolderIndex?: number;
-}
-
-/** Where the tabs with sessions are kept, e.g. the workspace state */
-export interface TabStore {
-  get(): SavedTab[];
-  set(tabs: SavedTab[]): void;
 }
 
 /**
@@ -58,7 +54,8 @@ export class Tabs {
   constructor(
     private readonly config: ConfigManager,
     private readonly host: TabsHost,
-    private readonly store?: TabStore
+    /** Identifies the workspace in the tags of its sessions */
+    private readonly workspace = ''
   ) {
     this.pty = new PtyManager({
       onData: (id, data) => this.handleData(id, data),
@@ -82,24 +79,58 @@ export class Tabs {
   }
 
   /**
-   * Opens the tabs whose sessions still run, e.g. after the window reloaded
-   * or reconnected to its remote, and returns how many there are. Sessions
-   * that ended meanwhile are dropped.
+   * Opens a tab for each session of this workspace that no window shows,
+   * e.g. after the window reloaded or reconnected to its remote, in the
+   * order they started, and returns how many there are. Sessions are found
+   * by the tag the extension stores with them on the machine they run on,
+   * so other sessions are never touched.
+   *
+   * Sessions of other workspaces whose program ended and that no window
+   * shows are ended, so they do not pile up.
    */
   async restore(): Promise<number> {
-    const saved = this.store?.get() ?? [];
-    const alive: SavedTab[] = [];
-    for (const tab of saved) {
-      const multiplexer = getMultiplexer(tab.session.multiplexer);
-      if (await multiplexer.exists(tab.session.name).catch(() => false)) {
-        alive.push(tab);
+    let entries = await this.listSessions();
+    // Clients of the previous view may still be detaching, e.g. after the
+    // window reconnected to its remote
+    if (entries.some((entry) => this.isOwn(entry) && entry.attached)) {
+      await new Promise((resolve) => setTimeout(resolve, DETACH_WAIT_MS));
+      entries = await this.listSessions();
+    }
+    const shown = new Set(this.state.getAll().map((instance) => instance.session?.name));
+    const restore = entries
+      .filter((entry) => this.isOwn(entry) && !entry.attached && !shown.has(entry.name))
+      .sort((a, b) => a.tag.created - b.tag.created);
+    for (const entry of entries) {
+      if (!this.isOwn(entry) && entry.ended && !entry.attached) {
+        void getMultiplexer(entry.multiplexer).kill(entry.name);
       }
     }
-    for (const tab of alive) {
-      this.open({ ...tab, session: { ...tab.session } });
+    for (const { name, multiplexer, tag } of restore) {
+      this.open({
+        launch: tag.launch,
+        cwd: tag.cwd,
+        workspaceFolderIndex: tag.workspaceFolderIndex,
+        session: { multiplexer, name, created: tag.created }
+      });
     }
-    if (alive.length !== saved.length) this.save();
-    return alive.length;
+    return restore.length;
+  }
+
+  /** The sessions the extension started, of every multiplexer */
+  private async listSessions(): Promise<Array<SessionEntry & { multiplexer: MultiplexerId }>> {
+    const lists = await Promise.all(
+      MULTIPLEXER_IDS.map(async (id) => {
+        const sessions = await getMultiplexer(id)
+          .list()
+          .catch(() => []);
+        return sessions.map((entry) => ({ ...entry, multiplexer: id }));
+      })
+    );
+    return lists.flat();
+  }
+
+  private isOwn(entry: SessionEntry): boolean {
+    return entry.tag.workspace === this.workspace;
   }
 
   private open(tab: {
@@ -131,7 +162,6 @@ export class Tabs {
     this.prompt.removeTerminal(id);
     this.status.forget(id);
     this.state.delete(id);
-    this.save();
     this.host.post({ type: 'removeTab', id });
 
     if (this.state.getActiveId() !== id) {
@@ -332,9 +362,12 @@ export class Tabs {
   ): Promise<void> {
     const config = this.config.getConfig();
     const { id, launch } = instance;
-    instance.session ??= { multiplexer: multiplexer.id as MultiplexerId, name: sessionName() };
+    instance.session ??= {
+      multiplexer: multiplexer.id as MultiplexerId,
+      name: sessionName(),
+      created: Date.now()
+    };
     const session = instance.session;
-    this.save();
 
     let result: Awaited<ReturnType<Multiplexer['open']>>;
     try {
@@ -346,13 +379,19 @@ export class Tabs {
           env: this.pty.sessionEnvironment(config, launch),
           cwd: instance.cwd ?? this.pty.defaultWorkingDirectory(),
           cols: this.cols,
-          rows: this.rows
+          rows: this.rows,
+          tag: {
+            workspace: this.workspace,
+            launch,
+            cwd: instance.cwd,
+            workspaceFolderIndex: instance.workspaceFolderIndex,
+            created: session.created
+          }
         },
         (data) => this.handleTapData(id, data)
       );
     } catch (error) {
       instance.session = undefined;
-      this.save();
       this.handleError(id, error instanceof Error ? error.message : String(error));
       return;
     }
@@ -387,7 +426,6 @@ export class Tabs {
     const { session } = instance;
     if (!session) return;
     instance.session = undefined;
-    this.save();
     void getMultiplexer(session.multiplexer).kill(session.name);
   }
 
@@ -434,21 +472,6 @@ export class Tabs {
     this.write(
       instance.id,
       `\r\n\x1b[2m[Detached; the session runs on. Press Enter to attach again or Esc to end it and close the tab.]\x1b[0m\r\n`
-    );
-  }
-
-  /** Keeps the tabs that run in sessions, to attach to them in the next window */
-  private save(): void {
-    this.store?.set(
-      this.state
-        .getAll()
-        .filter((instance) => instance.session)
-        .map((instance) => ({
-          session: instance.session as SessionRef,
-          launch: instance.launch,
-          cwd: instance.cwd,
-          workspaceFolderIndex: instance.workspaceFolderIndex
-        }))
     );
   }
 

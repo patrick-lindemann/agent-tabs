@@ -139,7 +139,9 @@ Set `agentTabs.multiplexer` in the settings of the machine the agents run on, e.
 - **tmux** (3.2 or later): sessions run on their own server, `tmux -L agent-tabs`, apart from yours; your `~/.tmux.conf` applies. tmux keeps the agents' status reports to itself, so Agent Tabs reads them from a control client. The output scrolls in tmux's history, with the mouse wheel; `prefix d` detaches the tab, Enter attaches it again.
 - **abduco**: passes everything through, so the tab's scrollback and status work as without a multiplexer. Agents with a full-screen interface redraw when the tab attaches again.
 
-Closing a tab ends its session. Closing the window, reloading it or losing the connection keeps the sessions, and the next window of the same workspace attaches to them. VS Code also keeps a remote's processes for a while after a connection drops; a multiplexer keeps them until you close their tabs. A status that changed while no window was attached shows once the agent reports again.
+Closing a tab ends its session. Closing the window, reloading it or losing the connection keeps the sessions, and the next window of the same workspace attaches to them, also from another computer. VS Code also keeps a remote's processes for a while after a connection drops; a multiplexer keeps them until you close their tabs. A status that changed while no window was attached shows once the agent reports again.
+
+Agent Tabs tags the sessions it starts with their workspace and profile, on the machine they run on, and only ever lists, attaches to or ends tagged sessions. When a window opens, sessions of other workspaces whose agent has exited are ended; running agents of a workspace keep running until you open it again and close their tabs.
 
 ## Contributing
 

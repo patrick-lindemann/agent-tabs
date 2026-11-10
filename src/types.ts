@@ -105,6 +105,8 @@ export interface TerminalInstance {
 export interface SessionRef {
   multiplexer: MultiplexerId;
   name: string;
+  /** When the session started, stored in its tag */
+  created: number;
 }
 
 // Host/webview protocol is defined once in the platform-neutral shared module.

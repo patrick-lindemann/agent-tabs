@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `agentTabs.multiplexer` runs tabs in tmux (3.2 or later) or abduco sessions that keep running when the window closes or loses its connection to a remote; the next window attaches to them again. Status works inside tmux too. Profiles can choose their own with `multiplexer`, or `none`
+- `agentTabs.multiplexer` runs tabs in tmux (3.2 or later) or abduco sessions that keep running when the window closes or loses its connection to a remote; the next window of the workspace attaches to them again, also from another computer. Status works inside tmux too. Only sessions Agent Tabs started are touched, and those whose agent exited are cleaned up. Profiles can choose their own with `multiplexer`, or `none`
 
 ### Changed
 

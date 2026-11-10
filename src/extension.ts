@@ -10,7 +10,7 @@ interface TabContext {
 
 export function activate(context: vscode.ExtensionContext) {
   void migrateProfileSettings();
-  terminalProvider = new ViewProvider(context.extensionUri, context.workspaceState);
+  terminalProvider = new ViewProvider(context.extensionUri);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('agentTabs.terminalView', terminalProvider, {

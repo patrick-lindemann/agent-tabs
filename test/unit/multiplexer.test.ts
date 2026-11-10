@@ -1,14 +1,28 @@
 import { EventEmitter } from 'node:events';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { launchForCommand } from '../../src/profiles';
 import {
   Abduco,
   ControlModeParser,
+  decodeTag,
+  encodeTag,
   hexBytes,
   type Run,
   type SessionOptions,
+  type SessionTag,
   Tmux
 } from '../../src/terminal/multiplexer';
+
+const TAG: SessionTag = {
+  workspace: '/work',
+  launch: launchForCommand('claude', ['--continue'], true),
+  cwd: '/work',
+  created: 1
+};
 
 const OPTIONS: SessionOptions = {
   session: 'agent-tabs-1',
@@ -17,7 +31,8 @@ const OPTIONS: SessionOptions = {
   env: { A: '1' },
   cwd: '/work',
   cols: 100,
-  rows: 30
+  rows: 30,
+  tag: TAG
 };
 
 /** Records commands and answers them from a table of argument prefixes */
@@ -160,6 +175,33 @@ describe('tmux sessions', () => {
     await expect(gone.ended('s', 4)).resolves.toBe(4);
   });
 
+  it('tags a new session', async () => {
+    const { calls, execute } = fakeRun([['has-session', new Error('no session')]]);
+    await new Tmux(execute, () => fakeControl().child as never).open(OPTIONS, () => {});
+    const newSession = calls.find((call) => call.includes('new-session')) ?? [];
+    const option = newSession.indexOf('@agent-tabs');
+    expect(newSession[option - 1]).toBe('=agent-tabs-1:');
+    expect(decodeTag(newSession[option + 1])).toEqual(TAG);
+  });
+
+  it('lists only tagged sessions', async () => {
+    const tag = encodeTag(TAG);
+    const listing = [
+      `0 0 ${tag} agent-tabs-1`,
+      `1 1 ${tag} agent-tabs-2`,
+      '0 0  mine',
+      '0 0 bm90IGEgdGFn forged',
+      ''
+    ].join('\n');
+    const tmux = new Tmux(fakeRun([['list-sessions', listing]]).execute);
+    await expect(tmux.list()).resolves.toEqual([
+      { name: 'agent-tabs-1', tag: TAG, ended: false, attached: false },
+      { name: 'agent-tabs-2', tag: TAG, ended: true, attached: true }
+    ]);
+    const noServer = new Tmux(fakeRun([['list-sessions', new Error('no server')]]).execute);
+    await expect(noServer.list()).resolves.toEqual([]);
+  });
+
   it('kills a session and ignores one that is gone', async () => {
     const { calls, execute } = fakeRun([['kill-session', new Error('no session')]]);
     await new Tmux(execute).kill('s');
@@ -171,10 +213,18 @@ describe('abduco sessions', () => {
   const LIST =
     'Active sessions (on host box)\n' +
     '* Tue\t 2026-11-10 13:43:12\trunning\n' +
-    '+ Tue\t 2026-11-10 13:43:12\tended\n';
+    '+ Tue\t 2026-11-10 13:43:12\tended\n' +
+    '  Tue\t 2026-11-10 13:43:12\tdetached\n';
+  let tags: string;
+  beforeEach(() => {
+    tags = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tabs-tags-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tags, { recursive: true, force: true });
+  });
 
   it('creates or attaches with one client and needs no tap', async () => {
-    const abduco = new Abduco(fakeRun([['', LIST]]).execute);
+    const abduco = new Abduco(fakeRun([['', LIST]]).execute, tags);
     await expect(abduco.open({ ...OPTIONS, session: 'running' })).resolves.toEqual({
       client: { command: 'abduco', args: ['-A', 'running', 'claude', '--continue'] },
       created: false
@@ -182,23 +232,50 @@ describe('abduco sessions', () => {
     await expect(abduco.open(OPTIONS)).resolves.toMatchObject({ created: true });
   });
 
-  it('lists sessions, also without any', async () => {
-    const abduco = new Abduco(fakeRun([['', LIST]]).execute);
+  it('knows sessions, also without any', async () => {
+    const abduco = new Abduco(fakeRun([['', LIST]]).execute, tags);
     await expect(abduco.exists('ended')).resolves.toBe(true);
     await expect(abduco.exists('other')).resolves.toBe(false);
     await expect(abduco.ended('running', 0)).resolves.toBeUndefined();
     await expect(abduco.ended('ended', 2)).resolves.toBe(2);
-    const empty = new Abduco(() => Promise.reject(new Error('no sessions')));
+    const empty = new Abduco(() => Promise.reject(new Error('no sessions')), tags);
     await expect(empty.exists('running')).resolves.toBe(false);
   });
 
-  it('kills the server of a session', async () => {
+  it('lists only sessions with a tag file and removes tags of sessions that are gone', async () => {
+    const abduco = new Abduco(fakeRun([['', LIST]]).execute, tags);
+    for (const name of ['running', 'ended', 'gone']) {
+      fs.writeFileSync(path.join(tags, `${name}.tag`), encodeTag(TAG));
+    }
+    fs.writeFileSync(path.join(tags, 'detached.tag'), 'not a tag');
+    await expect(abduco.list()).resolves.toEqual([
+      { name: 'ended', tag: TAG, ended: true, attached: false },
+      { name: 'running', tag: TAG, ended: false, attached: true }
+    ]);
+    expect(fs.existsSync(path.join(tags, 'gone.tag'))).toBe(false);
+    await expect(new Abduco(fakeRun().execute, path.join(tags, 'none')).list()).resolves.toEqual(
+      []
+    );
+  });
+
+  it('kills the server of a session and removes its tag', async () => {
     const { calls, execute } = fakeRun([['', LIST]]);
-    const abduco = new Abduco(execute);
+    const abduco = new Abduco(execute, tags);
+    await abduco.open({ ...OPTIONS, session: 'gone' });
     await abduco.kill('running');
-    await abduco.kill('other');
+    await abduco.kill('gone');
     expect(calls.filter(([command]) => command === 'pkill')).toEqual([
       ['pkill', '-f', 'abduco -A running ']
     ]);
+    expect(fs.readdirSync(tags)).toEqual([]);
+  });
+});
+
+describe('session tags', () => {
+  it('reads back what it wrote and rejects anything else', () => {
+    expect(decodeTag(encodeTag(TAG))).toEqual(TAG);
+    expect(decodeTag('')).toBeUndefined();
+    expect(decodeTag('%%%')).toBeUndefined();
+    expect(decodeTag(Buffer.from('{"workspace":1}').toString('base64'))).toBeUndefined();
   });
 });

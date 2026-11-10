@@ -1,5 +1,9 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import type { LaunchSpec } from '../types';
 
 /**
  * Terminal multiplexers that keep a tab's program running without VS Code,
@@ -17,6 +21,32 @@ export interface Command {
   args: string[];
 }
 
+/**
+ * What a session belongs to, stored with it on the machine it runs on: its
+ * workspace and the tab that shows it. Only sessions with a tag are
+ * listed, restored or cleaned up, so sessions the extension did not start
+ * are never touched.
+ */
+export interface SessionTag {
+  /** The workspace's folders or workspace file */
+  workspace: string;
+  launch: LaunchSpec;
+  cwd?: string;
+  workspaceFolderIndex?: number;
+  /** When the session started, to restore tabs in order */
+  created: number;
+}
+
+/** A session the extension started */
+export interface SessionEntry {
+  name: string;
+  tag: SessionTag;
+  /** The program ended and the session only keeps its exit code */
+  ended: boolean;
+  /** A client shows the session, e.g. in another window */
+  attached: boolean;
+}
+
 export interface SessionOptions {
   /** Session name, unique per tab */
   session: string;
@@ -27,6 +57,35 @@ export interface SessionOptions {
   cwd: string;
   cols: number;
   rows: number;
+  /** Stored with a new session */
+  tag: SessionTag;
+}
+
+/** Encodes a tag for storing it in one tmux option or file */
+export function encodeTag(tag: SessionTag): string {
+  return Buffer.from(JSON.stringify(tag), 'utf8').toString('base64');
+}
+
+/** Reads a stored tag; anything that is not one gives undefined */
+export function decodeTag(text: string): SessionTag | undefined {
+  try {
+    const tag = JSON.parse(
+      Buffer.from(text.trim(), 'base64').toString('utf8')
+    ) as Partial<SessionTag>;
+    const launch = tag.launch as Partial<LaunchSpec> | undefined;
+    if (
+      typeof tag.workspace !== 'string' ||
+      typeof tag.created !== 'number' ||
+      typeof launch?.command !== 'string' ||
+      typeof launch.label !== 'string' ||
+      !Array.isArray(launch.args)
+    ) {
+      return undefined;
+    }
+    return { ...tag, launch: { env: {}, commandLine: launch.command, ...launch } } as SessionTag;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -56,6 +115,8 @@ export interface Multiplexer {
   open(options: SessionOptions, onData: (data: string) => void): Promise<OpenResult>;
   /** Whether the session exists, also with a program that ended */
   exists(session: string): Promise<boolean>;
+  /** The sessions the extension started, in all workspaces */
+  list(): Promise<SessionEntry[]>;
   /**
    * After the client exited with `clientCode`: the program's exit code, or
    * undefined when the session still runs because the client was detached.
@@ -159,6 +220,8 @@ export class Tmux implements Multiplexer {
   readonly id = 'tmux';
   readonly command = 'tmux';
   static readonly SOCKET = 'agent-tabs';
+  /** Session option with the session's tag */
+  static readonly TAG = '@agent-tabs';
 
   constructor(
     private readonly execute: Run = run,
@@ -215,6 +278,12 @@ export class Tmux implements Multiplexer {
       session,
       command,
       ...args,
+      ';',
+      'set-option',
+      '-t',
+      target,
+      Tmux.TAG,
+      encodeTag(options.tag),
       ';',
       'set-option',
       '-t',
@@ -299,6 +368,23 @@ export class Tmux implements Multiplexer {
     }
   }
 
+  /** Sessions with a tag; none when the server is not running */
+  async list(): Promise<SessionEntry[]> {
+    // tmux prints control characters such as tabs as `_`; the tag is base64
+    // and session names have no spaces
+    const format = `#{session_attached} #{pane_dead} #{${Tmux.TAG}} #{session_name}`;
+    const output = await this.tmux(['list-sessions', '-F', format]).catch(() => '');
+    const entries: SessionEntry[] = [];
+    for (const line of output.split('\n')) {
+      const [attached, dead, encoded, name] = line.split(' ');
+      const tag = encoded ? decodeTag(encoded) : undefined;
+      if (name && tag) {
+        entries.push({ name, tag, ended: dead === '1', attached: Number(attached) > 0 });
+      }
+    }
+    return entries;
+  }
+
   async ended(session: string, clientCode: number): Promise<number | undefined> {
     if (!(await this.exists(session))) return clientCode;
     return this.deadPaneStatus(session);
@@ -338,17 +424,31 @@ export class Abduco implements Multiplexer {
   readonly id = 'abduco';
   readonly command = 'abduco';
 
-  constructor(private readonly execute: Run = run) {}
+  /**
+   * @param tags Folder with a file per session holding its tag, since abduco
+   *   cannot store one itself
+   */
+  constructor(
+    private readonly execute: Run = run,
+    private readonly tags = defaultTagFolder()
+  ) {}
 
   async open(options: SessionOptions): Promise<OpenResult> {
     const created = !(await this.exists(options.session));
+    if (created) {
+      fs.mkdirSync(this.tags, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(this.tagFile(options.session), encodeTag(options.tag), { mode: 0o600 });
+    }
     // -A creates the session or attaches to it
     const args = ['-A', options.session, options.command, ...options.args];
     return { client: { command: this.command, args }, created };
   }
 
-  /** Sessions listed by `abduco`, also those whose program ended (`+`) */
-  private async sessions(): Promise<Array<{ name: string; ended: boolean }>> {
+  /**
+   * Sessions listed by `abduco`: `+` marks one whose program ended, `*` one
+   * with a client attached.
+   */
+  private async sessions(): Promise<Array<{ name: string; ended: boolean; attached: boolean }>> {
     // abduco exits with 1 when there are no sessions
     const output = await this.execute(this.command, []).catch(() => '');
     return output
@@ -357,8 +457,40 @@ export class Abduco implements Multiplexer {
       .filter((line) => line.includes('\t'))
       .map((line) => ({
         name: line.slice(line.lastIndexOf('\t') + 1),
-        ended: line.startsWith('+')
+        ended: line.startsWith('+'),
+        attached: line.startsWith('*')
       }));
+  }
+
+  /** Sessions with a tag file; tag files of sessions that are gone are removed */
+  async list(): Promise<SessionEntry[]> {
+    const running = new Map((await this.sessions()).map((entry) => [entry.name, entry]));
+    let files: string[];
+    try {
+      files = fs.readdirSync(this.tags).filter((file) => file.endsWith('.tag'));
+    } catch {
+      return [];
+    }
+    const entries: SessionEntry[] = [];
+    for (const file of files) {
+      const name = file.slice(0, -'.tag'.length);
+      const session = running.get(name);
+      if (!session) {
+        this.removeTag(name);
+        continue;
+      }
+      const tag = decodeTag(readFile(this.tagFile(name)));
+      if (tag) entries.push({ name, tag, ended: session.ended, attached: session.attached });
+    }
+    return entries;
+  }
+
+  private tagFile(session: string): string {
+    return path.join(this.tags, `${session}.tag`);
+  }
+
+  private removeTag(session: string): void {
+    fs.rmSync(this.tagFile(session), { force: true });
   }
 
   async exists(session: string): Promise<boolean> {
@@ -370,11 +502,26 @@ export class Abduco implements Multiplexer {
     return entry && !entry.ended ? undefined : clientCode;
   }
 
-  /** Attaching to a session collects it once its program ended */
+  /** Ends the session's server, also one whose program ended */
   async kill(session: string): Promise<void> {
+    this.removeTag(session);
     const entry = (await this.sessions()).find((candidate) => candidate.name === session);
     if (!entry) return;
     await this.execute('pkill', ['-f', `abduco -A ${session} `]).catch(() => undefined);
+  }
+}
+
+/** `$XDG_STATE_HOME/agent-tabs/abduco`, by default under `~/.local/state` */
+function defaultTagFolder(): string {
+  const state = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
+  return path.join(state, 'agent-tabs', 'abduco');
+}
+
+function readFile(file: string): string {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
   }
 }
 

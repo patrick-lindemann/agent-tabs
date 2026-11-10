@@ -3,14 +3,22 @@ import { ConfigManager } from '../config';
 import { confirmClose, manageProfiles, pickProfile, pickTab } from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
-import { type SavedTab, Tabs } from '../terminal/tabs';
+import { Tabs } from '../terminal/tabs';
 import type { ExtensionMessage, LaunchSpec, TerminalInstance } from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
 import { dispatchMessage, type MessageHandlerContext } from './messages';
 
-/** Workspace state key of the tabs that run in multiplexer sessions */
-const SESSIONS_KEY = 'agentTabs.sessions';
+/**
+ * Identifies the workspace in the tags of its multiplexer sessions: the
+ * paths of its workspace file or folders on the machine the extension runs
+ * on, which stay the same whichever computer connects to a remote.
+ */
+function workspaceKey(): string {
+  const file = vscode.workspace.workspaceFile;
+  if (file && file.scheme !== 'untitled') return file.fsPath;
+  return (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath).join('\n');
+}
 
 /**
  * The terminal view in the secondary sidebar: connects the webview to the
@@ -24,10 +32,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   private readonly picker = new CommandInputPicker();
   private readonly tabs: Tabs;
 
-  constructor(
-    private readonly extensionUri: vscode.Uri,
-    workspaceState?: vscode.Memento
-  ) {
+  constructor(private readonly extensionUri: vscode.Uri) {
     this.tabs = new Tabs(
       this.config,
       {
@@ -36,10 +41,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         isVisible: () => this.view?.visible === true,
         isAttached: () => !this.disposed && this.view !== undefined
       },
-      workspaceState && {
-        get: () => workspaceState.get<SavedTab[]>(SESSIONS_KEY, []),
-        set: (tabs) => void workspaceState.update(SESSIONS_KEY, tabs)
-      }
+      workspaceKey()
     );
 
     // Pre-load help for the custom command picker (missing commands are handled gracefully)
