@@ -1,8 +1,10 @@
 import type { XTermTheme } from './types';
-export class ThemeBuilder {
-  private cachedTheme: XTermTheme | null = null;
-  private cachedFontFamily: string | null = null;
 
+/**
+ * The terminal's colors and font from VS Code's theme variables, read each
+ * time, since they change with the color theme
+ */
+export class ThemeBuilder {
   private static readonly DEFAULT_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
 
   private getCssVar(name: string, fallback: string): string {
@@ -11,23 +13,11 @@ export class ThemeBuilder {
   }
 
   getFontFamily(): string {
-    if (this.cachedFontFamily) {
-      return this.cachedFontFamily;
-    }
-
-    // Read VSCode's editor font family from CSS variable
-    const editorFont = this.getCssVar('--vscode-editor-font-family', '');
-    this.cachedFontFamily = editorFont || ThemeBuilder.DEFAULT_FONT_FAMILY;
-
-    return this.cachedFontFamily;
+    return this.getCssVar('--vscode-editor-font-family', '') || ThemeBuilder.DEFAULT_FONT_FAMILY;
   }
 
   getTheme(): XTermTheme {
-    if (this.cachedTheme) {
-      return this.cachedTheme;
-    }
-
-    this.cachedTheme = {
+    return {
       background: this.getCssVar(
         '--vscode-terminal-background',
         this.getCssVar('--vscode-editor-background', '#1e1e1e')
@@ -56,12 +46,17 @@ export class ThemeBuilder {
       brightCyan: this.getCssVar('--vscode-terminal-ansiBrightCyan', '#29b8db'),
       brightWhite: this.getCssVar('--vscode-terminal-ansiBrightWhite', '#ffffff')
     };
-
-    return this.cachedTheme;
   }
 
-  invalidateCache(): void {
-    this.cachedTheme = null;
-    this.cachedFontFamily = null;
+  /**
+   * Calls `onChange` when VS Code switches the color theme, which changes
+   * the classes and variables of the page
+   */
+  watch(onChange: () => void): () => void {
+    const observer = new MutationObserver(() => onChange());
+    for (const element of [document.documentElement, document.body]) {
+      observer.observe(element, { attributes: true, attributeFilter: ['class', 'style'] });
+    }
+    return () => observer.disconnect();
   }
 }

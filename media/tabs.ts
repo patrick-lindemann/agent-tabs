@@ -32,8 +32,32 @@ export class TabBar {
     this.setupNewTabButtons();
   }
 
+  /** The tab elements by tab ID, kept between renders */
+  private readonly elements = new Map<string, TabElement>();
+
+  /**
+   * Shows the tabs. Elements of tabs that stay are updated in place, since
+   * the tab list is sent again many times while status streams in.
+   */
   render(tabs: TabInfo[], statusColors: boolean, monochromeIcons: boolean): void {
-    this.list.replaceChildren(...tabs.map((tab) => this.createTab(tab, monochromeIcons)));
+    const ids = new Set(tabs.map((tab) => tab.id));
+    for (const [id, element] of this.elements) {
+      if (!ids.has(id)) {
+        element.root.remove();
+        this.elements.delete(id);
+      }
+    }
+    tabs.forEach((tab, index) => {
+      let element = this.elements.get(tab.id);
+      if (!element) {
+        element = this.createTab(tab.id);
+        this.elements.set(tab.id, element);
+      }
+      this.updateTab(element, tab, monochromeIcons);
+      if (this.list.children[index] !== element.root) {
+        this.list.insertBefore(element.root, this.list.children[index] ?? null);
+      }
+    });
     this.bar.classList.toggle('status-colors', statusColors);
 
     const activeId = tabs.find((tab) => tab.isActive)?.id;
@@ -50,74 +74,111 @@ export class TabBar {
     });
   }
 
-  private createTab(tab: TabInfo, monochromeIcons: boolean): HTMLDivElement {
-    const element = document.createElement('div');
-    element.className = `tab ${tab.isActive ? 'active' : ''}`;
-    element.dataset.id = tab.id;
-    element.setAttribute('role', 'tab');
-    element.setAttribute('aria-selected', String(tab.isActive));
-    element.setAttribute(
-      'aria-label',
-      tab.statusText ? `${tab.label}, ${tab.statusText}` : tab.label
-    );
+  /**
+   * A tab's element with its handlers. The tab strip is a tab list: the
+   * active tab takes focus with Tab, arrow keys, Home and End move between
+   * tabs, Enter or Space shows one, Delete closes it.
+   */
+  private createTab(id: string): TabElement {
+    const root = document.createElement('div');
+    root.dataset.id = id;
+    root.setAttribute('role', 'tab');
+
+    const status = document.createElement('span');
+    const label = document.createElement('span');
+    label.className = 'tab-label';
+
+    const close = document.createElement('button');
+    close.className = 'tab-close';
+    close.title = 'Close';
+    close.tabIndex = -1;
+    close.innerHTML = CLOSE_ICON;
+    keepFocus(close);
+    close.onclick = (event) => {
+      event.stopPropagation();
+      this.post({ type: 'closeTab', id });
+    };
+
+    root.onclick = () => {
+      if (root.classList.contains('active')) {
+        this.focusActive();
+      } else {
+        this.post({ type: 'switchTab', id });
+      }
+    };
+    // Middle-click closes, like editor tabs
+    root.onauxclick = (event) => {
+      if (event.button === 1) {
+        event.preventDefault();
+        this.post({ type: 'closeTab', id });
+      }
+    };
+    root.onkeydown = (event) => this.handleKey(id, event);
+
+    root.append(status, label, close);
+    return { root, status, label, close, statusHtml: '' };
+  }
+
+  private updateTab(element: TabElement, tab: TabInfo, monochromeIcons: boolean): void {
+    const { root, status, label, close } = element;
+    root.className = `tab ${tab.isActive ? 'active' : ''}`;
+    root.tabIndex = tab.isActive ? 0 : -1;
+    root.setAttribute('aria-selected', String(tab.isActive));
+    root.setAttribute('aria-label', tab.statusText ? `${tab.label}, ${tab.statusText}` : tab.label);
     // The full title and the status, since the label is a short key
-    element.title = [tab.description, tab.statusText].filter(Boolean).join('\n');
-    if (tab.status) {
-      element.dataset.status = tab.status;
-    }
-    if (tab.accentColor) {
-      element.style.setProperty('--tab-accent', tab.accentColor);
-    }
+    root.title = [tab.description, tab.statusText].filter(Boolean).join('\n');
+    if (tab.status) root.dataset.status = tab.status;
+    else delete root.dataset.status;
+    if (tab.accentColor) root.style.setProperty('--tab-accent', tab.accentColor);
+    else root.style.removeProperty('--tab-accent');
     // Read by VS Code for the `webview/context` menu (Close, Close Others)
-    element.dataset.vscodeContext = JSON.stringify({
+    root.dataset.vscodeContext = JSON.stringify({
       webviewSection: 'tab',
       terminalId: tab.id,
       preventDefaultContextMenuItems: true
     });
 
-    // The agent's logo, replaced by the status icon while there is a status
-    const status = document.createElement('span');
-    status.className = 'tab-status';
-    if (tab.status) {
-      status.innerHTML = STATUS_ICONS[tab.status];
-    } else if (tab.agent) {
-      status.classList.add('tab-logo');
-      status.innerHTML = AGENT_ICONS[tab.agent][monochromeIcons ? 'mono' : 'color'];
-    } else {
-      status.innerHTML = IDLE_ICON;
+    // The agent's logo, replaced by the status icon while there is a status;
+    // replaced only when it changes, so the working animation keeps running
+    const logo = !tab.status && tab.agent !== undefined;
+    const html = tab.status
+      ? STATUS_ICONS[tab.status]
+      : tab.agent
+        ? AGENT_ICONS[tab.agent][monochromeIcons ? 'mono' : 'color']
+        : IDLE_ICON;
+    status.className = logo ? 'tab-status tab-logo' : 'tab-status';
+    if (html !== element.statusHtml) {
+      status.innerHTML = html;
+      element.statusHtml = html;
     }
-
-    const label = document.createElement('span');
-    label.className = 'tab-label';
     label.textContent = tab.label;
+    close.setAttribute('aria-label', `Close ${tab.label}`);
+  }
 
-    const close = document.createElement('button');
-    close.className = 'tab-close';
-    close.title = 'Close';
-    close.innerHTML = CLOSE_ICON;
-    keepFocus(close);
-    close.onclick = (event) => {
-      event.stopPropagation();
-      this.post({ type: 'closeTab', id: tab.id });
-    };
-
-    element.onclick = () => {
-      if (tab.isActive) {
-        this.focusActive();
-      } else {
-        this.post({ type: 'switchTab', id: tab.id });
+  private handleKey(id: string, event: KeyboardEvent): void {
+    const tabs = [...this.list.querySelectorAll<HTMLElement>('.tab')];
+    const index = tabs.findIndex((tab) => tab.dataset.id === id);
+    const target = {
+      ArrowLeft: index - 1,
+      ArrowRight: index + 1,
+      Home: 0,
+      End: tabs.length - 1
+    }[event.key];
+    if (target !== undefined) {
+      event.preventDefault();
+      const next = tabs[(target + tabs.length) % tabs.length];
+      if (next?.dataset.id) {
+        this.post({ type: 'switchTab', id: next.dataset.id });
+        next.focus();
       }
-    };
-    // Middle-click closes, like editor tabs
-    element.onauxclick = (event) => {
-      if (event.button === 1) {
-        event.preventDefault();
-        this.post({ type: 'closeTab', id: tab.id });
-      }
-    };
-
-    element.append(status, label, close);
-    return element;
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.post({ type: 'switchTab', id });
+      this.focusActive();
+    } else if (event.key === 'Delete') {
+      event.preventDefault();
+      this.post({ type: 'closeTab', id });
+    }
   }
 
   /**
@@ -164,6 +225,15 @@ export class TabBar {
     this.scrollLeft.disabled = scrollLeft <= 0;
     this.scrollRight.disabled = scrollLeft + clientWidth >= scrollWidth - 1;
   }
+}
+
+/** A tab's elements, and the icon it shows */
+interface TabElement {
+  root: HTMLDivElement;
+  status: HTMLSpanElement;
+  label: HTMLSpanElement;
+  close: HTMLButtonElement;
+  statusHtml: string;
 }
 
 /** Keeps focus in the terminal when a button is clicked */

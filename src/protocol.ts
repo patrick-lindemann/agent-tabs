@@ -44,7 +44,9 @@ export type ExtensionMessage =
   | { type: 'tabsUpdate'; tabs: TabInfo[]; statusColors: boolean; monochromeIcons: boolean }
   | { type: 'createTab'; id: string }
   | { type: 'switchTab'; id: string }
-  | { type: 'removeTab'; id: string };
+  | { type: 'removeTab'; id: string }
+  /** The terminal font from `terminal.integrated.*`, or the editor's */
+  | { type: 'appearance'; fontSize: number; fontFamily?: string; lineHeight: number };
 
 export type WebviewIncomingMessage = ExtensionMessage;
 export type WebviewOutgoingMessage = WebviewMessage;

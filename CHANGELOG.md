@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With tmux, status and the exit code come from the program's pane, also after the user split the window
 - pi's notice about a new session ID is also hidden when it arrives in several pieces
 - Shortened tab titles keep a word that is a filler word only in another language, e.g. `die` in `Fix the die roll`
+- Prompt detection no longer reads a window title or a sentence ending in "continue" as a question
+- Programs in tabs no longer get the extension host's `ELECTRON_*` and `VSCODE_*` variables, e.g. `ELECTRON_RUN_AS_NODE`, which made `code` and other Electron apps run as Node
+- Closing a tab asks about unsent text that was pasted without bracketed paste
+- Terminals follow a change of the color theme, and use the font size, family and line height of VS Code's terminal (`terminal.integrated.*`)
+- Tabs can be used from the keyboard: Tab focuses the active tab, the arrow keys, Home and End switch tabs, Delete closes one. The close buttons are labeled for screen readers
+- The tab strip updates its tabs in place instead of rebuilding them on every status change
+- Alt+Up and Alt+Down send Alt instead of Ctrl with the arrow key
 - A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
 ### Security

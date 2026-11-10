@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PromptDetector } from '../../src/terminal/prompt';
+import { PromptDetector, stripAnsi } from '../../src/terminal/prompt';
 import { SILENT_AGENTS } from './agents';
 
 const DELAY = 100;
@@ -137,6 +137,20 @@ describe('timing', () => {
     d.onData('tab', 'ready$ ');
     vi.advanceTimersByTime(DELAY);
     expect(changes).toEqual([['tab', true]]);
+  });
+});
+
+describe('output that is not a prompt', () => {
+  it.each([
+    ['a sentence ending in a prompt word', 'Press any key to continue'],
+    ['a window title', '\x1b]0;Continue?\x07working'],
+    ['an unfinished escape sequence', 'done\x1b[3']
+  ])('ignores %s', (_, output) => {
+    expect(waits(output)).toBe(false);
+  });
+
+  it('removes window titles and keeps the text after them', () => {
+    expect(stripAnsi('\x1b]0;title\x07Continue?\x1b]2;x\x1b\\')).toBe('Continue?');
   });
 });
 

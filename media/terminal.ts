@@ -15,7 +15,12 @@ export class Terminals {
   private readonly theme = new ThemeBuilder();
   private readonly container: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
+  private readonly stopWatchingTheme: () => void;
   private activeId: string | undefined;
+  private font: { fontSize: number; fontFamily?: string; lineHeight: number } = {
+    fontSize: 12,
+    lineHeight: 1.2
+  };
 
   constructor(private readonly post: (message: WebviewOutgoingMessage) => void) {
     const container = document.getElementById('terminals-container');
@@ -25,6 +30,26 @@ export class Terminals {
     this.container = container;
     this.resizeObserver = new ResizeObserver(() => this.fitActive());
     this.resizeObserver.observe(container);
+    this.stopWatchingTheme = this.theme.watch(() => this.applyAppearance());
+  }
+
+  /** Uses the terminal font VS Code is configured with */
+  setFont(font: { fontSize: number; fontFamily?: string; lineHeight: number }): void {
+    this.font = font;
+    this.applyAppearance();
+  }
+
+  /** Applies the current colors and font to every terminal */
+  private applyAppearance(): void {
+    const theme = this.theme.getTheme();
+    const options = this.options();
+    for (const { terminal } of this.entries.values()) {
+      terminal.options.theme = theme;
+      terminal.options.fontSize = options.fontSize;
+      terminal.options.fontFamily = options.fontFamily;
+      terminal.options.lineHeight = options.lineHeight;
+    }
+    this.fitActive();
   }
 
   create(id: string): void {
@@ -45,7 +70,6 @@ export class Terminals {
       ...this.options(),
       letterSpacing: 0,
       theme: this.theme.getTheme(),
-      allowProposedApi: true,
       linkHandler: { activate: openLink, allowNonHttpProtocols: false }
     });
     const fitAddon = new FitAddon();
@@ -144,6 +168,7 @@ export class Terminals {
 
   dispose(): void {
     this.resizeObserver.disconnect();
+    this.stopWatchingTheme();
     for (const entry of this.entries.values()) {
       entry.terminal.dispose();
     }
@@ -152,9 +177,9 @@ export class Terminals {
   private options() {
     return {
       cursorBlink: true,
-      fontSize: 12,
-      fontFamily: this.theme.getFontFamily(),
-      lineHeight: 1.2
+      fontSize: this.font.fontSize,
+      fontFamily: this.font.fontFamily || this.theme.getFontFamily(),
+      lineHeight: this.font.lineHeight
     };
   }
 

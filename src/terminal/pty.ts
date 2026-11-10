@@ -24,6 +24,23 @@ export interface WorkingDirectorySelection {
 }
 
 /**
+ * Variables of the extension host that would change how programs in a tab
+ * run, e.g. `ELECTRON_RUN_AS_NODE` makes Electron apps such as `code` run
+ * as Node. VS Code removes the same ones for its own terminals.
+ */
+const HOST_ONLY =
+  /^(?:ELECTRON_.+|VSCODE_(?!PORTABLE$|SHELL_LOGIN$|ENV_(?:REPLACE|APPEND|PREPEND)$).+|SNAP(?:|_.*)|GDK_PIXBUF_.+)$/;
+
+/** The extension host's environment for a tab's process */
+export function hostEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined && !HOST_ONLY.test(key)) env[key] = value;
+  }
+  return env;
+}
+
+/**
  * Manages PTY process lifecycle.
  */
 export class PtyManager {
@@ -138,15 +155,12 @@ export class PtyManager {
     return fs.existsSync(cwd) ? cwd : os.homedir();
   }
 
+  /**
+   * The environment of a tab's process: the extension host's, without the
+   * variables that only concern it, then the configured variables
+   */
   private buildEnvironment(configEnv: Record<string, string>): Record<string, string> {
-    const env: Record<string, string> = {};
-
-    // Copy process.env, filtering undefined values
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined) {
-        env[key] = value;
-      }
-    }
+    const env = hostEnvironment();
 
     // Add config env and terminal settings
     Object.assign(env, configEnv, {

@@ -38,8 +38,9 @@ export function keySequence(event: KeyboardEventLike, isMac: boolean): string | 
   const sequences: Record<string, string> = {
     'Shift+Enter': '\x1b[13;2u',
     'Alt+Enter': '\x1b\r',
-    'Alt+ArrowUp': '\x1b[1;5A',
-    'Alt+ArrowDown': '\x1b[1;5B',
+    // xterm's modifier 3 is Alt (5 would be Ctrl)
+    'Alt+ArrowUp': '\x1b[1;3A',
+    'Alt+ArrowDown': '\x1b[1;3B',
     'Ctrl+Alt+KeyG': '\x07',
     'Ctrl+Shift+Digit2': '\x00',
     'Ctrl+Shift+Digit6': '\x1e',

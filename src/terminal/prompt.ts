@@ -10,12 +10,9 @@ const DEFAULT_PROMPT_PATTERNS: RegExp[] = [
   /\[[Yy]\/[Nn]\]\s*:?\s*$/,
   /\(yes\/no\)\s*:?\s*$/i,
 
-  // Question prompts (at end)
-  /[Cc]onfirm\??\s*$/,
-  /[Aa]pply\??\s*$/,
-  /[Cc]ontinue\??\s*$/,
-  /[Pp]roceed\??\s*$/,
-  /[Aa]ccept\??\s*$/,
+  // Questions at the end of a line of their own, e.g. `Continue?`, not
+  // output that ends with the word, e.g. `Press any key to continue`
+  /(?:^|[\n\r])\s*(?:Confirm|Apply|Continue|Proceed|Accept)\?\s*$/i,
 
   // Interactive menus (selector arrows - various unicode characters)
   /[❯›>]\s*\d+\./,
@@ -46,9 +43,16 @@ export function isSafeCustomPattern(pattern: string): boolean {
   return true;
 }
 
-// Strip ANSI escape codes from terminal output
-function stripAnsi(text: string): string {
-  return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+/**
+ * Removes escape sequences from terminal output: OSC sequences with their
+ * text, e.g. a window title, CSI sequences, two-character escapes, and an
+ * unfinished sequence at the end, which arrives with the next output
+ */
+export function stripAnsi(text: string): string {
+  return text
+    .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, '')
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+    .replace(/\x1B(?:\][^\x07]*|\[[0-?]*[ -/]*)?$/, '');
 }
 
 // Sliding buffer to handle PTY data chunks
@@ -60,10 +64,16 @@ class PromptBuffer {
     this.maxSize = maxSize;
   }
 
+  /**
+   * Keeps the last output, cut at a line break where there is one, so the
+   * buffer does not start inside an escape sequence
+   */
   append(data: string): void {
     this.buffer += data;
     if (this.buffer.length > this.maxSize) {
-      this.buffer = this.buffer.slice(-this.maxSize);
+      const kept = this.buffer.slice(-this.maxSize);
+      const line = kept.indexOf('\n');
+      this.buffer = line >= 0 ? kept.slice(line + 1) : kept;
     }
   }
 

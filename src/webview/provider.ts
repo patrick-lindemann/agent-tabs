@@ -94,7 +94,28 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
    */
   handleReady(cols: number, rows: number): void {
     this.tabs.setSize(cols, rows);
+    this.postAppearance();
     void this.tabs.attachView();
+  }
+
+  /** The terminal font of VS Code's own terminal, for the webview */
+  private postAppearance(): void {
+    const terminal = vscode.workspace.getConfiguration('terminal.integrated');
+    const editor = vscode.workspace.getConfiguration('editor');
+    const fontSize = terminal.get<number>('fontSize') || editor.get<number>('fontSize') || 12;
+    const lineHeight = terminal.get<number>('lineHeight') || 1.2;
+    this.post({
+      type: 'appearance',
+      fontSize,
+      fontFamily: terminal.get<string>('fontFamily') || undefined,
+      // VS Code reads values of 8 and more as pixels
+      lineHeight: lineHeight >= 8 ? lineHeight / fontSize : lineHeight
+    });
+  }
+
+  /** The terminal or editor font changed */
+  updateAppearance(): void {
+    this.postAppearance();
   }
 
   handleInput(id: string, data: string): void {
