@@ -291,11 +291,14 @@ function launchFromWords(
     agent,
     commandLine
   };
-  if (program && isInteractiveShell(program, words)) launch.terminal = true;
+  // A shell, also around a command string, e.g. `sh` in `sh -c 'echo hi'`;
+  // a known agent in the string gets the agent's logo instead
+  const shell = program?.shell ? innerProgram(words.slice(0, program.index)) : program;
+  if (!agent && shell && isShell(shell)) launch.terminal = true;
   return launch;
 }
 
-/** Shells a tab can run interactively, which get the terminal icon */
+/** Shells, whose profiles get the terminal icon */
 const SHELLS = new Set([
   'bash',
   'zsh',
@@ -314,16 +317,9 @@ const SHELLS = new Set([
   'cmd'
 ]);
 
-/**
- * Whether the program is a shell for typing into, e.g. `zsh -l`, and not
- * one that runs a script or command, e.g. `bash build.sh` or `sh -c …`
- */
-function isInteractiveShell(program: Program, words: string[]): boolean {
-  if (program.shell || program.remote || program.package) return false;
-  if (!SHELLS.has(program.name.toLowerCase())) return false;
-  return words
-    .slice(program.index + 1)
-    .every((word) => /^-[^c]*$/i.test(word) && !/^\/c$/i.test(word));
+/** Whether a program is a shell that runs on this machine */
+function isShell(program: Program): boolean {
+  return !program.remote && !program.package && SHELLS.has(program.name.toLowerCase());
 }
 
 /**

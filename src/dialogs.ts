@@ -34,7 +34,6 @@ export async function pickProfile(
       iconPath: profileIcon(profile, monochrome, extensionUri),
       choice: { profile }
     })),
-    { label: '', kind: vscode.QuickPickItemKind.Separator },
     { label: 'Custom Command…', iconPath: new vscode.ThemeIcon('edit'), choice: 'custom' },
     { label: '', kind: vscode.QuickPickItemKind.Separator },
     { label: 'Manage Profiles…', choice: 'manage' }

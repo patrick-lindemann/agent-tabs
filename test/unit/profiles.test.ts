@@ -125,8 +125,10 @@ describe('the plain terminal', () => {
     ['fish --login', true],
     ['pwsh -NoLogo', true],
     ['env A=1 zsh', true],
-    ['bash build.sh', false],
-    ['sh -c "echo hi"', false],
+    ['sh', true],
+    ['bash build.sh', true],
+    ["sh -c 'echo bye'", true],
+    // A known agent's logo wins
     ['bash -lc pi', false],
     ['ssh devbox bash', false],
     ['htop', false]
