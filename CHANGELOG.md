@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tabs can be used from the keyboard: Tab focuses the active tab, the arrow keys, Home and End switch tabs, Delete closes one. The close buttons are labeled for screen readers
 - The tab strip updates its tabs in place instead of rebuilding them on every status change
 - Alt+Up and Alt+Down send Alt instead of Ctrl with the arrow key
+- Switch Tab… also finds tabs by their full title and status
+- Custom Command starts with the default profile's whole command line, e.g. `env A=1 pi`, not only its first word
+- Only agents get `FORCE_COLOR=1`, not every program
 - A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
 ### Security

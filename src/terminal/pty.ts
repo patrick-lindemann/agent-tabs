@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as vscode from 'vscode';
-import type { INodePty, IPty, LaunchSpec, TerminalConfig } from '../types';
+import type { IDisposable, INodePty, IPty, LaunchSpec, TerminalConfig } from '../types';
 import { shellKind, shellRunLine } from './shell';
 import { pathKey, resolveExecutable, windowsLaunch } from './windows';
 
@@ -31,6 +31,14 @@ export interface WorkingDirectorySelection {
 const HOST_ONLY =
   /^(?:ELECTRON_.+|VSCODE_(?!PORTABLE$|SHELL_LOGIN$|ENV_(?:REPLACE|APPEND|PREPEND)$).+|SNAP(?:|_.*)|GDK_PIXBUF_.+)$/;
 
+/**
+ * Agents built with Node check `FORCE_COLOR` before colors; other
+ * programs, e.g. a shell, get the terminal's own color support only
+ */
+function agentColors(launch: LaunchSpec | undefined): Record<string, string> {
+  return launch?.agent ? { FORCE_COLOR: '1' } : {};
+}
+
 /** The extension host's environment for a tab's process */
 export function hostEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const env: Record<string, string> = {};
@@ -46,6 +54,8 @@ export function hostEnvironment(source: NodeJS.ProcessEnv = process.env): Record
 export class PtyManager {
   private nodePty: INodePty | undefined;
   private readonly ptys = new Map<string, IPty>();
+  /** The listeners of each PTY, ended with it */
+  private readonly listeners = new Map<IPty, IDisposable[]>();
 
   constructor(private readonly callbacks: PtyEventCallbacks) {}
 
@@ -138,7 +148,7 @@ export class PtyManager {
   } {
     const shell = config.shell || this.getDefaultShell();
     const cwd = this.getWorkingDirectory();
-    const env = this.buildEnvironment({ ...config.env, ...launch.env });
+    const env = this.buildEnvironment({ ...config.env, ...launch.env }, launch);
     return { shell, env, cwd };
   }
 
@@ -159,14 +169,15 @@ export class PtyManager {
    * The environment of a tab's process: the extension host's, without the
    * variables that only concern it, then the configured variables
    */
-  private buildEnvironment(configEnv: Record<string, string>): Record<string, string> {
+  private buildEnvironment(
+    configEnv: Record<string, string>,
+    launch?: LaunchSpec
+  ): Record<string, string> {
     const env = hostEnvironment();
-
-    // Add config env and terminal settings
     Object.assign(env, configEnv, {
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      FORCE_COLOR: '1'
+      ...agentColors(launch)
     });
 
     // Remove CI flag so CLI agents don't think it's in CI
@@ -223,7 +234,7 @@ export class PtyManager {
    * server's: the configured ones and the terminal's color support.
    */
   sessionEnvironment(config: TerminalConfig, launch: LaunchSpec): Record<string, string> {
-    return { COLORTERM: 'truecolor', FORCE_COLOR: '1', ...config.env, ...launch.env };
+    return { COLORTERM: 'truecolor', ...agentColors(launch), ...config.env, ...launch.env };
   }
 
   /** The working directory a tab starts in without its own */
@@ -232,19 +243,26 @@ export class PtyManager {
   }
 
   private setupPtyEventHandlers(terminalId: string, pty: IPty): void {
-    pty.onData((data: string) => {
-      this.callbacks.onData(terminalId, data);
-    });
-
     const startedAt = Date.now();
-    pty.onExit(({ exitCode }) => {
-      // A killed or replaced PTY was already removed from the map
-      if (this.ptys.get(terminalId) !== pty) {
-        return;
-      }
-      this.ptys.delete(terminalId);
-      this.callbacks.onExit(terminalId, exitCode, Date.now() - startedAt);
-    });
+    this.listeners.set(pty, [
+      pty.onData((data: string) => {
+        this.callbacks.onData(terminalId, data);
+      }),
+      pty.onExit(({ exitCode }) => {
+        // A killed or replaced PTY was already removed from the map
+        if (this.ptys.get(terminalId) !== pty) {
+          return;
+        }
+        this.ptys.delete(terminalId);
+        this.disposeListeners(pty);
+        this.callbacks.onExit(terminalId, exitCode, Date.now() - startedAt);
+      })
+    ]);
+  }
+
+  private disposeListeners(pty: IPty): void {
+    for (const listener of this.listeners.get(pty) ?? []) listener.dispose();
+    this.listeners.delete(pty);
   }
 
   /** Without direct mode, types the command into the shell, quoted for it */
@@ -288,6 +306,7 @@ export class PtyManager {
   kill(terminalId: string): void {
     const pty = this.ptys.get(terminalId);
     if (pty) {
+      this.disposeListeners(pty);
       try {
         pty.kill();
       } catch {

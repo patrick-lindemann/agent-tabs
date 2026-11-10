@@ -380,7 +380,7 @@
           ],
           "default": "none",
           "scope": "machine-overridable",
-          "enumDescriptions": [
+          "markdownEnumDescriptions": [
             "Programs end with their window.",
             "Run each tab in a tmux session (3.2 or later), with status support.",
             "Run each tab in an abduco session, with status support. Its output is not kept in the tab's scrollback."
@@ -396,14 +396,14 @@
             "restart",
             "keep"
           ],
-          "enumDescriptions": [
+          "markdownEnumDescriptions": [
             "Close the tab after a clean exit (code 0); keep it open after an error. Closing the last tab opens a new one.",
             "Always close the tab when the process exits.",
             "Restart the command in the same tab. Falls back to 'keep' if the process exits within 3 seconds of starting.",
             "Keep the tab open; press Enter to restart or Esc to close."
           ],
           "default": "auto",
-          "description": "What happens when the terminal's process exits (e.g. after /exit)",
+          "markdownDescription": "What happens when the terminal's process exits (e.g. after /exit)",
           "order": 2
         },
         "agentTabs.restoreTabs": {
@@ -415,7 +415,7 @@
         "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
-          "description": "Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent, since closing ends its session.",
+          "markdownDescription": "Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent, since closing ends its session.",
           "order": 4
         },
         "agentTabs.autoTabTitles": {
@@ -435,7 +435,7 @@
         "agentTabs.monochromeIcons": {
           "type": "boolean",
           "default": false,
-          "description": "Show agent logos in the text color instead of their brand colors.",
+          "markdownDescription": "Show agent logos in the text color instead of their brand colors.",
           "order": 7
         },
         "agentTabs.programStatus": {
@@ -447,13 +447,13 @@
         "agentTabs.statusColors": {
           "type": "boolean",
           "default": true,
-          "description": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color.",
+          "markdownDescription": "Color the status icons on tabs (working, needs input, done, failed) and, for needs input, done and failed, the tab's name. The icons' shapes show the status without color.",
           "order": 9
         },
         "agentTabs.promptNotification": {
           "type": "boolean",
           "default": true,
-          "description": "Show notification indicator on tab when terminal is waiting for user input",
+          "markdownDescription": "Show notification indicator on tab when terminal is waiting for user input",
           "order": 10
         },
         "agentTabs.promptNotificationDelay": {
@@ -461,7 +461,7 @@
           "default": 300,
           "minimum": 100,
           "maximum": 2000,
-          "description": "Delay in milliseconds before showing the notification after output stops",
+          "markdownDescription": "Delay in milliseconds before showing the notification after output stops",
           "order": 11
         },
         "agentTabs.promptPatterns": {
@@ -470,32 +470,32 @@
             "type": "string"
           },
           "default": [],
-          "description": "Additional regex patterns to detect when terminal is waiting for input (e.g., '^mybot> $'). Built-in patterns detect most CLI AI tools automatically.",
+          "markdownDescription": "Additional regex patterns to detect when terminal is waiting for input (e.g., `^mybot> $`). Built-in patterns detect most CLI AI tools automatically.",
           "order": 12
         },
         "agentTabs.directMode": {
           "type": "boolean",
           "default": true,
-          "description": "Run command directly without shell wrapper (cleaner output, but no shell features)",
+          "markdownDescription": "Run command directly without shell wrapper (cleaner output, but no shell features)",
           "order": 13
         },
         "agentTabs.shell": {
           "type": "string",
           "default": "",
-          "description": "Custom shell path (empty = system default)",
+          "markdownDescription": "Custom shell path (empty = system default)",
           "order": 14,
           "scope": "machine-overridable"
         },
         "agentTabs.autoRun": {
           "type": "boolean",
           "default": true,
-          "description": "With directMode off: run the profile's command in the shell when a tab opens",
+          "markdownDescription": "With directMode off: run the profile's command in the shell when a tab opens",
           "order": 15
         },
         "agentTabs.env": {
           "type": "object",
           "default": {},
-          "description": "Additional environment variables",
+          "markdownDescription": "Additional environment variables",
           "order": 16,
           "scope": "machine-overridable"
         }

@@ -7,7 +7,10 @@ import { isAtBottom, trackScroll, viewportOf } from './scroll';
 import { ThemeBuilder } from './theme';
 import type { TerminalEntry, WebviewOutgoingMessage } from './types';
 
-const IS_MAC = navigator.platform.toUpperCase().includes('MAC');
+const IS_MAC = /Mac/i.test(
+  (navigator as Navigator & { userAgentData?: { platform: string } }).userAgentData?.platform ??
+    navigator.userAgent
+);
 
 /** The xterm.js terminals, one per tab, of which only the active one is shown */
 export class Terminals {

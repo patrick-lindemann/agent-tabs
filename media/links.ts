@@ -1,3 +1,6 @@
+import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm';
+import type { WebviewOutgoingMessage } from './types';
+
 export interface FileLinkMatch {
   path: string;
   line?: number;
@@ -52,8 +55,6 @@ export function extractFileLinks(line: string): FileLinkMatch[] {
   return links;
 }
 
-import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm';
-import type { WebviewOutgoingMessage } from './types';
 export class FileLinkProvider implements ILinkProvider {
   constructor(
     private readonly terminal: Terminal,

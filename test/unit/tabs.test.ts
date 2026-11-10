@@ -69,9 +69,11 @@ const nodePty = {
       killed: false,
       onData: (callback) => {
         onData = callback;
+        return { dispose: () => (onData = () => {}) };
       },
       onExit: (callback) => {
         onExit = callback;
+        return { dispose: () => (onExit = () => {}) };
       },
       write: (data) => pty.written.push(data),
       size: [0, 0],
@@ -100,8 +102,10 @@ afterAll(() => {
   Module._load = load;
 });
 
-// Commands found on the PATH; the real missingCommand checks them through isInstalled
-const installed = vi.hoisted(() => new Set(['claude', 'codex', 'pi', 'env', 'tmux', 'abduco']));
+// Commands found on the PATH; the real missingCommand checks them through
+// isInstalled. Tests may change it; each test starts with these.
+const INSTALLED = ['claude', 'codex', 'pi', 'env', 'tmux', 'abduco'];
+const installed = vi.hoisted(() => new Set<string>());
 vi.mock('node:fs', async (original) => {
   const fs = await original<typeof import('node:fs')>();
   const known = (file: string) => installed.has(file.split(/[\\/]/).pop() ?? '');
@@ -217,6 +221,8 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  installed.clear();
+  for (const command of INSTALLED) installed.add(command);
   spawned.length = 0;
   vscode.errors.length = 0;
   vscode.settings = {};
@@ -348,16 +354,14 @@ describe('process output', () => {
 
   it('falls back to the prompt detector for agents that report nothing', async () => {
     vscode.settings.promptNotificationDelay = 100;
-    const { tabs, status: tabStatus } = setup();
-    const a = await tabs.create(launchForCommand('copilot', [], true));
     installed.add('copilot');
-    tabs.close(a);
+    const { tabs, status: tabStatus } = setup();
     const id = await tabs.create(launchForCommand('copilot', [], true));
+    // Shown only for tabs in the background
     await tabs.create();
-    spawned.find((pty) => pty.file === 'copilot')?.emit('Run this command?\r\n❯ 1. Yes');
+    spawned[0].emit('Run this command?\r\n❯ 1. Yes');
     vi.advanceTimersByTime(100);
     expect(tabStatus(id)).toBe('blocked');
-    installed.delete('copilot');
   });
 });
 

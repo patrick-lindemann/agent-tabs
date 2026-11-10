@@ -195,7 +195,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   async promptAndCreateTerminal(): Promise<void> {
     const config = this.config.getConfig();
-    const result = await this.picker.promptForCommand(config.defaultProfile.command);
+    // The default profile's whole command line, e.g. `env A=1 pi`
+    const result = await this.picker.promptForCommand(config.defaultProfile.commandLine);
     if (!result.cancelled && result.command) {
       await this.createTerminal(
         launchForCommand(result.command, result.args, config.programStatus)

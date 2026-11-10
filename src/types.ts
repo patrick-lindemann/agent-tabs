@@ -1,3 +1,7 @@
+import type { AgentId } from './protocol';
+import type { Draft } from './terminal/draft';
+import type { MultiplexerId } from './terminal/multiplexer';
+
 // Muted but distinct workspace accent colors
 export const WORKSPACE_ACCENT_COLORS = [
   '#6b9ac4', // Muted blue
@@ -11,9 +15,14 @@ export const WORKSPACE_ACCENT_COLORS = [
 ] as const;
 
 // node-pty types
+/** Ends a listener */
+export interface IDisposable {
+  dispose(): void;
+}
+
 export interface IPty {
-  onData: (callback: (data: string) => void) => void;
-  onExit: (callback: (exitCode: { exitCode: number; signal?: number }) => void) => void;
+  onData: (callback: (data: string) => void) => IDisposable;
+  onExit: (callback: (exitCode: { exitCode: number; signal?: number }) => void) => IDisposable;
   write: (data: string) => void;
   resize: (cols: number, rows: number) => void;
   kill: () => void;
@@ -157,10 +166,6 @@ export type {
   TabStatus,
   WebviewMessage
 } from './protocol';
-
-import type { AgentId } from './protocol';
-import type { Draft } from './terminal/draft';
-import type { MultiplexerId } from './terminal/multiplexer';
 
 // Command help parsing types
 export interface CommandFlag {

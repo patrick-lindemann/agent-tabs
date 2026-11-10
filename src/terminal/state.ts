@@ -13,10 +13,7 @@ const STATUS_LABELS: Record<TabStatus, string> = {
   error: 'Failed'
 };
 
-/**
- * Manages terminal instance state including active terminal tracking.
- * Eliminates duplicated tab activation logic.
- */
+/** The open tabs, which one is active, and how each is labeled and described */
 export class TerminalStateManager {
   private readonly terminals = new Map<string, TerminalInstance>();
   private activeTerminalId: string | undefined;
@@ -83,30 +80,14 @@ export class TerminalStateManager {
     return this.activeTerminalId;
   }
 
-  /**
-   * Deactivates the current terminal and activates a new one.
-   * This eliminates the duplicated tab activation logic.
-   * Returns the previously active terminal (if any).
-   */
-  setActive(id: string): TerminalInstance | undefined {
-    let previousActive: TerminalInstance | undefined;
-
-    // Deactivate previous
-    if (this.activeTerminalId && this.activeTerminalId !== id) {
-      previousActive = this.terminals.get(this.activeTerminalId);
-      if (previousActive) {
-        previousActive.isActive = false;
-      }
-    }
-
-    // Activate new
+  /** Makes a tab the active one; an unknown ID changes nothing */
+  setActive(id: string): void {
     const instance = this.terminals.get(id);
-    if (instance) {
-      instance.isActive = true;
-      this.activeTerminalId = id;
-    }
-
-    return previousActive;
+    if (!instance) return;
+    const previous = this.activeTerminalId && this.terminals.get(this.activeTerminalId);
+    if (previous) previous.isActive = false;
+    instance.isActive = true;
+    this.activeTerminalId = id;
   }
 
   /**
@@ -235,14 +216,5 @@ export class TerminalStateManager {
       return undefined;
     }
     return WORKSPACE_ACCENT_COLORS[folderIndex % WORKSPACE_ACCENT_COLORS.length];
-  }
-
-  /**
-   * Iterates over all terminal IDs.
-   */
-  forEachId(callback: (id: string) => void): void {
-    for (const id of this.terminals.keys()) {
-      callback(id);
-    }
   }
 }

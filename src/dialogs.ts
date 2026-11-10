@@ -104,6 +104,8 @@ export interface TabEntry {
 export function pickTab(entries: TabEntry[], active: 1 | -1 = 1): Promise<string | undefined> {
   const pick = vscode.window.createQuickPick<TabEntry>();
   pick.placeholder = 'Switch to terminal tab';
+  pick.matchOnDescription = true;
+  pick.matchOnDetail = true;
   pick.items = entries;
   const preselected = active === 1 ? entries[1] : entries[entries.length - 1];
   if (preselected) pick.activeItems = [preselected];

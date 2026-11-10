@@ -25,10 +25,7 @@ type MessageHandlerMap = {
   [K in WebviewMessage['type']]: MessageHandler<Extract<WebviewMessage, { type: K }>>;
 };
 
-/**
- * Registry of message handlers.
- * Replaces the switch statement with a typed handler map.
- */
+/** The handler of each message type the webview sends */
 const messageHandlers: MessageHandlerMap = {
   ready: (message, ctx) => {
     ctx.handleReady(message.cols ?? 80, message.rows ?? 24);

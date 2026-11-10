@@ -543,8 +543,10 @@ export class Abduco implements Multiplexer {
   async open(options: SessionOptions): Promise<OpenResult> {
     const created = !(await this.exists(options.session));
     if (created) {
-      fs.mkdirSync(this.tags, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(this.tagFile(options.session), encodeTag(options.tag), { mode: 0o600 });
+      await fs.promises.mkdir(this.tags, { recursive: true, mode: 0o700 });
+      await fs.promises.writeFile(this.tagFile(options.session), encodeTag(options.tag), {
+        mode: 0o600
+      });
     }
     // -A creates the session or attaches to it
     const args = ['-A', options.session, options.command, ...options.args];
