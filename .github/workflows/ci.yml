@@ -12,9 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -28,16 +28,39 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run compile
+      # With coverage, so the thresholds in vitest.config.mts apply
       - name: Run unit tests
         run: npm test
+
+  # Starts real processes through node-pty's native module on each platform
+  # the extension ships for, e.g. batch files through cmd.exe on Windows
+  pty:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+      # node-pty installs its prebuilt or built module for Node, not Electron
+      - name: Install dependencies
+        run: npm ci
+      - name: Run node-pty tests
+        run: npm run test:pty
 
   integration:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
