@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as vscode from 'vscode';
 import type { INodePty, IPty, LaunchSpec, TerminalConfig } from '../types';
-import { shellClearCommand, shellQuote } from './shell';
+import { shellKind, shellRunLine } from './shell';
+import { pathKey, resolveExecutable, windowsLaunch } from './windows';
 
 /**
  * Callbacks for PTY events.
@@ -52,10 +53,11 @@ export class PtyManager {
       this.ensureNodePtyLoaded();
       const { shell, env, cwd: defaultCwd } = this.prepareSpawnOptions(config, launch);
       const workingDir = cwd ?? defaultCwd;
-      const pty = client
+      const program = client && this.programFor(client.command, client.args, env);
+      const pty = program
         ? this.nodePty?.spawn(
-            client.command,
-            client.args,
+            program.file,
+            program.args,
             this.spawnOptions(cols, rows, workingDir, env)
           )
         : this.createPty(config, launch, shell, cols, rows, workingDir, env);
@@ -63,7 +65,7 @@ export class PtyManager {
 
       this.ptys.set(terminalId, pty);
       this.setupPtyEventHandlers(terminalId, pty);
-      if (!client) this.handleAutoRun(pty, config, launch);
+      if (!client) this.handleAutoRun(pty, config, launch, shell);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.callbacks.onError(terminalId, errorMessage);
@@ -177,9 +179,25 @@ export class PtyManager {
 
     const spawnOptions = this.spawnOptions(cols, rows, cwd, env);
     if (config.directMode && launch.command) {
-      return this.nodePty.spawn(launch.command, launch.args, spawnOptions);
+      const { file, args } = this.programFor(launch.command, launch.args, env);
+      return this.nodePty.spawn(file, args, spawnOptions);
     }
-    return this.nodePty.spawn(shell, [], spawnOptions);
+    const { file, args } = this.programFor(shell, [], env);
+    return this.nodePty.spawn(file, args, spawnOptions);
+  }
+
+  /**
+   * What node-pty runs for a program. On Windows, it needs the full path,
+   * and batch files run through `cmd.exe`; see `windows.ts`.
+   */
+  private programFor(
+    command: string,
+    args: string[],
+    env: Record<string, string>
+  ): { file: string; args: string[] | string } {
+    if (process.platform !== 'win32') return { file: command, args };
+    const file = resolveExecutable(command, env[pathKey(env)] ?? '', env.PATHEXT) ?? command;
+    return windowsLaunch(file, args, env.ComSpec ?? env.COMSPEC);
   }
 
   private spawnOptions(cols: number, rows: number, cwd: string, env: Record<string, string>) {
@@ -215,11 +233,15 @@ export class PtyManager {
     });
   }
 
-  private handleAutoRun(pty: IPty, config: TerminalConfig, launch: LaunchSpec): void {
+  /** Without direct mode, types the command into the shell, quoted for it */
+  private handleAutoRun(
+    pty: IPty,
+    config: TerminalConfig,
+    launch: LaunchSpec,
+    shell: string
+  ): void {
     if (!config.directMode && config.autoRun && launch.command) {
-      const fullCommand = [launch.command, ...launch.args.map((arg) => shellQuote(arg))].join(' ');
-      // Clear screen and run command
-      pty.write(`${shellClearCommand()} && ${fullCommand}\r`);
+      pty.write(`${shellRunLine(launch.command, launch.args, shellKind(shell))}\r`);
     }
   }
 
@@ -227,11 +249,9 @@ export class PtyManager {
    * The PATH a tab's process gets, for checking that its command exists.
    */
   getSearchPath(config: TerminalConfig, launch: LaunchSpec): string {
-    const env: Partial<Record<string, string>> = this.buildEnvironment({
-      ...config.env,
-      ...launch.env
-    });
-    return env.PATH ?? '';
+    const env = this.buildEnvironment({ ...config.env, ...launch.env });
+    // Windows writes it `Path`
+    return env[pathKey(env)] ?? '';
   }
 
   /**

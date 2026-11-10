@@ -22,7 +22,8 @@ export interface IPty {
 export interface INodePty {
   spawn: (
     file: string,
-    args: string[],
+    /** On Windows also a ready command line, which node-pty passes on unchanged */
+    args: string[] | string,
     options: {
       name?: string;
       cols?: number;

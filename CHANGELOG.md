@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The warning about invalid profiles appears once, not again after every change to an Agent Tabs setting
 - Agents installed while VS Code runs get a profile, when none is configured, once the window has focus again
 - An invalid `agentTabs.onExit` or `agentTabs.tabTitleWords` falls back to the default
+- On Windows, tabs start agents installed as `.exe` or as npm's `.cmd` shims, e.g. `claude`, `codex` or `pi`: the extension finds the program with PATHEXT, including in the last entry of the PATH, and runs batch files through `cmd.exe` with their arguments escaped
+- With `agentTabs.directMode` off, the command typed into the shell is quoted for it, also a path with spaces, in `cmd.exe` and PowerShell too
 - A tab in a multiplexer session stores in the session when its conversation started, so a window that attaches to the session later no longer resumes a Claude Code conversation that does not exist
 
 ### Security

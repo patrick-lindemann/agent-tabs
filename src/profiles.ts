@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
 import { MULTIPLEXER_IDS, type MultiplexerId } from './terminal/multiplexer';
+import { resolveExecutable } from './terminal/windows';
 import type { AgentId, LaunchSpec } from './types';
 import { innerProgram, type Program, programName } from './wrappers';
 
@@ -477,6 +478,10 @@ export function missingCommand(launch: LaunchSpec, searchPath?: string): string 
  * on (with PATHEXT on Windows).
  */
 export function isInstalled(command: string, searchPath = process.env.PATH ?? ''): boolean {
+  if (process.platform === 'win32') {
+    // As the tab starts it, see `terminal/windows.ts`
+    return resolveExecutable(command, searchPath, process.env.PATHEXT) !== undefined;
+  }
   const isFile = (file: string) => {
     try {
       fs.accessSync(file, fs.constants.X_OK);
@@ -485,17 +490,13 @@ export function isInstalled(command: string, searchPath = process.env.PATH ?? ''
       return false;
     }
   };
-  if (command.includes('/') || command.includes('\\')) {
+  if (command.includes('/')) {
     return isFile(command);
   }
-  const extensions =
-    process.platform === 'win32'
-      ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';')]
-      : [''];
   return searchPath
     .split(path.delimiter)
     .filter(Boolean)
-    .some((dir) => extensions.some((extension) => isFile(path.join(dir, command + extension))));
+    .some((dir) => isFile(path.join(dir, command)));
 }
 
 /**
