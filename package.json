@@ -372,7 +372,7 @@
                   "sparkle",
                   null
                 ],
-                "markdownDescription": "The icon in the menu and on the profile's tabs, in place of the one its command line gets: an agent's logo, `terminal`, or `sparkle` (also `null`) for any other program. It changes nothing else, e.g. status support."
+                "markdownDescription": "The icon in the menu and on the profile's tabs, in place of the one its command line gets: an agent's logo, `terminal` or `sparkle`. Not set or `null`, the command line decides: an agent's logo, `terminal` for a shell, else `sparkle`. It changes nothing else, e.g. status support."
               },
               "multiplexer": {
                 "type": "string",

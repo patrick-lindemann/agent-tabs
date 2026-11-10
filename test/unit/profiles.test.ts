@@ -141,7 +141,9 @@ describe('the plain terminal', () => {
     [undefined, 'claude'],
     ['terminal', 'terminal'],
     ['pi', 'pi'],
-    [null, 'sparkle']
+    ['sparkle', 'sparkle'],
+    // The same as not set
+    [null, 'claude']
   ] as const)('uses the icon %s of a profile', (icon, shown) => {
     const { profiles, problems } = resolveProfiles([{ name: 'P', command: 'claude', icon }], false);
     expect(problems).toEqual([]);

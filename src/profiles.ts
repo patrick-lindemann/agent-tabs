@@ -384,7 +384,7 @@ function agentOfProgram(program: Program): AgentId | undefined {
 export interface ProfileSetting {
   command: string;
   name?: string;
-  /** An icon in place of the one the command line gets; `null` for the sparkle */
+  /** An icon in place of the one the command line gets; `null` is the same as none */
   icon?: ProfileIcon | null;
   env?: Record<string, string>;
   multiplexer?: MultiplexerId | 'none';
@@ -476,7 +476,7 @@ export function resolveProfiles(
       const launch = launchFromWords(name.trim(), words, command.trim(), programStatus);
       launch.env = { ...(env as Record<string, string> | undefined) };
       launch.profile = launch.label;
-      if (icon !== undefined) launch.icon = (icon as ProfileIcon | null) ?? 'sparkle';
+      if (icon !== undefined && icon !== null) launch.icon = icon as ProfileIcon;
       if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
     }
