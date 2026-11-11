@@ -13,3 +13,18 @@
   after the GitHub Release succeeds, through trusted publishing: the
   Marketplace policy names the workflow file `release.yml` and the `production`
   environment, so keep both names.
+- To show a change in a development window, run `npm run compile`, then open
+  VS Code with its own user data and extensions folders, so the window shares
+  no settings, theme, state or extensions with the user's other VS Code
+  windows, and no folder:
+
+  ```sh
+  dev=/tmp/agent-tabs-dev
+  mkdir -p "$dev/user/User" "$dev/extensions"
+  code --user-data-dir "$dev/user" --extensions-dir "$dev/extensions" \
+    --extensionDevelopmentPath="$PWD" --new-window
+  ```
+
+  Never open one with the default user data: Agent Tabs commands such as
+  Discover Profiles would change the user's real settings. After another
+  change, compile again and run _Developer: Reload Window_ in that window.
