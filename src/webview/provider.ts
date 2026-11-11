@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from '../config';
-import { confirmClose, manageProfiles, pickProfile, pickTab } from '../dialogs';
+import { confirmClose, discoverProfiles, manageProfiles, pickProfile, pickTab } from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
 import { Tabs } from '../terminal/tabs';
@@ -40,7 +40,9 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    workspaceState?: vscode.Memento
+    workspaceState?: vscode.Memento,
+    /** Keeps the user's choice not to be warned before Discover Profiles */
+    private readonly globalState?: vscode.Memento
   ) {
     this.tabs = new Tabs(
       this.config,
@@ -184,6 +186,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
       await this.promptAndCreateTerminal();
     } else if (choice === 'manage') {
       await this.manageProfiles();
+    } else if (choice === 'discover') {
+      await this.discoverProfiles();
     } else if (choice) {
       await this.createTerminal(choice.profile);
     }
@@ -191,6 +195,17 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   manageProfiles(): Promise<void> {
     return manageProfiles(this.config.getConfig().profiles);
+  }
+
+  /** Adds profiles for installed agents that have none, after a warning */
+  async discoverProfiles(): Promise<void> {
+    if (!this.globalState) return;
+    const config = this.config.getConfig();
+    await discoverProfiles(
+      config.profiles,
+      (profile) => this.tabs.pty.getSearchPath(config, profile),
+      this.globalState
+    );
   }
 
   async promptAndCreateTerminal(): Promise<void> {

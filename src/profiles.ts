@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
 import { PROFILE_ICONS } from './protocol';
@@ -494,6 +495,79 @@ export function resolveProfiles(
     if (terminal) profiles.push(terminal);
   }
   return { profiles, problems };
+}
+
+/**
+ * Folders agents' installers put their executable in, which may not be on the
+ * PATH VS Code got, e.g. when it was started from the Dock
+ */
+export function installFolders(
+  home = os.homedir(),
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const join = platform === 'win32' ? path.win32.join : path.posix.join;
+  if (platform === 'win32') {
+    return [
+      env.APPDATA && join(env.APPDATA, 'npm'),
+      env.LOCALAPPDATA && join(env.LOCALAPPDATA, 'Programs', 'cursor-agent'),
+      join(home, '.local', 'bin'),
+      join(home, '.bun', 'bin'),
+      join(home, 'scoop', 'shims')
+    ].filter((dir): dir is string => Boolean(dir));
+  }
+  return [
+    join(home, '.local', 'bin'),
+    join(home, '.claude', 'local'),
+    join(home, '.opencode', 'bin'),
+    join(home, '.bun', 'bin'),
+    join(home, '.npm-global', 'bin'),
+    join(home, '.volta', 'bin'),
+    join(home, '.cargo', 'bin'),
+    join(home, '.grok', 'bin'),
+    join(home, '.hermes', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin'
+  ];
+}
+
+/**
+ * Profiles for the known agents that are installed but have no profile in
+ * `profiles` yet, in the order of the known agents. A profile is the
+ * agent's by its kind: its `kind`, or without one the kind its command line
+ * gets, e.g. `npx @openai/codex` is Codex. An agent found on
+ * `searchPath` runs by its name; one only found in `folders` by its full
+ * path. A taken name gets a number, e.g. `Codex 2`. Shells are not agents,
+ * so no Terminal profile is added.
+ */
+export function discoverAgents(
+  profiles: Pick<LaunchSpec, 'label' | 'icon'>[],
+  searchPath = process.env.PATH ?? '',
+  folders: string[] = installFolders()
+): ProfileSetting[] {
+  const names = new Set(profiles.map((profile) => profile.label));
+  // A profile's icon is its kind
+  const configured = new Set<ProfileIcon>(profiles.map((profile) => profile.icon));
+  const found: ProfileSetting[] = [];
+  for (const agent of AGENT_IDS) {
+    if (configured.has(agent)) continue;
+    const { label, command, aliases = [] } = AGENTS[agent];
+    const executables = [command, ...aliases];
+    const onPath = executables.find((name) => isInstalled(name, searchPath));
+    const elsewhere = onPath
+      ? undefined
+      : folders
+          .flatMap((dir) => executables.map((name) => path.join(dir, name)))
+          .find((file) => isInstalled(file));
+    const commandLine = onPath ?? (elsewhere && quoteWord(elsewhere));
+    if (!commandLine) continue;
+    let name = label;
+    for (let n = 2; names.has(name); n++) name = `${label} ${String(n)}`;
+    names.add(name);
+    found.push({ name, command: commandLine });
+  }
+  return found;
 }
 
 /** The agent's name, e.g. `Claude Code`, or the program's, e.g. `htop` */

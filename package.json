@@ -154,6 +154,11 @@
         "command": "agentTabs.manageProfiles",
         "title": "Manage Profiles…",
         "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.discoverProfiles",
+        "title": "Discover Profiles",
+        "category": "Agent Tabs"
       }
     ],
     "keybindings": [

@@ -1,17 +1,18 @@
 import * as vscode from 'vscode';
-import { missingCommand } from './profiles';
+import { discoverAgents, missingCommand, type ProfileSetting } from './profiles';
 import type { CloseRisk } from './terminal/state';
 import type { AgentId, LaunchSpec } from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
 const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi', 'devin']);
 
-export type ProfileChoice = { profile: LaunchSpec } | 'custom' | 'manage' | undefined;
+export type ProfileChoice = { profile: LaunchSpec } | 'custom' | 'manage' | 'discover' | undefined;
 
 /**
  * Use Profile…: the profiles in their configured order with their logos,
- * then Custom Command…, then Manage Profiles…. VS Code's native view menus
- * cannot follow a setting's order or list user-defined profiles.
+ * then Custom Command…, then Discover Profiles and Manage Profiles…. VS
+ * Code's native view menus cannot follow a setting's order or list
+ * user-defined profiles.
  */
 export async function pickProfile(
   profiles: LaunchSpec[],
@@ -36,6 +37,9 @@ export async function pickProfile(
     })),
     { label: 'Custom Command…', iconPath: new vscode.ThemeIcon('edit'), choice: 'custom' },
     { label: '', kind: vscode.QuickPickItemKind.Separator },
+    // Manage Profiles… last: ↑ from the first item lands on it, and it
+    // changes nothing, unlike Discover Profiles
+    { label: 'Discover Profiles', choice: 'discover' },
     { label: 'Manage Profiles…', choice: 'manage' }
   ];
 
@@ -86,6 +90,81 @@ export async function manageProfiles(profiles: LaunchSpec[]): Promise<void> {
     );
   }
   await vscode.commands.executeCommand('workbench.action.openSettings', 'agentTabs.profiles');
+}
+
+/** Global state key: the user turned off the warning before Discover Profiles */
+const DISCOVER_WARNING_KEY = 'agentTabs.discoverProfiles.skipWarning';
+
+/**
+ * Discover Profiles: appends a profile to `agentTabs.profiles` for each known
+ * agent installed on this machine that has none yet. It changes the setting,
+ * so it warns first, until the user chooses not to be warned again. Without
+ * own profiles, the installed ones in use are written first, so the new
+ * ones follow them. `searchPath` is the PATH the tabs get.
+ */
+export async function discoverProfiles(
+  profiles: LaunchSpec[],
+  searchPath: (profile?: LaunchSpec) => string,
+  globalState: vscode.Memento
+): Promise<void> {
+  if (!globalState.get<boolean>(DISCOVER_WARNING_KEY, false)) {
+    const discover = 'Discover';
+    const dontShow = "Discover and Don't Show Again";
+    const choice = await vscode.window.showWarningMessage(
+      'Discover profiles?',
+      {
+        modal: true,
+        detail:
+          'Agent Tabs looks for installed coding agents that have no profile yet and adds a profile for each to the end of agentTabs.profiles. This changes your settings.'
+      },
+      discover,
+      dontShow
+    );
+    if (choice === undefined) return;
+    if (choice === dontShow) await globalState.update(DISCOVER_WARNING_KEY, true);
+  }
+
+  const config = vscode.workspace.getConfiguration('agentTabs');
+  const inspected = config.inspect<unknown>('profiles');
+  const own = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
+  // Where the profiles in use come from; the setting has no folder scope
+  const inWorkspace = own(inspected?.workspaceValue);
+  const setting = inWorkspace ? inspected?.workspaceValue : inspected?.globalValue;
+  // Without own profiles, the ones made for the installed agents and the
+  // Terminal profile are kept; those for agents that are not installed are not
+  const existing = own(setting)
+    ? profiles
+    : profiles.filter((profile) => !missingCommand(profile, searchPath(profile)));
+
+  const found = discoverAgents(existing, searchPath());
+  if (found.length === 0) {
+    void vscode.window.showInformationMessage(
+      'Agent Tabs: found no installed agents without a profile.'
+    );
+    return;
+  }
+  const current = own(setting)
+    ? setting
+    : existing.map(
+        (profile): ProfileSetting => ({
+          name: profile.label,
+          command: profile.commandLine
+        })
+      );
+  await config.update(
+    'profiles',
+    [...current, ...found],
+    inWorkspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global
+  );
+  const names = found.map((profile) => profile.name).join(', ');
+  const manage = 'Manage Profiles…';
+  const choice = await vscode.window.showInformationMessage(
+    `Agent Tabs: added ${found.length === 1 ? 'a profile' : `${String(found.length)} profiles`}: ${names}.`,
+    manage
+  );
+  if (choice === manage) {
+    await vscode.commands.executeCommand('workbench.action.openSettings', 'agentTabs.profiles');
+  }
 }
 
 export interface TabEntry {

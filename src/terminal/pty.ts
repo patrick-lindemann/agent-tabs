@@ -285,10 +285,11 @@ export class PtyManager {
   }
 
   /**
-   * The PATH a tab's process gets, for checking that its command exists.
+   * The PATH a tab's process gets, for checking that its command exists;
+   * without a launch, the PATH of a tab without a profile's own variables.
    */
-  getSearchPath(config: TerminalConfig, launch: LaunchSpec): string {
-    const env = this.buildEnvironment({ ...config.env, ...launch.env });
+  getSearchPath(config: TerminalConfig, launch?: LaunchSpec): string {
+    const env = this.buildEnvironment({ ...config.env, ...launch?.env });
     // Windows writes it `Path`
     return env[pathKey(env)] ?? '';
   }

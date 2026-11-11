@@ -8,7 +8,11 @@ interface TabContext {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  terminalProvider = new ViewProvider(context.extensionUri, context.workspaceState);
+  terminalProvider = new ViewProvider(
+    context.extensionUri,
+    context.workspaceState,
+    context.globalState
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('agentTabs.terminalView', terminalProvider, {
@@ -34,6 +38,9 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('agentTabs.manageProfiles', () => {
       void terminalProvider?.manageProfiles();
+    }),
+    vscode.commands.registerCommand('agentTabs.discoverProfiles', () => {
+      void terminalProvider?.discoverProfiles();
     }),
     vscode.commands.registerCommand('agentTabs.switchTab', () => {
       void terminalProvider?.pickTerminal(1);

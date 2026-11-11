@@ -20,7 +20,7 @@ Tabs take their name from the agent's session: Claude Code's conversation summar
 
 ### Every agent, one place
 
-Open any agent from the `+ ⌄` menu, with its logo. Agent Tabs finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue` or `env MODEL=fast pi` work, and a **Terminal** profile after them opens VS Code's default shell. **Custom Command…** runs anything else with completion for its flags.
+Open any agent from the `+ ⌄` menu, with its logo. Agent Tabs finds the agents you have installed and makes a profile for each. Profiles are plain command lines, so `claude --continue` or `env MODEL=fast pi` work, and a **Terminal** profile after them opens VS Code's default shell. **Custom Command…** runs anything else with completion for its flags. Once you have your own profiles, **Discover Profiles** in the `⌄` menu or the Command Palette adds the agents you installed since.
 
 ![The profile menu with installed agents](media/screenshots/profiles.png)
 

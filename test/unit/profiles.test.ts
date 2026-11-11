@@ -4,6 +4,8 @@ import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   defaultProfile,
+  discoverAgents,
+  installFolders,
   isInstalled,
   labelFromTitle,
   launchForCommand,
@@ -394,6 +396,83 @@ describe('finding commands', () => {
     expect(missingCommand(launch('bash -lc "cd x && pi"'), dir)).toBeUndefined();
     expect(missingCommand(launch('bash -lc "pi --continue"'), dir)).toBe('pi');
     expect(missingCommand(launch('tmux new -s pi'), dir)).toBeUndefined();
+  });
+});
+
+describe('discovering agents', () => {
+  let onPath: string;
+  let elsewhere: string;
+  beforeAll(() => {
+    onPath = fs.mkdtempSync(path.join(os.tmpdir(), 'discover-path-'));
+    elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'discover-other '));
+    for (const name of ['claude', 'codex', 'pi', 'zsh']) {
+      fs.writeFileSync(path.join(onPath, name), '#!/bin/sh\n', { mode: 0o755 });
+    }
+    fs.writeFileSync(path.join(elsewhere, 'cursor-agent'), '#!/bin/sh\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(elsewhere, 'gemini'), '#!/bin/sh\n', { mode: 0o644 });
+  });
+  afterAll(() => {
+    fs.rmSync(onPath, { recursive: true, force: true });
+    fs.rmSync(elsewhere, { recursive: true, force: true });
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'adds installed agents without a profile, but no shells',
+    () => {
+      const { profiles } = resolveProfiles(
+        [
+          { name: 'Claude', command: 'claude --continue' },
+          { name: 'Codex', command: 'env A=1 htop' },
+          { name: 'Shell', command: 'zsh -l' }
+        ],
+        false
+      );
+      expect(discoverAgents(profiles, onPath, [elsewhere])).toEqual([
+        { name: 'Codex 2', command: 'codex' },
+        { name: 'Pi', command: 'pi' },
+        { name: 'Cursor', command: `'${path.join(elsewhere, 'cursor-agent')}'` }
+      ]);
+    }
+  );
+
+  it.skipIf(process.platform === 'win32')('adds nothing when every agent has a profile', () => {
+    const { profiles } = resolveProfiles(
+      [
+        { name: 'C', command: 'claude' },
+        { name: 'X', command: 'npx @openai/codex' },
+        { name: 'P', command: 'ssh box pi' },
+        { name: 'A', command: 'agent' }
+      ],
+      false
+    );
+    expect(discoverAgents(profiles, onPath, [elsewhere])).toEqual([]);
+  });
+
+  it.skipIf(process.platform === 'win32')('knows the agent of a profile by its kind', () => {
+    const { profiles } = resolveProfiles(
+      [
+        // A script that starts Claude
+        { name: 'Mine', command: 'my-claude.sh', kind: 'claude' },
+        // Runs pi, but is not taken for it
+        { name: 'Other', command: 'pi', kind: 'sparkle' },
+        // Not set: the command line decides
+        { name: 'X', command: 'codex', kind: null },
+        { name: 'A', command: 'agent' }
+      ],
+      false
+    );
+    expect(discoverAgents(profiles, onPath, [elsewhere])).toEqual([{ name: 'Pi', command: 'pi' }]);
+  });
+
+  it('looks in the folders installers use', () => {
+    expect(installFolders('/home/me', 'linux', {})).toContain('/home/me/.local/bin');
+    expect(installFolders('/Users/me', 'darwin', {})).toContain('/opt/homebrew/bin');
+    expect(installFolders('C:\\Users\\me', 'win32', { APPDATA: 'C:\\AppData' })).toEqual([
+      'C:\\AppData\\npm',
+      'C:\\Users\\me\\.local\\bin',
+      'C:\\Users\\me\\.bun\\bin',
+      'C:\\Users\\me\\scoop\\shims'
+    ]);
   });
 });
 
