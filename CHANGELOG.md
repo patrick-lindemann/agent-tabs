@@ -5,6 +5,12 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-11-11
+
+### Fixed
+
+- Hyperlinks to files, such as the Markdown links in pi's answers, open in the editor with one click, at the line in a `#L10` fragment, like in VS Code's terminal. They were not links before, so only pi's own mouse handling opened them, after a click had focused the terminal
+
 ## [3.3.0] - 2026-11-11
 
 ### Added

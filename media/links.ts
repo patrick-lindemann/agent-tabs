@@ -55,6 +55,62 @@ export function extractFileLinks(line: string): FileLinkMatch[] {
   return links;
 }
 
+export interface FileTarget {
+  path: string;
+  line?: number;
+  column?: number;
+}
+
+/**
+ * The file an OSC 8 hyperlink points to, as programs such as pi write them
+ * for Markdown links: a `file://` URL or a path, with an optional line in a
+ * `#L10`, `#L10C5` or `#L10-L20` fragment or a `:10:5` suffix. Other URLs,
+ * e.g. `mailto:`, point to no file.
+ */
+export function parseFileTarget(target: string): FileTarget | undefined {
+  let rest = target;
+  let line: number | undefined;
+  let column: number | undefined;
+  const hash = rest.indexOf('#');
+  if (hash !== -1) {
+    const fragment = /^L(\d+)(?:C(\d+))?(?:-L?\d+(?:C\d+)?)?$/i.exec(rest.slice(hash + 1));
+    if (fragment) {
+      line = Number(fragment[1]);
+      column = fragment[2] ? Number(fragment[2]) : undefined;
+    }
+    rest = rest.slice(0, hash);
+  }
+
+  let path: string;
+  if (/^file:/i.test(rest)) {
+    try {
+      const url = new URL(rest);
+      path = decodeURIComponent(url.pathname);
+      // `file:///C:/x` has the path `/C:/x`; `file://server/share` is UNC
+      if (/^\/[a-zA-Z]:\//.test(path)) path = path.slice(1);
+      else if (url.host) path = `\\\\${url.host}${path.replace(/\//g, '\\')}`;
+    } catch {
+      return undefined;
+    }
+  } else if (/^[a-zA-Z][a-zA-Z0-9+.-]+:/.test(rest)) {
+    // A URL with another scheme; one letter followed by `:` is a drive
+    return undefined;
+  } else {
+    path = rest;
+  }
+
+  if (line === undefined) {
+    const suffix = /^(.*?):(\d+)(?::(\d+))?$/.exec(path);
+    if (suffix && !/^[a-zA-Z]$/.test(suffix[1])) {
+      path = suffix[1];
+      line = Number(suffix[2]);
+      column = suffix[3] ? Number(suffix[3]) : undefined;
+    }
+  }
+  if (!path) return undefined;
+  return { path, line, column };
+}
+
 export class FileLinkProvider implements ILinkProvider {
   constructor(
     private readonly terminal: Terminal,
