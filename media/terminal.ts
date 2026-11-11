@@ -2,7 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
 import { isTabShortcut, keySequence } from './keys';
-import { FileLinkProvider } from './links';
+import { FileLinkProvider, parseFileTarget } from './links';
 import { isAtBottom, trackScroll, viewportOf } from './scroll';
 import { ThemeBuilder } from './theme';
 import type { TerminalEntry, WebviewOutgoingMessage } from './types';
@@ -81,11 +81,18 @@ export class Terminals {
     const openLink = (_event: MouseEvent, url: string) => {
       if (/^https?:\/\//i.test(url)) this.post({ type: 'openLink', url });
     };
+    // OSC 8 hyperlinks may also point to files, e.g. pi's Markdown links to
+    // `/path/file.ts#L10`; those open in the editor, like in VS Code's terminal
+    const openHyperlink = (event: MouseEvent, url: string) => {
+      if (/^https?:\/\//i.test(url)) return openLink(event, url);
+      const file = parseFileTarget(url);
+      if (file) this.post({ type: 'openFile', id, ...file });
+    };
     const terminal = new Terminal({
       ...this.options(),
       letterSpacing: 0,
       theme: this.theme.getTheme(),
-      linkHandler: { activate: openLink, allowNonHttpProtocols: false }
+      linkHandler: { activate: openHyperlink, allowNonHttpProtocols: true }
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
