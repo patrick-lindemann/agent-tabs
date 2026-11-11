@@ -384,8 +384,11 @@ function agentOfProgram(program: Program): AgentId | undefined {
 export interface ProfileSetting {
   command: string;
   name?: string;
-  /** An icon in place of the one the command line gets; `null` is the same as none */
-  icon?: ProfileIcon | null;
+  /**
+   * What the profile runs, which decides its icon in place of the one the
+   * command line gets; `null` is the same as none
+   */
+  kind?: ProfileIcon | null;
   env?: Record<string, string>;
   multiplexer?: MultiplexerId | 'none';
 }
@@ -437,7 +440,7 @@ export function resolveProfiles(
     );
   }
   for (const [index, entry] of list.entries()) {
-    const { command, name, env, multiplexer, icon } = (
+    const { command, name, env, multiplexer, kind } = (
       typeof entry === 'object' && entry !== null ? entry : {}
     ) as Record<string, unknown>;
     const position = `profile ${index + 1}`;
@@ -467,16 +470,16 @@ export function resolveProfiles(
         `the multiplexer of ${position} must be ${[...MULTIPLEXER_IDS, 'none'].join(', ')}`
       );
     } else if (
-      icon !== undefined &&
-      icon !== null &&
-      !PROFILE_ICONS.includes(icon as ProfileIcon)
+      kind !== undefined &&
+      kind !== null &&
+      !PROFILE_ICONS.includes(kind as ProfileIcon)
     ) {
-      problems.push(`the icon of ${position} must be one of ${PROFILE_ICONS.join(', ')} or null`);
+      problems.push(`the kind of ${position} must be one of ${PROFILE_ICONS.join(', ')} or null`);
     } else {
       const launch = launchFromWords(name.trim(), words, command.trim(), programStatus);
       launch.env = { ...(env as Record<string, string> | undefined) };
       launch.profile = launch.label;
-      if (icon !== undefined && icon !== null) launch.icon = icon as ProfileIcon;
+      if (kind !== undefined && kind !== null) launch.icon = kind as ProfileIcon;
       if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
     }

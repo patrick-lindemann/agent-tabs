@@ -62,7 +62,7 @@ export interface LaunchSpec {
   /** The profile's own `multiplexer`, over `agentTabs.multiplexer` */
   multiplexer?: MultiplexerId | 'none';
   /**
-   * The icon of the profile and its tabs: the profile's `icon`, or the
+   * The icon of the profile and its tabs: the profile's `kind`, or the
    * agent's logo, the terminal icon for a shell, else the sparkle
    */
   icon: ProfileIcon;

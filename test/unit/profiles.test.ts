@@ -144,24 +144,24 @@ describe('the plain terminal', () => {
     ['sparkle', 'sparkle'],
     // The same as not set
     [null, 'claude']
-  ] as const)('uses the icon %s of a profile', (icon, shown) => {
-    const { profiles, problems } = resolveProfiles([{ name: 'P', command: 'claude', icon }], false);
+  ] as const)('shows the icon of a profile of kind %s', (kind, shown) => {
+    const { profiles, problems } = resolveProfiles([{ name: 'P', command: 'claude', kind }], false);
     expect(problems).toEqual([]);
     expect(profiles[0].icon).toBe(shown);
-    // The icon changes nothing else
+    // The kind changes nothing else
     expect(profiles[0].agent).toBe('claude');
   });
 
-  it('skips a profile with an unknown icon, like other invalid entries', () => {
+  it('skips a profile of an unknown kind, like other invalid entries', () => {
     const { profiles, problems } = resolveProfiles(
       [
-        { name: 'P', command: 'claude', icon: 'rocket' },
+        { name: 'P', command: 'claude', kind: 'rocket' },
         { name: 'Q', command: 'pi' }
       ],
       false
     );
     expect(profiles.map((profile) => profile.label)).toEqual(['Q']);
-    expect(problems).toEqual([expect.stringContaining('the icon of profile 1 must be one of')]);
+    expect(problems).toEqual([expect.stringContaining('the kind of profile 1 must be one of')]);
   });
 
   it('has no agent', () => {
