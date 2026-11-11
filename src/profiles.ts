@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as stopword from 'stopword';
 import { PROFILE_ICONS } from './protocol';
@@ -384,8 +385,11 @@ function agentOfProgram(program: Program): AgentId | undefined {
 export interface ProfileSetting {
   command: string;
   name?: string;
-  /** An icon in place of the one the command line gets; `null` is the same as none */
-  icon?: ProfileIcon | null;
+  /**
+   * What the profile runs, which decides its icon in place of the one the
+   * command line gets; `null` is the same as none
+   */
+  kind?: ProfileIcon | null;
   env?: Record<string, string>;
   multiplexer?: MultiplexerId | 'none';
 }
@@ -437,7 +441,7 @@ export function resolveProfiles(
     );
   }
   for (const [index, entry] of list.entries()) {
-    const { command, name, env, multiplexer, icon } = (
+    const { command, name, env, multiplexer, kind } = (
       typeof entry === 'object' && entry !== null ? entry : {}
     ) as Record<string, unknown>;
     const position = `profile ${index + 1}`;
@@ -467,16 +471,16 @@ export function resolveProfiles(
         `the multiplexer of ${position} must be ${[...MULTIPLEXER_IDS, 'none'].join(', ')}`
       );
     } else if (
-      icon !== undefined &&
-      icon !== null &&
-      !PROFILE_ICONS.includes(icon as ProfileIcon)
+      kind !== undefined &&
+      kind !== null &&
+      !PROFILE_ICONS.includes(kind as ProfileIcon)
     ) {
-      problems.push(`the icon of ${position} must be one of ${PROFILE_ICONS.join(', ')} or null`);
+      problems.push(`the kind of ${position} must be one of ${PROFILE_ICONS.join(', ')} or null`);
     } else {
       const launch = launchFromWords(name.trim(), words, command.trim(), programStatus);
       launch.env = { ...(env as Record<string, string> | undefined) };
       launch.profile = launch.label;
-      if (icon !== undefined && icon !== null) launch.icon = icon as ProfileIcon;
+      if (kind !== undefined && kind !== null) launch.icon = kind as ProfileIcon;
       if (multiplexer !== undefined) launch.multiplexer = multiplexer as MultiplexerId | 'none';
       profiles.push(launch);
     }
@@ -491,6 +495,79 @@ export function resolveProfiles(
     if (terminal) profiles.push(terminal);
   }
   return { profiles, problems };
+}
+
+/**
+ * Folders agents' installers put their executable in, which may not be on the
+ * PATH VS Code got, e.g. when it was started from the Dock
+ */
+export function installFolders(
+  home = os.homedir(),
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const join = platform === 'win32' ? path.win32.join : path.posix.join;
+  if (platform === 'win32') {
+    return [
+      env.APPDATA && join(env.APPDATA, 'npm'),
+      env.LOCALAPPDATA && join(env.LOCALAPPDATA, 'Programs', 'cursor-agent'),
+      join(home, '.local', 'bin'),
+      join(home, '.bun', 'bin'),
+      join(home, 'scoop', 'shims')
+    ].filter((dir): dir is string => Boolean(dir));
+  }
+  return [
+    join(home, '.local', 'bin'),
+    join(home, '.claude', 'local'),
+    join(home, '.opencode', 'bin'),
+    join(home, '.bun', 'bin'),
+    join(home, '.npm-global', 'bin'),
+    join(home, '.volta', 'bin'),
+    join(home, '.cargo', 'bin'),
+    join(home, '.grok', 'bin'),
+    join(home, '.hermes', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin'
+  ];
+}
+
+/**
+ * Profiles for the known agents that are installed but have no profile in
+ * `profiles` yet, in the order of the known agents. A profile is the
+ * agent's by its kind: its `kind`, or without one the kind its command line
+ * gets, e.g. `npx @openai/codex` is Codex. An agent found on
+ * `searchPath` runs by its name; one only found in `folders` by its full
+ * path. A taken name gets a number, e.g. `Codex 2`. Shells are not agents,
+ * so no Terminal profile is added.
+ */
+export function discoverAgents(
+  profiles: Pick<LaunchSpec, 'label' | 'icon'>[],
+  searchPath = process.env.PATH ?? '',
+  folders: string[] = installFolders()
+): ProfileSetting[] {
+  const names = new Set(profiles.map((profile) => profile.label));
+  // A profile's icon is its kind
+  const configured = new Set<ProfileIcon>(profiles.map((profile) => profile.icon));
+  const found: ProfileSetting[] = [];
+  for (const agent of AGENT_IDS) {
+    if (configured.has(agent)) continue;
+    const { label, command, aliases = [] } = AGENTS[agent];
+    const executables = [command, ...aliases];
+    const onPath = executables.find((name) => isInstalled(name, searchPath));
+    const elsewhere = onPath
+      ? undefined
+      : folders
+          .flatMap((dir) => executables.map((name) => path.join(dir, name)))
+          .find((file) => isInstalled(file));
+    const commandLine = onPath ?? (elsewhere && quoteWord(elsewhere));
+    if (!commandLine) continue;
+    let name = label;
+    for (let n = 2; names.has(name); n++) name = `${label} ${String(n)}`;
+    names.add(name);
+    found.push({ name, command: commandLine });
+  }
+  return found;
 }
 
 /** The agent's name, e.g. `Claude Code`, or the program's, e.g. `htop` */

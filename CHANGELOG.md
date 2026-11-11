@@ -5,6 +5,16 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-11-11
+
+### Added
+
+- **Discover Profiles**, in the profile menu above Manage Profiles… and in the Command Palette, adds a profile to the end of `agentTabs.profiles` for each installed agent that has none yet, by the profiles' `kind` or else their command line, also when it is installed outside the PATH VS Code got, e.g. in `~/.local/bin`. It asks first, since it changes the setting, unless you chose not to be asked again
+
+### Changed
+
+- A profile's `icon` is now `kind`, with the same values: an agent, `terminal` or `sparkle`
+
 ## [3.2.0] - 2026-11-11
 
 ### Added
