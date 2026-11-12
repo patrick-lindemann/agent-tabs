@@ -1,4 +1,4 @@
-import { shortTitle, transformTitle } from '../profiles';
+import { sentenceCase, shortTitle, transformTitle } from '../profiles';
 import type {
   LayoutInfo,
   SplitSide,
@@ -321,11 +321,17 @@ export class TerminalStateManager {
     return title ? `${instance.launch.label} / ${title}` : instance.launch.label;
   }
 
+  /**
+   * The program's title, else the first message sent. With
+   * `transformTabTitles`, the message is in sentence case like the titles
+   * agents write, and Claude Code's generated names are written as words.
+   */
   private getTitle(instance: TerminalInstance, titles: TitleOptions): string | undefined {
-    const title = titles.autoTabTitles ? (instance.titleLabel ?? instance.messageLabel) : undefined;
-    return title && titles.transformTabTitles
-      ? transformTitle(title, instance.launch.agent)
-      : title;
+    if (!titles.autoTabTitles) return undefined;
+    const { titleLabel, messageLabel } = instance;
+    if (!titles.transformTabTitles) return titleLabel ?? messageLabel;
+    if (titleLabel) return transformTitle(titleLabel, instance.launch.agent);
+    return messageLabel && sentenceCase(messageLabel);
   }
 
   /** `Needs input: approve Bash`, or undefined when idle */

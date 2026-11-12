@@ -11,6 +11,7 @@ import {
   launchForCommand,
   missingCommand,
   resolveProfiles,
+  sentenceCase,
   shortTitle,
   splitCommandLine,
   terminalLaunch,
@@ -505,6 +506,20 @@ describe('transformed titles', () => {
     expect(transformTitle('x86-64', 'claude')).toBe('x86-64');
     expect(transformTitle('fix-login-bug', 'pi')).toBe('fix-login-bug');
     expect(transformTitle('fix-login-bug', undefined)).toBe('fix-login-bug');
+  });
+
+  it.each([
+    ['why does the build fail', 'Why does the build fail'],
+    ['über die Anmeldung', 'Über die Anmeldung'],
+    ['fix, then test', 'Fix, then test'],
+    ['Fix the login bug', 'Fix the login bug'],
+    ['iOS build fails', 'iOS build fails'],
+    ['README is outdated', 'README is outdated'],
+    ['src/app.ts throws', 'src/app.ts throws'],
+    ['pi-tabs crashes', 'pi-tabs crashes'],
+    ['42 tests fail', '42 tests fail']
+  ])('writes %j in sentence case as %j', (text, expected) => {
+    expect(sentenceCase(text)).toBe(expected);
   });
 });
 

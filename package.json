@@ -545,7 +545,7 @@
         "agentTabs.transformTabTitles": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Write a Claude Code session name that `/rename` generated, e.g. `fix-login-bug`, as `Fix login bug` in tab names. When off, tabs show the name as Claude Code writes it.",
+          "markdownDescription": "Write tab names in sentence case like the titles agents write: the first message you send, e.g. `why does the build fail` as `Why does the build fail`, and a Claude Code session name that `/rename` generated, e.g. `fix-login-bug`, as `Fix login bug`. When off, tabs show the message and the name as written.",
           "order": 6
         },
         "agentTabs.monochromeIcons": {

@@ -718,7 +718,20 @@ export function shortTitle(text: string, maxWords: number): string | undefined {
  */
 export function transformTitle(label: string, agent: AgentId | undefined): string {
   if (agent !== 'claude' || !/^[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)+$/.test(label)) return label;
-  return label[0].toUpperCase() + label.slice(1).replaceAll('-', ' ');
+  return sentenceCase(label.replaceAll('-', ' '));
+}
+
+/**
+ * Capitalizes the first word when it is all lowercase, as in the sentence
+ * case that agents write titles in: `why does the build fail` becomes
+ * `Why does the build fail`. A first word with a capital, e.g. `iOS` or
+ * `README`, and one that is not a plain word, e.g. `src/app.ts` or
+ * `pi-tabs`, stay as they are.
+ */
+export function sentenceCase(text: string): string {
+  if (!/^\p{Ll}+(?=$|[\s,;:!?)])/u.test(text)) return text;
+  const [first, ...rest] = text;
+  return first.toUpperCase() + rest.join('');
 }
 
 /**

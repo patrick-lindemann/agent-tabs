@@ -254,6 +254,19 @@ describe('tab labels', () => {
     const asWritten = titles(4, { transformTabTitles: false });
     expect(state.getLabel(instance, asWritten)).toBe('fix-login-bug');
   });
+
+  it('writes the first message in sentence case until the agent sets a title', () => {
+    const instance = tab({ messageLabel: 'why does the build fail' });
+    const state = manager(instance);
+    expect(state.getLabel(instance, titles())).toBe('Why does build fail');
+    expect(state.getFullLabel(instance, titles())).toBe('Claude Code / Why does the build fail');
+    const asWritten = titles(4, { transformTabTitles: false });
+    expect(state.getLabel(instance, asWritten)).toBe('why does build fail');
+
+    // The agent's own title is left in its case
+    instance.titleLabel = 'build failure in CI';
+    expect(state.getFullLabel(instance, titles())).toBe('Claude Code / build failure in CI');
+  });
 });
 
 describe('tab list', () => {
