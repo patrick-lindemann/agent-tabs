@@ -213,23 +213,30 @@ export interface BusyTab {
 const REASONS: Record<BusyTab['reason'], string> = {
   working: 'is still working',
   waiting: 'is waiting for your input',
-  session: 'still runs in its detached session'
+  session: 'still runs in a detached session'
 };
 
 /**
  * Asks before closing tabs whose agent is working or waiting for an answer,
- * or whose detached session still runs.
- * "Don't Ask Again" turns off `agentTabs.confirmClose`.
+ * or whose detached session still runs. The title says why for one tab, and
+ * the detail lists each tab with its reason for several.
+ * "Don't Ask Again" closes them and turns off `agentTabs.confirmClose`.
  */
 export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
   const [first] = busy;
   const single = busy.length === 1 && first;
-  const message = single ? `Close "${first.label}"?` : `Close ${String(busy.length)} tabs?`;
+  const message = single
+    ? `${first.agent} in "${first.label}" ${REASONS[first.reason]}`
+    : `${String(busy.length)} tabs are still in use`;
   const detail = single
-    ? `${first.agent} ${REASONS[first.reason]}. Closing the tab ends its session.`
-    : 'Their agents are working, waiting for input or still run in a detached session. Closing the tabs ends their sessions.';
-  const close = busy.length === 1 ? 'Close' : 'Close All';
-  const dontAsk = "Close and Don't Ask Again";
+    ? 'Closing the tab ends its session.'
+    : [
+        ...busy.map((tab) => `"${tab.label}": ${tab.agent} ${REASONS[tab.reason]}`),
+        '',
+        'Closing the tabs ends their sessions.'
+      ].join('\n');
+  const close = single ? 'Close' : 'Close All';
+  const dontAsk = "Don't Ask Again";
 
   const choice = await vscode.window.showWarningMessage(
     message,

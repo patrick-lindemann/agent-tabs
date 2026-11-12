@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The dialog before closing tabs says in its title why a tab is in use, lists each tab with its reason when several are, and its second button is **Don't Ask Again**
+
 ### Removed
 
 - Closing a tab no longer asks when you typed a message without sending it. Agent Tabs cannot see an agent's input, so it guessed from the keys you pressed, and often asked after the text had been deleted
