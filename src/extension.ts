@@ -69,6 +69,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('agentTabs.split', () => {
       void terminalProvider?.splitTerminal();
     }),
+    vscode.commands.registerCommand('agentTabs.splitRight', () => {
+      void terminalProvider?.splitTerminal('right');
+    }),
     vscode.commands.registerCommand('agentTabs.focusPreviousPane', () => {
       terminalProvider?.focusNextPane(-1);
     }),

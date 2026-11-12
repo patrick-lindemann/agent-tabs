@@ -18,6 +18,7 @@ import type {
   TerminalInstance
 } from '../types';
 import { typed } from './draft';
+import type { SavedLayout } from './layout';
 import {
   getMultiplexer,
   MULTIPLEXER_IDS,
@@ -78,10 +79,16 @@ export interface ClosedTabStore {
   set(tabs: ClosedTab[]): void;
 }
 
-/** Where the open tabs are kept for the next window, e.g. the workspace state */
+/**
+ * Where the open tabs and the panes they are in are kept for the next
+ * window, e.g. the workspace state
+ */
 export interface OpenTabStore {
   get(): OpenTab[];
   set(tabs: OpenTab[]): void;
+  /** The splits of the panes; none with one pane */
+  getLayout(): unknown;
+  setLayout(layout: SavedLayout | undefined): void;
 }
 
 /** How many closed tabs can be reopened */
@@ -147,11 +154,11 @@ export class Tabs {
   }
 
   /**
-   * Opens a tab in the focused pane, or with `split` in a new pane below
-   * it. Without a launch it runs the first profile. Returns undefined when
-   * the user cancelled choosing its folder.
+   * Opens a tab in the focused pane, or with `split` in a new pane on that
+   * side of it. Without a launch it runs the first profile. Returns
+   * undefined when the user cancelled choosing its folder.
    */
-  async create(launch?: LaunchSpec, split = false): Promise<string | undefined> {
+  async create(launch?: LaunchSpec, split?: SplitSide): Promise<string | undefined> {
     const folder = await this.pty.selectWorkingDirectory();
     if (!folder) return undefined;
     const { path: cwd, folderIndex } = folder;
@@ -159,7 +166,7 @@ export class Tabs {
     const focused = this.state.getFocusedPaneId();
     const pane =
       split && this.state.getPaneTabs(focused).length > 0
-        ? this.state.addPane(focused, 'after')?.id
+        ? this.state.addPane(focused, split)?.id
         : undefined;
     return this.open({
       launch: launch ?? this.config.getConfig().defaultProfile,
@@ -258,22 +265,15 @@ export class Tabs {
     /** The tabs their panes showed; the focused pane's last */
     const shownInPane: string[] = [];
     let focused: string | undefined;
-    // The panes the saved tabs were in, by position; the first is the
-    // focused pane, the others open below it as their first tab opens
-    const panes = new Map<number, string>([[0, this.state.getFocusedPaneId()]]);
-    let lastPane = this.state.getFocusedPaneId();
-    const paneFor = (tab: OpenTab): string => {
-      const index = tab.pane ?? 0;
-      let pane = panes.get(index);
-      if (!pane) {
-        pane = this.state.addPane(lastPane, 'after', tab.paneSize)?.id ?? lastPane;
-        panes.set(index, pane);
-        lastPane = pane;
-      } else if (index === 0 && tab.paneSize !== undefined) {
-        this.state.setPaneSize(pane, tab.paneSize);
-      }
-      return pane;
-    };
+    // The panes the saved tabs were in, by their position in reading order.
+    // A saved layout that does not fit the tabs, e.g. from another version,
+    // puts them all in one pane.
+    const count = Math.max(0, ...saved.map((tab) => (tab.pane ?? 0) + 1));
+    const panes =
+      (this.state.count === 0 && count > 1
+        ? this.state.restoreLayout(this.openTabs?.getLayout(), count)
+        : undefined) ?? [];
+    const paneFor = (tab: OpenTab): string | undefined => panes[tab.pane ?? 0];
     this.restoring = true;
     try {
       for (const tab of saved) {
@@ -301,7 +301,6 @@ export class Tabs {
       }
       // Sessions the last window did not list open in the pane that had focus
       if (focused) this.state.setActive(focused);
-      else this.state.focusPane(panes.get(0) ?? lastPane);
       const sessions = [...own.values()]
         .filter((entry) => this.workspace !== '' || listed.has(entry.name))
         .filter((entry) => !entry.attached && !shown.has(entry.name))
@@ -311,6 +310,8 @@ export class Tabs {
       }
     } finally {
       this.restoring = false;
+      // Panes whose tabs show elsewhere now, e.g. in another window, close
+      this.state.prunePanes();
     }
     for (const id of shownInPane) this.state.setActive(id, false);
     if (focused) this.switchTo(focused);
@@ -347,6 +348,7 @@ export class Tabs {
     const activeId = this.state.getActiveId();
     const panes = this.state.getPaneIds();
     const split = panes.length > 1;
+    const layout = this.state.saveLayout();
     const tabs: OpenTab[] = panes.flatMap((pane, index) =>
       this.state.getPaneTabs(pane).flatMap((id) => {
         const instance = this.state.get(id);
@@ -365,13 +367,14 @@ export class Tabs {
         tab.active = instance.isActive || undefined;
         tab.focused = id === activeId || undefined;
         tab.pane = index;
-        tab.paneSize = this.state.getPaneSize(pane);
         return [tab];
       })
     );
-    const json = JSON.stringify(tabs);
+    const json = JSON.stringify([tabs, layout]);
     if (json === this.savedOpen) return;
     this.savedOpen = json;
+    // The layout first, so tabs never refer to panes it does not have
+    this.openTabs.setLayout(layout);
     this.openTabs.set(tabs);
   }
 
@@ -543,17 +546,22 @@ export class Tabs {
     }
   }
 
-  /** Focuses the pane above (-1) or below (1) the focused one, without wrapping */
+  /**
+   * Focuses the next (1) or previous (-1) pane in reading order, wrapping
+   * around, like VS Code's split terminal
+   */
   focusNextPane(step: 1 | -1): void {
     const panes = this.state.getPaneIds();
-    const pane = panes[panes.indexOf(this.state.getFocusedPaneId()) + step];
-    const id = pane && this.state.getPaneTabs(pane).length > 0 && this.state.getShownIn(pane);
+    if (panes.length <= 1) return;
+    const index = panes.indexOf(this.state.getFocusedPaneId());
+    const pane = panes[(index + step + panes.length) % panes.length];
+    const id = this.state.getShownIn(pane);
     if (id) this.switchTo(id);
   }
 
-  /** The panes' heights after the user dragged an edge between them */
-  resizePanes(sizes: number[]): void {
-    if (this.state.resizePanes(sizes)) this.saveOpen();
+  /** The sizes of a split's children after the user dragged an edge between them */
+  resizeSplit(split: string, sizes: number[]): void {
+    if (this.state.resizeSplit(split, sizes)) this.saveOpen();
   }
 
   /**

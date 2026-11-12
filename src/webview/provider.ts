@@ -22,6 +22,9 @@ const CLOSED_TABS_KEY = 'agentTabs.closedTabs';
 /** Workspace state key of the open tabs, which the next window opens again */
 const OPEN_TABS_KEY = 'agentTabs.openTabs';
 
+/** Workspace state key of the splits of the open tabs' panes */
+const LAYOUT_KEY = 'agentTabs.layout';
+
 /**
  * Identifies the workspace in the tags of its multiplexer sessions: the
  * paths of its workspace file or folders on the machine the extension runs
@@ -69,7 +72,9 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
       },
       workspaceState && {
         get: () => workspaceState.get<OpenTab[]>(OPEN_TABS_KEY, []),
-        set: (tabs) => void workspaceState.update(OPEN_TABS_KEY, tabs)
+        set: (tabs) => void workspaceState.update(OPEN_TABS_KEY, tabs),
+        getLayout: () => workspaceState.get<unknown>(LAYOUT_KEY),
+        setLayout: (layout) => void workspaceState.update(LAYOUT_KEY, layout)
       }
     );
   }
@@ -182,8 +187,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     this.tabs.focusPane(pane);
   }
 
-  handleResizePanes(sizes: number[]): void {
-    this.tabs.resizePanes(sizes);
+  handleResizeSplit(split: string, sizes: number[]): void {
+    this.tabs.resizeSplit(split, sizes);
   }
 
   handleOpenFile(id: string, path: string, line?: number, column?: number): void {
@@ -201,12 +206,15 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     return this.tabs.create(launch);
   }
 
-  /** Opens the first profile in a new pane below the focused one, like Split Terminal */
-  splitTerminal(): Promise<string | undefined> {
-    return this.tabs.create(undefined, true);
+  /**
+   * Opens the first profile in a new pane below the focused one, like Split
+   * Terminal does in a sidebar, or with `side` to its right
+   */
+  splitTerminal(side: 'bottom' | 'right' = 'bottom'): Promise<string | undefined> {
+    return this.tabs.create(undefined, side);
   }
 
-  /** Focuses the pane above (-1) or below (1) */
+  /** Focuses the next (1) or previous (-1) pane */
   focusNextPane(step: 1 | -1): void {
     this.tabs.focusNextPane(step);
   }
@@ -390,10 +398,10 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   private refresh(): void {
     const { state } = this.tabs;
     const { autoTabTitles, tabTitleWords, statusColors, monochromeIcons } = this.config.getConfig();
-    const panes = state.getPanesInfo(autoTabTitles, tabTitleWords);
-    this.post({ type: 'tabsUpdate', panes, statusColors, monochromeIcons });
+    const layout = state.getLayoutInfo(autoTabTitles, tabTitleWords);
+    this.post({ type: 'tabsUpdate', layout, statusColors, monochromeIcons });
     // Scopes the pane keybindings, like VS Code's terminal while it is split
-    const split = panes.length > 1;
+    const split = state.paneCount > 1;
     if (split !== this.split) {
       this.split = split;
       void vscode.commands.executeCommand('setContext', 'agentTabs.split', split);

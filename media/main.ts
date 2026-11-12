@@ -19,7 +19,7 @@ function start(): void {
         terminals.clear(message.id);
         break;
       case 'tabsUpdate':
-        panes?.render(message.panes, message.statusColors, message.monochromeIcons);
+        panes?.render(message.layout, message.statusColors, message.monochromeIcons);
         break;
       case 'createTab':
         terminals.create(message.id);

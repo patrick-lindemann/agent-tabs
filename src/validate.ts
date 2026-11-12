@@ -38,12 +38,16 @@ export function isWebviewMessage(value: unknown): value is WebviewMessage {
       );
     case 'splitTab':
       return (
-        isId(value.id) && isId(value.pane) && (value.side === 'before' || value.side === 'after')
+        isId(value.id) &&
+        isId(value.pane) &&
+        typeof value.side === 'string' &&
+        ['top', 'bottom', 'left', 'right'].includes(value.side)
       );
     case 'focusPane':
       return isId(value.pane);
-    case 'resizePanes':
+    case 'resizeSplit':
       return (
+        isId(value.split) &&
         Array.isArray(value.sizes) &&
         value.sizes.length <= 100 &&
         value.sizes.every(

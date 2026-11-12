@@ -54,25 +54,27 @@ describe('active tab', () => {
 });
 
 describe('panes', () => {
-  it('splits a tab into a new pane below or above, which gets focus and half the height', () => {
-    const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }));
+  it('splits a tab into a new pane on a side, which gets focus', () => {
+    const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }), tab({ id: 'd' }));
     const [first] = state.getPaneIds();
-    const below = state.split('b', first, 'after');
+    const below = state.split('b', first, 'bottom');
     expect(state.getPaneIds()).toEqual([first, below]);
-    expect(state.getPaneTabs(first)).toEqual(['a', 'c']);
+    expect(state.getPaneTabs(first)).toEqual(['a', 'c', 'd']);
     expect(state.getPaneTabs(below)).toEqual(['b']);
     expect(state.getFocusedPaneId()).toBe(below);
     expect(state.getActiveId()).toBe('b');
-    expect([state.getPaneSize(first), below && state.getPaneSize(below)]).toEqual([0.5, 0.5]);
-    const above = state.split('c', first, 'before');
+    const above = state.split('c', first, 'top');
     expect(state.getPaneIds()).toEqual([above, first, below]);
-    expect(state.getAllIds()).toEqual(['c', 'a', 'b']);
+    // Beside a pane in a column: a row in its place
+    const right = state.split('d', first, 'right');
+    expect(state.getPaneIds()).toEqual([above, first, right, below]);
+    expect(state.getAllIds()).toEqual(['c', 'a', 'd', 'b']);
   });
 
   it("does not split a pane's only tab from itself", () => {
     const state = manager(tab());
     const [pane] = state.getPaneIds();
-    expect(state.split('a', pane, 'after')).toBeUndefined();
+    expect(state.split('a', pane, 'bottom')).toBeUndefined();
     expect(state.getPaneIds()).toEqual([pane]);
   });
 
@@ -80,7 +82,7 @@ describe('panes', () => {
     const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }));
     const [first] = state.getPaneIds();
     state.setActive('a');
-    const second = state.split('c', first, 'after') as string;
+    const second = state.split('c', first, 'right') as string;
     expect(state.getShownIds()).toEqual(['a', 'c']);
     state.setActive('b', false);
     expect(state.getShownIds()).toEqual(['b', 'c']);
@@ -92,15 +94,15 @@ describe('panes', () => {
     expect(state.getPaneTabs(second)).toEqual(['c']);
   });
 
-  it('closes a pane with its last tab and gives the pane above its height and focus', () => {
+  it('closes a pane with its last tab and gives the pane before it its space and focus', () => {
     const state = manager(tab(), tab({ id: 'b' }));
     const [first] = state.getPaneIds();
-    const second = state.split('b', first, 'after') as string;
+    const second = state.split('b', first, 'bottom') as string;
     state.delete('b');
     expect(state.getPaneIds()).toEqual([first]);
     expect(state.getFocusedPaneId()).toBe(first);
-    expect(state.getPaneSize(first)).toBe(1);
     expect(state.getPaneTabs(second)).toEqual([]);
+    expect(state.getLayoutInfo(false, 4).type).toBe('pane');
   });
 
   it('keeps the last pane when its last tab closes', () => {
@@ -114,7 +116,7 @@ describe('panes', () => {
   it('moves a tab into another pane at a position, which shows it', () => {
     const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }));
     const [first] = state.getPaneIds();
-    const second = state.split('c', first, 'after') as string;
+    const second = state.split('c', first, 'bottom') as string;
     expect(state.move('a', 0, second)).toBe(true);
     expect(state.getPaneTabs(second)).toEqual(['a', 'c']);
     expect(state.getActiveId()).toBe('a');
@@ -125,23 +127,27 @@ describe('panes', () => {
     expect(state.getPaneTabs(second)).toEqual(['a', 'c', 'b']);
   });
 
-  it('describes each pane with its tabs, size and focus', () => {
+  it('describes the layout with each pane, its tabs and focus, and the split sizes', () => {
     const state = manager(tab(), tab({ id: 'b' }));
     const [first] = state.getPaneIds();
-    const second = state.split('b', first, 'after') as string;
-    state.resizePanes([3, 1]);
-    expect(
-      state.getPanesInfo(false, 4).map(({ id, size, focused, tabs }) => ({
-        id,
-        size,
-        focused,
-        tabs: tabs.map((info) => [info.id, info.isActive])
-      }))
-    ).toEqual([
-      { id: first, size: 3, focused: false, tabs: [['a', true]] },
-      { id: second, size: 1, focused: true, tabs: [['b', true]] }
+    const second = state.split('b', first, 'right') as string;
+    const layout = state.getLayoutInfo(false, 4);
+    if (layout.type !== 'split') throw new Error('not split');
+    expect(state.resizeSplit(layout.id, [3, 1])).toBe(true);
+    expect(state.resizeSplit(layout.id, [1])).toBe(false);
+    expect(state.resizeSplit('missing', [1, 1])).toBe(false);
+    const strip = (info: ReturnType<typeof state.getLayoutInfo>): unknown =>
+      info.type === 'pane'
+        ? [info.id, info.focused, info.tabs.map((t) => [t.id, t.isActive])]
+        : [info.direction, info.sizes, info.children.map(strip)];
+    expect(strip(state.getLayoutInfo(false, 4))).toEqual([
+      'row',
+      [3, 1],
+      [
+        [first, false, [['a', true]]],
+        [second, true, [['b', true]]]
+      ]
     ]);
-    expect(state.resizePanes([1])).toBe(false);
   });
 });
 

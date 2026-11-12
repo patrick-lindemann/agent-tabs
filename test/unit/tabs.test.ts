@@ -18,6 +18,7 @@ import type {
   LaunchSpec,
   OnExitAction,
   OpenTab,
+  SplitSide,
   TerminalConfig
 } from '../../src/types';
 import { status } from './agents';
@@ -145,7 +146,7 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
 
 /** Tabs whose `create` fails the test instead of returning no tab */
 class TestTabs extends Tabs {
-  override async create(launch?: LaunchSpec, split?: boolean): Promise<string> {
+  override async create(launch?: LaunchSpec, split?: SplitSide): Promise<string> {
     const id = await super.create(launch, split);
     if (!id) throw new Error('no tab opened');
     return id;
@@ -181,9 +182,14 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
   };
   const open = {
     tabs: [] as OpenTab[],
+    layout: undefined as unknown,
     get: () => open.tabs,
     set: (tabs: OpenTab[]) => {
       open.tabs = tabs;
+    },
+    getLayout: () => open.layout,
+    setLayout: (layout: unknown) => {
+      open.layout = layout;
     }
   };
   const tabs = new TestTabs(manager, host, WORKSPACE, closed, open);
@@ -384,7 +390,7 @@ describe('panes', () => {
     const b = await tabs.create();
     const [first] = tabs.state.getPaneIds();
     posted.length = 0;
-    tabs.split(b, first, 'after');
+    tabs.split(b, first, 'bottom');
     const [, second] = tabs.state.getPaneIds();
     expect(tabs.state.getPaneTabs(first)).toEqual([a]);
     expect(tabs.state.getPaneTabs(second)).toEqual([b]);
@@ -392,10 +398,10 @@ describe('panes', () => {
     expect(posted).toEqual([{ type: 'switchTab', id: b }]);
   });
 
-  it('opens a new tab in the focused pane, and Split Terminal in a new pane below it', async () => {
+  it('opens a new tab in the focused pane, and Split Terminal in a new pane beside it', async () => {
     const { tabs } = setup();
     const a = await tabs.create();
-    const b = await tabs.create(undefined, true);
+    const b = await tabs.create(undefined, 'right');
     const [first, second] = tabs.state.getPaneIds();
     expect(tabs.state.getPaneTabs(second)).toEqual([b]);
     tabs.focusPane(first);
@@ -408,7 +414,7 @@ describe('panes', () => {
     const { tabs } = setup();
     const a = await tabs.create();
     const b = await tabs.create();
-    const c = await tabs.create(undefined, true);
+    const c = await tabs.create(undefined, 'bottom');
     const d = await tabs.create();
     tabs.cycle(1);
     expect(tabs.state.getActiveId()).toBe(c);
@@ -418,23 +424,24 @@ describe('panes', () => {
     expect(tabs.state.getAllIds()).toEqual([a, b, d, c]);
   });
 
-  it('focuses the pane above or below, without wrapping', async () => {
+  it('focuses the next or previous pane in reading order, wrapping around', async () => {
     const { tabs } = setup();
     const a = await tabs.create();
-    const b = await tabs.create(undefined, true);
-    tabs.focusNextPane(-1);
-    expect(tabs.state.getActiveId()).toBe(a);
-    tabs.focusNextPane(-1);
-    expect(tabs.state.getActiveId()).toBe(a);
+    const b = await tabs.create(undefined, 'right');
+    const c = await tabs.create(undefined, 'bottom');
     tabs.focusNextPane(1);
+    expect(tabs.state.getActiveId()).toBe(a);
+    tabs.focusNextPane(-1);
+    expect(tabs.state.getActiveId()).toBe(c);
+    tabs.focusNextPane(-1);
     expect(tabs.state.getActiveId()).toBe(b);
     expect(tabs.recentlyUsed()[0]).toBe(b);
   });
 
-  it('closes a pane with its last tab, and the pane above takes focus', async () => {
+  it('closes a pane with its last tab, and the pane before it takes focus', async () => {
     const { tabs } = setup();
     const a = await tabs.create();
-    const b = await tabs.create(undefined, true);
+    const b = await tabs.create(undefined, 'right');
     tabs.close(b);
     expect(tabs.state.getPaneIds()).toHaveLength(1);
     expect(tabs.state.getActiveId()).toBe(a);
@@ -444,7 +451,7 @@ describe('panes', () => {
     const { tabs } = setup();
     const a = await tabs.create();
     const b = await tabs.create();
-    const c = await tabs.create(undefined, true);
+    const c = await tabs.create(undefined, 'bottom');
     tabs.close(a);
     expect(tabs.state.getActiveId()).toBe(c);
     expect(tabs.state.getShownIds()).toEqual([b, c]);
@@ -454,7 +461,7 @@ describe('panes', () => {
     const { tabs } = setup();
     const a = await tabs.create();
     const b = await tabs.create();
-    const c = await tabs.create(undefined, true);
+    const c = await tabs.create(undefined, 'right');
     const [, second] = tabs.state.getPaneIds();
     tabs.move(a, 0, second);
     expect(tabs.state.getPaneTabs(second)).toEqual([a, c]);
@@ -466,7 +473,7 @@ describe('panes', () => {
     const { tabs, host, status: tabStatus } = setup();
     const a = await tabs.create();
     const agentA = spawned[0];
-    await tabs.create(undefined, true);
+    await tabs.create(undefined, 'right');
     // In view without focus, a result is not news
     agentA.emit(status('state=working') + status('state=done'));
     expect(tabStatus(a)).toBeUndefined();
@@ -480,14 +487,15 @@ describe('panes', () => {
     expect(tabStatus(a)).toBeUndefined();
   });
 
-  it('keeps the pane sizes the user dragged', async () => {
+  it('keeps the sizes the user dragged for the next window', async () => {
     const { tabs, open } = setup();
     await tabs.create();
-    await tabs.create(undefined, true);
-    tabs.resizePanes([2, 1]);
-    expect(open.tabs.map((tab) => tab.paneSize)).toEqual([2, 1]);
-    tabs.resizePanes([1]);
-    expect(open.tabs.map((tab) => tab.paneSize)).toEqual([2, 1]);
+    await tabs.create(undefined, 'right');
+    const layout = tabs.state.getLayoutInfo(false, 4);
+    tabs.resizeSplit(layout.id, [2, 1]);
+    expect(open.layout).toEqual({ direction: 'row', sizes: [2, 1], children: [0, 1] });
+    tabs.resizeSplit(layout.id, [1]);
+    expect(open.layout).toEqual({ direction: 'row', sizes: [2, 1], children: [0, 1] });
   });
 });
 
@@ -1617,42 +1625,75 @@ describe('restoring the tabs of the last window', () => {
     expect(open.tabs).toEqual(previous.open.tabs);
   });
 
-  it('saves one pane as before, without pane fields', async () => {
+  it('saves one pane as before, without pane fields or a layout', async () => {
     const { tabs, open } = setup();
     await tabs.create();
     await tabs.create(PI);
-    expect(open.tabs.map((tab) => [tab.pane, tab.paneSize, tab.focused, tab.active])).toEqual([
-      [undefined, undefined, undefined, undefined],
-      [undefined, undefined, undefined, true]
+    expect(open.tabs.map((tab) => [tab.pane, tab.focused, tab.active])).toEqual([
+      [undefined, undefined, undefined],
+      [undefined, undefined, true]
     ]);
+    expect(open.layout).toBeUndefined();
   });
 
-  it('opens the panes again with their tabs, sizes, shown tabs and focus', async () => {
+  it('opens nested panes again with their tabs, sizes, shown tabs and focus', async () => {
     const previous = setup();
     const a = await previous.tabs.create();
-    const b = await previous.tabs.create(PI);
-    const c = await previous.tabs.create(undefined, true);
     await previous.tabs.create(PI);
-    previous.tabs.switchTo(c);
+    const c = await previous.tabs.create(undefined, 'right');
+    const d = await previous.tabs.create(PI, 'bottom');
     previous.tabs.switchTo(a);
-    previous.tabs.resizePanes([3, 1]);
-    expect(previous.tabs.state.getShownIds()).toEqual([a, c]);
-    expect(b).toBeDefined();
+    const outer = previous.tabs.state.getLayoutInfo(false, 4);
+    previous.tabs.resizeSplit(outer.id, [3, 1]);
+    expect(previous.tabs.state.getShownIds()).toEqual([a, c, d]);
 
     const { tabs, open } = setup();
     open.tabs = previous.open.tabs;
+    open.layout = previous.open.layout;
     await expect(tabs.restore()).resolves.toBe(4);
     const panes = tabs.state.getPaneIds();
-    expect(panes).toHaveLength(2);
     const labels = (pane: string) =>
       tabs.state.getPaneTabs(pane).map((id) => tabs.state.get(id)?.launch.label);
-    expect(labels(panes[0])).toEqual(['Claude Code', 'Pi']);
-    expect(labels(panes[1])).toEqual(['Claude Code', 'Pi']);
-    expect(panes.map((pane) => tabs.state.getPaneSize(pane))).toEqual([3, 1]);
-    const [first, , third] = tabs.state.getAllIds();
-    expect(tabs.state.getShownIds()).toEqual([first, third]);
+    expect(panes.map(labels)).toEqual([['Claude Code', 'Pi'], ['Claude Code'], ['Pi']]);
+    const layout = tabs.state.getLayoutInfo(false, 4);
+    expect(layout.type === 'split' && [layout.direction, layout.sizes]).toEqual(['row', [3, 1]]);
+    const [first, , third, fourth] = tabs.state.getAllIds();
+    expect(tabs.state.getShownIds()).toEqual([first, third, fourth]);
     expect(tabs.state.getActiveId()).toBe(first);
     expect(open.tabs).toEqual(previous.open.tabs);
+    expect(open.layout).toEqual(previous.open.layout);
+  });
+
+  it('opens the tabs in one pane when the saved layout does not fit them', async () => {
+    const previous = setup();
+    await previous.tabs.create();
+    await previous.tabs.create(PI, 'right');
+
+    const { tabs, open } = setup();
+    open.tabs = previous.open.tabs;
+    open.layout = { direction: 'row', sizes: [1], children: [0] };
+    await expect(tabs.restore()).resolves.toBe(2);
+    expect(tabs.state.getPaneIds()).toHaveLength(1);
+    expect(tabs.state.getAllIds()).toHaveLength(2);
+  });
+
+  it('closes the panes whose tabs did not open again', async () => {
+    const previous = setup();
+    await previous.tabs.create();
+    await previous.tabs.create(PI, 'right');
+
+    const { tabs, open } = setup();
+    // The second pane's tab shows its session in another window
+    tmux.add('elsewhere', { created: 1 }, { attached: true });
+    open.tabs = previous.open.tabs.map((tab, index) =>
+      index === 1 ? { ...tab, session: 'elsewhere' } : tab
+    );
+    open.layout = previous.open.layout;
+    const restored = tabs.restore();
+    await vi.runAllTimersAsync();
+    await expect(restored).resolves.toBe(1);
+    expect(tabs.state.getPaneIds()).toHaveLength(1);
+    expect(tabs.state.getActiveId()).toBe(tabs.state.getAllIds()[0]);
   });
 
   it('restores nothing with restoreTabs off', async () => {

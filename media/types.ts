@@ -4,7 +4,9 @@ import type { WebviewOutgoingMessage } from '../src/protocol';
 
 export type {
   AgentId,
+  LayoutInfo,
   PaneInfo,
+  SplitInfo,
   SplitSide,
   TabInfo,
   WebviewIncomingMessage,

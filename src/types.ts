@@ -151,10 +151,11 @@ export interface OpenTab {
   session?: string;
   /** Its pane showed it; without `pane` there was one pane, and this tab had focus */
   active?: boolean;
-  /** Its pane's position from the top, 0 for the first; none with one pane */
+  /**
+   * Its pane's position among the panes in reading order, 0 for the first,
+   * in the layout kept with the tabs; none with one pane
+   */
   pane?: number;
-  /** Its pane's share of the view's height */
-  paneSize?: number;
   /** It was the tab of the pane with focus */
   focused?: boolean;
 }
@@ -173,8 +174,11 @@ export interface SessionRef {
 export type {
   AgentId,
   ExtensionMessage,
+  LayoutInfo,
   PaneInfo,
   ProfileIcon,
+  SplitDirection,
+  SplitInfo,
   SplitSide,
   TabInfo,
   TabStatus,

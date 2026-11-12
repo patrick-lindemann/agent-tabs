@@ -1,31 +1,38 @@
 import { drag, TabBar } from './tabs';
 import type { Terminals } from './terminal';
-import type { PaneInfo, SplitSide, WebviewOutgoingMessage } from './types';
+import type { LayoutInfo, PaneInfo, SplitInfo, SplitSide, WebviewOutgoingMessage } from './types';
 
-/** A pane's terminal is at least this high in pixels while its edge is dragged */
-const MIN_PANE_HEIGHT = 60;
+/** A pane is at least this wide and high in pixels while an edge is dragged */
+const MIN_PANE_SIZE = 60;
+
+/**
+ * The share of a pane's width or height at its edges where a dropped tab
+ * splits it toward that edge; the top and bottom take what is left
+ */
+const SIDE_ZONE = 0.25;
 
 /** A pane in the view: its tab strip and the container its terminal shows in */
 interface PaneElement {
   root: HTMLElement;
   tabs: TabBar;
   terminal: HTMLElement;
-  size: number;
   /** The tab the pane shows */
   shown: string | undefined;
 }
 
 /**
- * The view's panes, stacked top to bottom, each a tab strip over the
- * terminal of its active tab. Dropping a dragged tab on the top or bottom
- * half of a pane's terminal splits the pane, and the edge between two panes
- * can be dragged to resize them.
+ * The view's panes, laid out by the splits the extension sends: side by
+ * side in a row, one above the other in a column, and splits within
+ * splits. Each pane is a tab strip over the terminal of its active tab.
+ * Dropping a dragged tab near an edge of a pane's terminal splits the pane
+ * toward it, and the edge between two panes can be dragged to resize them.
  */
 export class Panes {
   private readonly root: HTMLElement;
   private readonly panes = new Map<string, PaneElement>();
-  /** Pane IDs, top to bottom */
-  private order: string[] = [];
+  /** The layout last built, to build it again only when it changed */
+  private shape = '';
+  private paneCount = 0;
   private focusedId: string | undefined;
 
   constructor(
@@ -38,12 +45,13 @@ export class Panes {
   }
 
   get count(): number {
-    return this.order.length;
+    return this.paneCount;
   }
 
   /** Lays out the panes and shows each pane's active tab in it */
-  render(panes: PaneInfo[], statusColors: boolean, monochromeIcons: boolean): void {
-    const ids = new Set(panes.map((pane) => pane.id));
+  render(layout: LayoutInfo, statusColors: boolean, monochromeIcons: boolean): void {
+    const infos = panesOf(layout);
+    const ids = new Set(infos.map((pane) => pane.id));
     for (const [id, pane] of this.panes) {
       if (!ids.has(id)) {
         this.terminals.release(pane.terminal);
@@ -53,40 +61,67 @@ export class Panes {
       }
     }
     // Emptied first, so a terminal that moved between panes is not taken back
-    for (const info of panes) {
+    for (const info of infos) {
       const pane = this.panes.get(info.id);
       if (pane && !info.tabs.some((tab) => tab.isActive)) this.terminals.release(pane.terminal);
     }
-    for (const info of panes) {
+    for (const info of infos) {
       const pane = this.panes.get(info.id) ?? this.createPane(info.id);
-      pane.size = info.size;
-      pane.root.style.flexGrow = String(info.size);
       pane.root.classList.toggle('focused', info.focused);
       pane.tabs.render(info.tabs, statusColors, monochromeIcons);
       pane.shown = info.tabs.find((tab) => tab.isActive)?.id;
     }
-    // Laid out again only when the panes changed: moving a pane's element
-    // takes keyboard focus from its terminal, and tab updates come often
-    const order = panes.map((pane) => pane.id);
-    if (order.join('\n') !== this.order.join('\n')) {
-      this.root.replaceChildren();
-      order.forEach((id, index) => {
-        const pane = this.panes.get(id);
-        if (!pane) return;
-        if (index > 0) this.root.appendChild(this.createSash(index));
-        this.root.appendChild(pane.root);
-      });
+    // Built again only when the splits changed: moving a pane's element
+    // takes keyboard focus from its terminal, and tab updates come often.
+    // Sizes alone are applied in place.
+    const shape = JSON.stringify(shapeOf(layout));
+    if (shape !== this.shape) {
+      this.shape = shape;
+      this.root.replaceChildren(this.build(layout));
+    } else {
+      this.applySizes(layout);
     }
-    this.order = order;
-    this.root.classList.toggle('split', panes.length > 1);
-    for (const info of panes) {
+    this.paneCount = infos.length;
+    this.root.classList.toggle('split', infos.length > 1);
+    for (const info of infos) {
       const pane = this.panes.get(info.id);
       const active = info.tabs.find((tab) => tab.isActive);
       if (pane && active) this.terminals.place(active.id, pane.terminal);
     }
-    const focused = panes.find((pane) => pane.focused);
+    const focused = infos.find((pane) => pane.focused);
     this.focusedId = focused?.id;
     this.terminals.setActive(focused?.tabs.find((tab) => tab.isActive)?.id);
+  }
+
+  /** The element of a pane, or of a split with its children and the edges between them */
+  private build(node: LayoutInfo): HTMLElement {
+    if (node.type === 'pane') {
+      const pane = this.panes.get(node.id);
+      if (!pane) throw new Error(`Pane ${node.id} not found`);
+      return pane.root;
+    }
+    const split = document.createElement('div');
+    split.className = `split split-${node.direction}`;
+    split.dataset.split = node.id;
+    node.children.forEach((child, index) => {
+      if (index > 0) split.appendChild(this.createSash(node, index));
+      const element = this.build(child);
+      element.style.flexGrow = String(node.sizes[index]);
+      split.appendChild(element);
+    });
+    return split;
+  }
+
+  /** Sets the sizes of every split's children, without building it again */
+  private applySizes(node: LayoutInfo): void {
+    if (node.type === 'pane') return;
+    const split = this.root.querySelector<HTMLElement>(`[data-split="${node.id}"]`);
+    const children = split ? childrenOf(split) : [];
+    node.children.forEach((child, index) => {
+      const element = children[index];
+      if (element) element.style.flexGrow = String(node.sizes[index]);
+      this.applySizes(child);
+    });
   }
 
   private createPane(id: string): PaneElement {
@@ -112,19 +147,23 @@ export class Panes {
       }
     });
     this.setupSplitDrop(id, terminal);
-    const pane: PaneElement = { root, tabs, terminal, size: 1, shown: undefined };
+    const pane: PaneElement = { root, tabs, terminal, shown: undefined };
     this.panes.set(id, pane);
     return pane;
   }
 
   /**
-   * A tab dragged over a pane's terminal shades the half it would go to:
-   * the top half opens a new pane above, the bottom half below
+   * A tab dragged over a pane's terminal shades the part it would go to: a
+   * new pane on the left or right near those edges, else above or below
    */
   private setupSplitDrop(id: string, terminal: HTMLElement): void {
     const side = (event: DragEvent): SplitSide => {
       const rect = terminal.getBoundingClientRect();
-      return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = (event.clientY - rect.top) / rect.height;
+      if (x < SIDE_ZONE) return 'left';
+      if (x > 1 - SIDE_ZONE) return 'right';
+      return y < 0.5 ? 'top' : 'bottom';
     };
     const zone = (): HTMLElement => {
       let element = terminal.querySelector<HTMLElement>('.drop-zone');
@@ -161,41 +200,51 @@ export class Panes {
   }
 
   /**
-   * The edge above the pane at `index`: dragging it moves height between
-   * that pane and the one above
+   * The edge before the split's child at `index`: dragging it moves width
+   * or height between that child and the one before
    */
-  private createSash(index: number): HTMLElement {
+  private createSash(split: SplitInfo, index: number): HTMLElement {
+    const row = split.direction === 'row';
     const sash = document.createElement('div');
-    sash.className = 'pane-sash';
+    sash.className = `pane-sash ${row ? 'sash-vertical' : 'sash-horizontal'}`;
     sash.setAttribute('role', 'separator');
-    sash.setAttribute('aria-orientation', 'horizontal');
+    sash.setAttribute('aria-orientation', row ? 'vertical' : 'horizontal');
     sash.addEventListener('pointerdown', (event) => {
-      const above = this.panes.get(this.order[index - 1]);
-      const below = this.panes.get(this.order[index]);
-      if (!above || !below) return;
+      const parent = sash.parentElement;
+      if (!parent) return;
+      const children = childrenOf(parent);
+      const before = children[index - 1];
+      const after = children[index];
+      if (!before || !after) return;
       event.preventDefault();
       sash.setPointerCapture(event.pointerId);
       sash.classList.add('active');
-      const startY = event.clientY;
-      const aboveHeight = above.root.getBoundingClientRect().height;
-      const belowHeight = below.root.getBoundingClientRect().height;
-      const total = above.size + below.size;
+      const length = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        return row ? rect.width : rect.height;
+      };
+      const position = (pointer: PointerEvent) => (row ? pointer.clientX : pointer.clientY);
+      const start = position(event);
+      const beforeLength = length(before);
+      const afterLength = length(after);
+      // Sizes as rendered, since the user may have dragged before
+      const sizes = children.map((child) => Number(child.style.flexGrow) || 1);
+      const total = sizes[index - 1] + sizes[index];
       const move = (moved: PointerEvent) => {
         const delta = Math.max(
-          MIN_PANE_HEIGHT - aboveHeight,
-          Math.min(moved.clientY - startY, belowHeight - MIN_PANE_HEIGHT)
+          MIN_PANE_SIZE - beforeLength,
+          Math.min(position(moved) - start, afterLength - MIN_PANE_SIZE)
         );
-        const share = (aboveHeight + delta) / (aboveHeight + belowHeight);
-        above.size = total * share;
-        below.size = total - above.size;
-        above.root.style.flexGrow = String(above.size);
-        below.root.style.flexGrow = String(below.size);
+        const share = (beforeLength + delta) / (beforeLength + afterLength);
+        sizes[index - 1] = total * share;
+        sizes[index] = total - sizes[index - 1];
+        before.style.flexGrow = String(sizes[index - 1]);
+        after.style.flexGrow = String(sizes[index]);
       };
       const end = () => {
         sash.removeEventListener('pointermove', move);
         sash.classList.remove('active');
-        const sizes = this.order.map((pane) => this.panes.get(pane)?.size ?? 1);
-        this.post({ type: 'resizePanes', sizes });
+        this.post({ type: 'resizeSplit', split: split.id, sizes });
       };
       sash.addEventListener('pointermove', move);
       sash.addEventListener('pointerup', end, { once: true });
@@ -203,4 +252,24 @@ export class Panes {
     });
     return sash;
   }
+}
+
+/** The panes of a layout in reading order */
+function panesOf(node: LayoutInfo): PaneInfo[] {
+  return node.type === 'pane' ? [node] : node.children.flatMap(panesOf);
+}
+
+/** A layout without sizes and tabs: what decides whether it must be built again */
+function shapeOf(node: LayoutInfo): unknown {
+  return node.type === 'pane'
+    ? node.id
+    : { id: node.id, direction: node.direction, children: node.children.map(shapeOf) };
+}
+
+/** A split element's children, without the edges between them */
+function childrenOf(split: HTMLElement): HTMLElement[] {
+  return [...split.children].filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && !child.classList.contains('pane-sash')
+  );
 }

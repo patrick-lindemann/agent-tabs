@@ -48,21 +48,35 @@ export interface TabInfo {
   statusText?: string;
 }
 
-/**
- * A pane of the view, stacked top to bottom: a tab strip and the terminal
- * of the tab it shows
- */
+/** A pane of the view: a tab strip and the terminal of the tab it shows */
 export interface PaneInfo {
+  type: 'pane';
   id: string;
-  /** Its share of the view's height, relative to the other panes */
-  size: number;
   /** Commands and new tabs go to the focused pane */
   focused: boolean;
   tabs: TabInfo[];
 }
 
-/** Where a dragged tab goes in a pane it is dropped on: a new pane above or below it */
-export type SplitSide = 'before' | 'after';
+/**
+ * Panes or further splits next to each other: side by side in a `row`, one
+ * above the other in a `column`
+ */
+export interface SplitInfo {
+  type: 'split';
+  id: string;
+  direction: SplitDirection;
+  /** Each child's share of the split's width or height, in order */
+  sizes: number[];
+  children: LayoutInfo[];
+}
+
+/** The view's layout: one pane, or a split of panes */
+export type LayoutInfo = PaneInfo | SplitInfo;
+
+export type SplitDirection = 'row' | 'column';
+
+/** Where a dragged tab dropped on a pane's terminal goes: a new pane on that side */
+export type SplitSide = 'top' | 'bottom' | 'left' | 'right';
 
 export type WebviewMessage =
   | { type: 'ready'; cols?: number; rows?: number }
@@ -80,8 +94,8 @@ export type WebviewMessage =
   | { type: 'splitTab'; id: string; pane: string; side: SplitSide }
   /** The user clicked into a pane */
   | { type: 'focusPane'; pane: string }
-  /** The user dragged the edge between panes; their sizes in order */
-  | { type: 'resizePanes'; sizes: number[] }
+  /** The user dragged an edge between the children of a split; their sizes in order */
+  | { type: 'resizeSplit'; split: string; sizes: number[] }
   | { type: 'openFile'; id: string; path: string; line?: number; column?: number }
   | { type: 'openLink'; url: string }
   | { type: 'focus'; focused: boolean };
@@ -89,7 +103,7 @@ export type WebviewMessage =
 export type ExtensionMessage =
   | { type: 'output'; id: string; data: string }
   | { type: 'clear'; id: string }
-  | { type: 'tabsUpdate'; panes: PaneInfo[]; statusColors: boolean; monochromeIcons: boolean }
+  | { type: 'tabsUpdate'; layout: LayoutInfo; statusColors: boolean; monochromeIcons: boolean }
   | { type: 'createTab'; id: string }
   /** Focuses the tab's terminal, which the last `tabsUpdate` shows in its pane */
   | { type: 'switchTab'; id: string }

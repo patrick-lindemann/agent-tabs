@@ -162,18 +162,24 @@
       },
       {
         "command": "agentTabs.split",
-        "title": "Split Terminal",
+        "title": "Split Terminal Down",
         "category": "Agent Tabs",
         "icon": "$(split-vertical)"
       },
       {
+        "command": "agentTabs.splitRight",
+        "title": "Split Terminal Right",
+        "category": "Agent Tabs",
+        "icon": "$(split-horizontal)"
+      },
+      {
         "command": "agentTabs.focusPreviousPane",
-        "title": "Focus Pane Above",
+        "title": "Focus Previous Pane",
         "category": "Agent Tabs"
       },
       {
         "command": "agentTabs.focusNextPane",
-        "title": "Focus Pane Below",
+        "title": "Focus Next Pane",
         "category": "Agent Tabs"
       },
       {
@@ -264,6 +270,11 @@
       {
         "command": "agentTabs.split",
         "mac": "ctrl+shift+5",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.splitRight",
+        "mac": "cmd+k cmd+\\",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {

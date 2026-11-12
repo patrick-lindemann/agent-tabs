@@ -1,16 +1,8 @@
 import { shortTitle } from '../profiles';
-import type { PaneInfo, SplitSide, TabInfo, TabStatus, TerminalInstance } from '../types';
+import type { LayoutInfo, SplitSide, TabInfo, TabStatus, TerminalInstance } from '../types';
 import { WORKSPACE_ACCENT_COLORS } from '../types';
 import { hasDraft } from './draft';
-
-function newPane(): Pane {
-  return {
-    id: `pane-${Math.random().toString(36).slice(2, 10)}`,
-    tabs: [],
-    active: undefined,
-    size: 1
-  };
-}
+import { type Pane, PaneLayout, type SavedLayout } from './layout';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(Math.trunc(value), max));
@@ -26,25 +18,20 @@ const STATUS_LABELS: Record<TabStatus, string> = {
   error: 'Failed'
 };
 
-/** A pane of the view: its tabs in order and the one it shows */
-interface Pane {
-  id: string;
-  tabs: string[];
-  active: string | undefined;
-  /** Share of the view's height, relative to the other panes */
-  size: number;
-}
-
 /**
- * The open tabs, the panes they are in, stacked top to bottom, which tab
- * each pane shows and which pane has focus, and how tabs are labeled and
- * described. There is always at least one pane; only the last one left
+ * The open tabs, the panes they are in, which tab each pane shows and which
+ * pane has focus, and how tabs are labeled and described. Panes are split
+ * side by side or one above the other, and splits can be split again; see
+ * `PaneLayout`. There is always at least one pane; only the last one left
  * may be empty.
  */
 export class TerminalStateManager {
   private readonly terminals = new Map<string, TerminalInstance>();
-  private panes: Pane[] = [newPane()];
-  private focusedPane = this.panes[0];
+  private layout = new PaneLayout();
+
+  private get focusedPane(): Pane {
+    return this.layout.focused;
+  }
 
   /**
    * Generates a unique terminal ID.
@@ -111,9 +98,9 @@ export class TerminalStateManager {
   }
 
   /**
-   * Moves a tab into a new pane above (`before`) or below (`after`) a pane,
-   * which shows it and gets focus; the two share the pane's height. A pane's
-   * only tab cannot split from itself. Returns the new pane's ID.
+   * Moves a tab into a new pane on a side of a pane, which shows it and gets
+   * focus; the two share the pane's space. A pane's only tab cannot split
+   * from itself. Returns the new pane's ID.
    */
   split(id: string, paneId: string, side: SplitSide): string | undefined {
     const from = this.paneOf(id);
@@ -128,22 +115,11 @@ export class TerminalStateManager {
   }
 
   /**
-   * Adds an empty pane above or below another, which halves its height with
+   * Adds an empty pane on a side of another, which shares its space with
    * it. It must get a tab before anything else happens.
    */
-  addPane(paneId: string, side: SplitSide = 'after', size?: number): Pane | undefined {
-    const index = this.panes.findIndex((pane) => pane.id === paneId);
-    const target = this.panes[index];
-    if (!target) return undefined;
-    const pane = newPane();
-    if (size === undefined) {
-      target.size /= 2;
-      pane.size = target.size;
-    } else {
-      pane.size = size;
-    }
-    this.panes.splice(side === 'after' ? index + 1 : index, 0, pane);
-    return pane;
+  addPane(paneId: string, side: SplitSide = 'bottom'): Pane | undefined {
+    return this.layout.addPane(paneId, side);
   }
 
   /** Takes a tab out of its pane, which closes when it is left empty */
@@ -156,19 +132,7 @@ export class TerminalStateManager {
       const next = pane.tabs[pane.tabs.length - 1];
       if (next) this.show(pane, next);
     }
-    if (pane.tabs.length === 0 && this.panes.length > 1) this.removePane(pane);
-  }
-
-  /**
-   * Removes an empty pane; the pane above it, or else below, gets its
-   * height and, when it had focus, the focus
-   */
-  private removePane(pane: Pane): void {
-    const index = this.panes.indexOf(pane);
-    this.panes.splice(index, 1);
-    const neighbor = this.panes[Math.max(0, index - 1)];
-    neighbor.size += pane.size;
-    if (this.focusedPane === pane) this.focusedPane = neighbor;
+    if (pane.tabs.length === 0) this.layout.removePane(pane);
   }
 
   /** Shows a tab in its pane, without giving the pane focus */
@@ -183,23 +147,22 @@ export class TerminalStateManager {
   /** Clears all terminal instances, used when the webview is recreated. */
   clear(): void {
     this.terminals.clear();
-    this.panes = [newPane()];
-    this.focusedPane = this.panes[0];
+    this.layout = new PaneLayout();
   }
 
   // --- Panes ---
 
   private pane(id: string): Pane | undefined {
-    return this.panes.find((pane) => pane.id === id);
+    return this.layout.pane(id);
   }
 
   private paneOf(id: string): Pane | undefined {
-    return this.panes.find((pane) => pane.tabs.includes(id));
+    return this.layout.paneOf(id);
   }
 
-  /** The pane IDs, top to bottom */
+  /** The pane IDs in reading order: left to right, top to bottom */
   getPaneIds(): string[] {
-    return this.panes.map((pane) => pane.id);
+    return this.layout.panes().map((pane) => pane.id);
   }
 
   getPaneId(tabId: string): string | undefined {
@@ -216,9 +179,9 @@ export class TerminalStateManager {
     return pane ? [...pane.tabs] : [];
   }
 
-  /** The tab each pane shows, top to bottom */
+  /** The tab each pane shows, in reading order */
   getShownIds(): string[] {
-    return this.panes.flatMap((pane) => (pane.active ? [pane.active] : []));
+    return this.layout.panes().flatMap((pane) => (pane.active ? [pane.active] : []));
   }
 
   /** The tab a pane shows */
@@ -226,30 +189,36 @@ export class TerminalStateManager {
     return this.pane(paneId)?.active;
   }
 
-  getPaneSize(paneId: string): number | undefined {
-    return this.pane(paneId)?.size;
-  }
-
-  setPaneSize(paneId: string, size: number): void {
-    const pane = this.pane(paneId);
-    if (pane && size > 0) pane.size = size;
-  }
-
   /** Gives a pane focus; returns whether it changed */
   focusPane(paneId: string): boolean {
     const pane = this.pane(paneId);
     if (!pane || pane === this.focusedPane) return false;
-    this.focusedPane = pane;
+    this.layout.focused = pane;
     return true;
   }
 
-  /** Sets the panes' heights, in order; ignored unless there is one per pane */
-  resizePanes(sizes: number[]): boolean {
-    if (sizes.length !== this.panes.length) return false;
-    this.panes.forEach((pane, index) => {
-      pane.size = sizes[index];
-    });
-    return true;
+  /** Sets the sizes of a split's children; ignored unless there is one per child */
+  resizeSplit(splitId: string, sizes: number[]): boolean {
+    return this.layout.resize(splitId, sizes);
+  }
+
+  /** The splits of the layout for the next window; none with one pane */
+  saveLayout(): SavedLayout | undefined {
+    return this.layout.save();
+  }
+
+  /**
+   * Before any tab opens, replaces the single pane with a saved layout of
+   * `count` panes. Returns the panes' IDs by their saved position, or
+   * undefined when the saved layout does not fit.
+   */
+  restoreLayout(saved: unknown, count: number): string[] | undefined {
+    return this.layout.restore(saved, count)?.map((pane) => pane.id);
+  }
+
+  /** Removes panes that got no tab, e.g. after restoring sessions that ended */
+  prunePanes(): void {
+    this.layout.prune();
   }
 
   /**
@@ -259,9 +228,9 @@ export class TerminalStateManager {
     return this.getAllIds().flatMap((id) => this.terminals.get(id) ?? []);
   }
 
-  /** All tab IDs, pane by pane from the top, each pane's in its order */
+  /** All tab IDs, pane by pane in reading order, each pane's in its order */
   getAllIds(): string[] {
-    return this.panes.flatMap((pane) => pane.tabs);
+    return this.layout.panes().flatMap((pane) => pane.tabs);
   }
 
   /**
@@ -284,7 +253,7 @@ export class TerminalStateManager {
     const pane = this.paneOf(id);
     if (!pane) return;
     this.show(pane, id);
-    if (focus) this.focusedPane = pane;
+    if (focus) this.layout.focused = pane;
   }
 
   /**
@@ -297,14 +266,15 @@ export class TerminalStateManager {
     }
   }
 
-  /** The panes with their tabs, for the webview */
-  getPanesInfo(autoTitles: boolean, titleWords: number): PaneInfo[] {
-    return this.panes.map((pane) => ({
-      id: pane.id,
-      size: pane.size,
-      focused: pane === this.focusedPane,
+  /** The layout with each pane's tabs, for the webview */
+  getLayoutInfo(autoTitles: boolean, titleWords: number): LayoutInfo {
+    return this.layout.info((pane) => ({
       tabs: this.getTabsInfo(autoTitles, titleWords, pane.tabs)
     }));
+  }
+
+  get paneCount(): number {
+    return this.layout.panes().length;
   }
 
   /** Describes tabs for the webview, by default all of them */

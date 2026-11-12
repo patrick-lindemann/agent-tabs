@@ -17,7 +17,7 @@ export interface MessageHandlerContext {
   handleMoveTab(id: string, index: number, pane?: string): void;
   handleSplitTab(id: string, pane: string, side: SplitSide): void;
   handleFocusPane(pane: string): void;
-  handleResizePanes(sizes: number[]): void;
+  handleResizeSplit(split: string, sizes: number[]): void;
   handleOpenFile(id: string, path: string, line?: number, column?: number): void;
   handleOpenLink(url: string): void;
   handleFocus(focused: boolean): void;
@@ -64,8 +64,8 @@ const messageHandlers: MessageHandlerMap = {
   focusPane: (message, ctx) => {
     ctx.handleFocusPane(message.pane);
   },
-  resizePanes: (message, ctx) => {
-    ctx.handleResizePanes(message.sizes);
+  resizeSplit: (message, ctx) => {
+    ctx.handleResizeSplit(message.split, message.sizes);
   },
   openFile: (message, ctx) => {
     ctx.handleOpenFile(message.id, message.path, message.line, message.column);

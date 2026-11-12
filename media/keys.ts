@@ -16,10 +16,12 @@ export interface KeyboardEventLike {
  * Cmd+Shift+Left/Right goes to VS Code only `afterCmdK`, as the key right
  * after Cmd+K; otherwise the terminal gets it.
  *
- * Splitting follows VS Code's terminal: Cmd+\ or Ctrl+Shift+5. While the
- * view is `split`, the keys that focus the pane above or below go to VS Code
- * too, as in VS Code's split terminal: Cmd+Alt+Up/Down on macOS, Alt+Up/Down
- * on Windows and Linux.
+ * Splitting follows VS Code's terminal: Cmd+\ or Ctrl+Shift+5, and on macOS
+ * Cmd+K Cmd+\ splits to the right like Split Editor Orthogonal. While the
+ * view is `split`, the keys that focus the previous or next pane go to VS
+ * Code too, as in VS Code's split terminal: Cmd+Alt+Up/Down on macOS,
+ * Alt+Up/Down on Windows and Linux. Its Left/Right variants are left out:
+ * Cmd+Alt+Left/Right switches tabs, and Alt+Left/Right moves by word.
  */
 export function isTabShortcut(
   event: KeyboardEventLike,

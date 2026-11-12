@@ -38,7 +38,7 @@ Closed a tab by accident? `Cmd+Shift+T` opens it again and continues its convers
 
 ### Split the view
 
-Drag a tab onto the top or bottom half of a terminal to open it in a new pane above or below, each with its own tabs; drag it onto another pane's tab strip to move it there. Drag the edge between two panes to resize them. `Cmd+\` (`Ctrl+Shift+5` on Windows and Linux) opens a new tab in a pane below, like Split Terminal. New tabs and the tab keys act on the pane you clicked into last. The next window opens the panes again with their tabs and sizes.
+Drag a tab onto a terminal to open it in a new pane beside it, each with its own tabs: near the left or right edge for a pane side by side, else on the top or bottom half for one above or below. Panes split again the same way, in either direction. Drag a tab onto another pane's tab strip to move it there, and the edge between two panes to resize them. `Cmd+\` (`Ctrl+Shift+5` on Windows and Linux) opens a new tab in a pane below, like Split Terminal, and Split Terminal Right in a pane to the right. New tabs and the tab keys act on the pane you clicked into last. The next window opens the panes again with their tabs and sizes.
 
 ### Works like VS Code
 
@@ -76,7 +76,8 @@ The same keys as VS Code's editor tabs, active while Agent Tabs has focus. On Wi
 | Recently used tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Move tab left / right | `Cmd+K` `Cmd+Shift+←` / `Cmd+K` `Cmd+Shift+→` | `Ctrl+Shift+PageUp` / `Ctrl+Shift+PageDown` |
 | Split into a new pane below | `Cmd+\`, `Ctrl+Shift+5` | `Ctrl+Shift+5` |
-| Focus pane above / below | `Cmd+Alt+↑` / `Cmd+Alt+↓` | `Alt+↑` / `Alt+↓` |
+| Split into a new pane to the right | `Cmd+K` `Cmd+\` | — |
+| Focus previous / next pane | `Cmd+Alt+↑` / `Cmd+Alt+↓` | `Alt+↑` / `Alt+↓` |
 
 Move Tab to Start and Move Tab to End have no key, as in VS Code; bind one in Keyboard Shortcuts if you like. With several panes, the tab keys, Close Others and the tab positions act on the focused pane, and the pane keys follow VS Code's split terminal; they only apply while the view is split.
 

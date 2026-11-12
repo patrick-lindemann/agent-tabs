@@ -15,7 +15,10 @@ body {
   flex-direction: column;
 }
 
-/* The panes, stacked top to bottom; each takes its share of the height */
+/*
+ * The panes, in splits side by side (row) or one above the other (column);
+ * each child of a split takes its share of the split's width or height
+ */
 #panes {
   display: flex;
   flex: 1;
@@ -23,10 +26,26 @@ body {
   min-height: 0;
 }
 
+.split {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-row {
+  flex-direction: row;
+}
+
+.split-column {
+  flex-direction: column;
+}
+
 .pane {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -53,46 +72,71 @@ body.dragging-tab .pane-terminal .terminal-wrapper {
 /* The half of a pane a dropped tab would split off, like dragging an editor */
 .drop-zone {
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 50%;
   background-color: var(--vscode-editorGroup-dropBackground, rgba(83, 89, 93, 0.5));
   pointer-events: none;
   z-index: 10;
 }
 
-.drop-zone[data-side="before"] {
-  top: 0;
+.drop-zone[data-side="top"] {
+  inset: 0 0 50% 0;
 }
 
-.drop-zone[data-side="after"] {
-  bottom: 0;
+.drop-zone[data-side="bottom"] {
+  inset: 50% 0 0 0;
+}
+
+.drop-zone[data-side="left"] {
+  inset: 0 50% 0 0;
+}
+
+.drop-zone[data-side="right"] {
+  inset: 0 0 0 50%;
 }
 
 /* The edge between two panes, which resizes them when dragged */
 .pane-sash {
   position: relative;
   flex-shrink: 0;
-  height: 1px;
   background-color: var(--vscode-editorGroup-border, #444444);
+}
+
+.sash-horizontal {
+  height: 1px;
+}
+
+.sash-vertical {
+  width: 1px;
 }
 
 .pane-sash::before {
   content: "";
   position: absolute;
-  top: -3px;
-  bottom: -3px;
-  left: 0;
-  right: 0;
-  cursor: ns-resize;
   z-index: 20;
+}
+
+.sash-horizontal::before {
+  inset: -3px 0;
+  cursor: ns-resize;
+}
+
+.sash-vertical::before {
+  inset: 0 -3px;
+  cursor: ew-resize;
 }
 
 .pane-sash:hover::before,
 .pane-sash.active::before {
   background-color: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder, #007fd4));
-  top: -2px;
-  bottom: -2px;
+}
+
+.sash-horizontal:hover::before,
+.sash-horizontal.active::before {
+  inset: -2px 0;
+}
+
+.sash-vertical:hover::before,
+.sash-vertical.active::before {
+  inset: 0 -2px;
 }
 
 /*
