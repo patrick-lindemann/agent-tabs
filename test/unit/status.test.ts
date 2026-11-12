@@ -3,7 +3,7 @@ import { launchForCommand } from '../../src/profiles';
 import { TerminalStateManager } from '../../src/terminal/state';
 import { resetStatus, StatusTracker } from '../../src/terminal/status';
 import type { AgentId, TabStatus, TerminalInstance } from '../../src/types';
-import { type AgentTranscript, notify, query, status, TRANSCRIPTS, title } from './agents';
+import { type AgentTranscript, msg, notify, query, status, TRANSCRIPTS, title } from './agents';
 
 const COMMANDS: Record<AgentId, string> = {
   claude: 'claude',
@@ -156,6 +156,61 @@ describe.each(TRANSCRIPTS)('$agent tab status', (transcript: AgentTranscript) =>
   });
 });
 
+describe('child records, e.g. pi-subagents runs', () => {
+  const run = (state: string, id = 'subagents/3f9c2a107b1e') =>
+    status(`state=${state}:id=${id}:app=pi-subagents`);
+
+  it('stays working while a background subagent works after the turn is done', () => {
+    const t = tab('pi');
+    t.output(status('state=working') + run('working') + status('state=done'));
+    expect(t.status).toBe('working');
+    expect(t.busy).toBe(true);
+    // The run finishes; the result waits to be seen
+    t.output(run('done'));
+    expect(t.status).toBe('done');
+    expect(t.busy).toBe(false);
+  });
+
+  it('counts a run as ended when cleared, also through a parent or the root', () => {
+    const t = tab('pi');
+    t.output(status('state=done') + run('working', 'subagents/a') + run('working', 'subagents/b'));
+    t.output(status('state=clear:id=subagents/a'));
+    expect(t.status).toBe('working');
+    t.output(status('state=clear:id=subagents'));
+    expect(t.status).toBe('done');
+    t.output(run('working', 'subagents/c') + status('state=clear'));
+    expect(t.instance.children).toBeUndefined();
+  });
+
+  it("ignores other programs' child records, e.g. Claude Code's background shells", () => {
+    const t = tab('claude');
+    t.output(status('state=working:id=bg1:app=claude-code') + status('state=done'));
+    expect(t.status).toBe('done');
+  });
+
+  it('needs input while a run is blocked, over the working turn', () => {
+    const t = tab('pi');
+    t.output(status('state=working') + run('blocked'));
+    expect(t.status).toBe('blocked');
+    expect(t.instance.programState).toBe('working');
+  });
+
+  it('keeps the root report for the details and the result', () => {
+    const t = tab('pi');
+    t.output(run('working') + status(`state=done:msg=${msg('fix-auth')}`));
+    expect(t.text).toBe('Working: fix-auth');
+    t.output(run('idle'));
+    expect(t.text).toBe('Done: fix-auth');
+  });
+
+  it('forgets the runs when the tab restarts', () => {
+    const t = tab('pi');
+    t.output(run('working'));
+    resetStatus(t.instance);
+    expect(t.status).toBeUndefined();
+  });
+});
+
 describe('status details', () => {
   it('shows the reported message, e.g. what needs approval', () => {
     const t = tab('claude');
@@ -170,7 +225,7 @@ describe('status details', () => {
     expect(t.text).toBe('Needs input: Approval requested: cargo test');
   });
 
-  it('ignores child records, e.g. a background task finishing', () => {
+  it('does not let a child record that finished end the run', () => {
     const t = tab('claude');
     t.output(status('state=working') + status('state=done:id=bg1'));
     expect(t.status).toBe('working');

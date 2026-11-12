@@ -14,13 +14,18 @@ import type { ProgramState } from '../types';
  * - The terminal bell (BEL outside an escape sequence), which some dialogs
  *   ring when they ask the user something.
  *
- * Only the root OSC 7501 record (no `id`) is tracked; child records such as
- * subagents are ignored.
+ * A report without `id` is the program's own (root) record. A report with
+ * `id` is a child record, e.g. pi-subagents' `subagents/<run>` for each
+ * background run, which can be working while the root record is done.
  */
 
 export interface ProgramStatusReport {
-  /** `clear` removes the record */
+  /** `clear` removes the record, and a child record's descendants */
   state: ProgramState | 'clear';
+  /** The child record, e.g. `subagents/3f9c2a107b1e`; none for the root record */
+  id?: string;
+  /** The program that sent it, e.g. `pi-subagents` */
+  app?: string;
   kind?: string;
   message?: string;
 }
@@ -63,6 +68,8 @@ const MAX_MESSAGE_LENGTH = 2732;
 const STATES = new Set<string>(['idle', 'working', 'blocked', 'done', 'error', 'clear']);
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
+/** The protocol's id grammar: up to 8 segments of 1 to 32 characters, 128 in all */
+const RECORD_ID = /^[A-Za-z0-9_.+-]{1,32}(?:\/[A-Za-z0-9_.+-]{1,32}){0,7}$/;
 
 export class TerminalSignalParser {
   private pending = '';
@@ -137,7 +144,12 @@ function parseReport(body: string): ProgramStatusReport | undefined {
   }
 
   const state = pairs.get('state');
-  if (!state || !STATES.has(state) || pairs.has('id')) {
+  if (!state || !STATES.has(state)) {
+    return undefined;
+  }
+  // A malformed id is ignored rather than read as the root record
+  const id = pairs.get('id');
+  if (id !== undefined && (id.length > 128 || !RECORD_ID.test(id))) {
     return undefined;
   }
 
@@ -149,5 +161,13 @@ function parseReport(body: string): ProgramStatusReport | undefined {
     if (CONTROL_CHARACTERS.test(message)) return undefined;
   }
 
-  return { state: state as ProgramStatusReport['state'], kind: pairs.get('kind'), message };
+  const report: ProgramStatusReport = {
+    state: state as ProgramStatusReport['state'],
+    kind: pairs.get('kind'),
+    message
+  };
+  if (id !== undefined) report.id = id;
+  const app = pairs.get('app');
+  if (id !== undefined && app) report.app = app;
+  return report;
 }

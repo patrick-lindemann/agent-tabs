@@ -51,14 +51,24 @@ describe('program status reports', () => {
   it.each([
     ['no state', 'app=pi'],
     ['an unknown state', 'state=sleeping'],
-    ['a child record', 'state=blocked:id=worker1'],
-    ['a child clear', 'state=clear:id=ses_1'],
+    ['a malformed id', 'state=working:id=a b'],
+    ['an empty id segment', 'state=working:id=subagents//run'],
+    ['an id segment over 32 characters', `state=working:id=${'a'.repeat(33)}`],
     ['a control character in the message', `state=done:msg=${msg('a\x1b[31mb')}`],
     ['a C1 control in the message', `state=done:msg=${msg('a\u009bb')}`],
     ['an oversized message', `state=done:msg=${'A'.repeat(2733)}`],
     ['a message that is not base64', 'state=done:msg=not base64!']
   ])('drops a report with %s', (_, body) => {
     expect(reports(scan(status(body)))).toEqual([]);
+  });
+
+  it('reads the id of a child record', () => {
+    expect(
+      reports(scan(status('state=working:id=subagents/3f9c2a107b1e:app=pi-subagents')))
+    ).toEqual([{ state: 'working', id: 'subagents/3f9c2a107b1e', app: 'pi-subagents' }]);
+    expect(reports(scan(status('state=clear:id=subagents/3f9c2a107b1e')))).toEqual([
+      { state: 'clear', id: 'subagents/3f9c2a107b1e' }
+    ]);
   });
 
   it('counts support queries separately from reports', () => {
