@@ -15,21 +15,31 @@ export interface KeyboardEventLike {
  * On macOS, moving a tab is the chord Cmd+K Cmd+Shift+Left/Right, so
  * Cmd+Shift+Left/Right goes to VS Code only `afterCmdK`, as the key right
  * after Cmd+K; otherwise the terminal gets it.
+ *
+ * Splitting follows VS Code's terminal: Cmd+\ or Ctrl+Shift+5. While the
+ * view is `split`, the keys that focus the pane above or below go to VS Code
+ * too, as in VS Code's split terminal: Cmd+Alt+Up/Down on macOS, Alt+Up/Down
+ * on Windows and Linux.
  */
 export function isTabShortcut(
   event: KeyboardEventLike,
   isMac: boolean,
-  afterCmdK = false
+  afterCmdK = false,
+  split = false
 ): boolean {
   const { code, ctrlKey, metaKey, altKey, shiftKey } = event;
   const mods = `${ctrlKey ? 'Ctrl+' : ''}${altKey ? 'Alt+' : ''}${shiftKey ? 'Shift+' : ''}${metaKey ? 'Meta+' : ''}`;
   const digit = /^Digit[0-9]$/.test(code);
   const arrow = code === 'ArrowLeft' || code === 'ArrowRight';
+  const upDown = code === 'ArrowUp' || code === 'ArrowDown';
   if (code === 'Tab' && (mods === 'Ctrl+' || mods === 'Ctrl+Shift+')) return true;
+  if (mods === 'Ctrl+Shift+' && code === 'Digit5') return true;
   if (isMac) {
     return (
       (mods === 'Ctrl+' && digit) ||
       isCmdK(event) ||
+      (mods === 'Meta+' && code === 'Backslash') ||
+      (split && mods === 'Alt+Meta+' && upDown) ||
       (afterCmdK && mods === 'Shift+Meta+' && arrow) ||
       (mods === 'Meta+' && ['KeyN', 'KeyW', 'Digit9'].includes(code)) ||
       (mods === 'Shift+Meta+' && ['KeyT', 'BracketLeft', 'BracketRight'].includes(code)) ||
@@ -38,6 +48,7 @@ export function isTabShortcut(
   }
   return (
     (mods === 'Alt+' && digit) ||
+    (split && mods === 'Alt+' && upDown) ||
     (mods === 'Ctrl+' && ['KeyN', 'PageUp', 'PageDown', 'F4'].includes(code)) ||
     (mods === 'Ctrl+Shift+' && ['KeyT', 'KeyW', 'PageUp', 'PageDown'].includes(code))
   );

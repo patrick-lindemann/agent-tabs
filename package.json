@@ -161,6 +161,22 @@
         "category": "Agent Tabs"
       },
       {
+        "command": "agentTabs.split",
+        "title": "Split Terminal",
+        "category": "Agent Tabs",
+        "icon": "$(split-vertical)"
+      },
+      {
+        "command": "agentTabs.focusPreviousPane",
+        "title": "Focus Pane Above",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.focusNextPane",
+        "title": "Focus Pane Below",
+        "category": "Agent Tabs"
+      },
+      {
         "command": "agentTabs.closeTabFromMenu",
         "title": "Close",
         "category": "Agent Tabs"
@@ -238,6 +254,29 @@
         "key": "ctrl+shift+pagedown",
         "mac": "cmd+k cmd+shift+right",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.split",
+        "key": "ctrl+shift+5",
+        "mac": "cmd+\\",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.split",
+        "mac": "ctrl+shift+5",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.focusPreviousPane",
+        "key": "alt+up",
+        "mac": "cmd+alt+up",
+        "when": "agentTabs.split && (agentTabs.focused || focusedView == 'agentTabs.terminalView')"
+      },
+      {
+        "command": "agentTabs.focusNextPane",
+        "key": "alt+down",
+        "mac": "cmd+alt+down",
+        "when": "agentTabs.split && (agentTabs.focused || focusedView == 'agentTabs.terminalView')"
       },
       {
         "command": "agentTabs.switchToTabAt",

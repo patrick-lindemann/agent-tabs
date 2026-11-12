@@ -15,15 +15,100 @@ body {
   flex-direction: column;
 }
 
-/* Terminals container - takes most of the space */
-#terminals-container {
+/* The panes, stacked top to bottom; each takes its share of the height */
+#panes {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The terminal of the pane's active tab; takes the rest of the pane */
+.pane-terminal {
   flex: 1;
   position: relative;
   overflow: hidden;
 }
 
+/* Terminals no pane shows wait here */
+.hidden-terminals {
+  display: none;
+}
+
+/*
+ * While a tab is dragged, terminals let the drag through to their pane, so
+ * it can show where the tab would go
+ */
+body.dragging-tab .pane-terminal .terminal-wrapper {
+  pointer-events: none;
+}
+
+/* The half of a pane a dropped tab would split off, like dragging an editor */
+.drop-zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background-color: var(--vscode-editorGroup-dropBackground, rgba(83, 89, 93, 0.5));
+  pointer-events: none;
+  z-index: 10;
+}
+
+.drop-zone[data-side="before"] {
+  top: 0;
+}
+
+.drop-zone[data-side="after"] {
+  bottom: 0;
+}
+
+/* The edge between two panes, which resizes them when dragged */
+.pane-sash {
+  position: relative;
+  flex-shrink: 0;
+  height: 1px;
+  background-color: var(--vscode-editorGroup-border, #444444);
+}
+
+.pane-sash::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  cursor: ns-resize;
+  z-index: 20;
+}
+
+.pane-sash:hover::before,
+.pane-sash.active::before {
+  background-color: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder, #007fd4));
+  top: -2px;
+  bottom: -2px;
+}
+
+/*
+ * With several panes, the inactive panes' active tabs look like those of
+ * an unfocused editor group
+ */
+#panes.split .pane:not(.focused) .tab.active {
+  background-color: var(
+    --vscode-tab-unfocusedActiveBackground,
+    var(--vscode-tab-activeBackground, #1e1e1e)
+  );
+  color: var(--vscode-tab-unfocusedActiveForeground, var(--vscode-tab-activeForeground, #ffffff));
+}
+
 /* Browser-style tab strip */
-#tab-bar {
+.tab-bar {
   display: flex;
   flex-shrink: 0;
   height: 28px;
@@ -34,7 +119,7 @@ body {
 }
 
 /* Scrolls sideways without a visible scrollbar */
-#tab-list {
+.tab-list {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -43,7 +128,7 @@ body {
   scrollbar-width: none;
 }
 
-#tab-list::-webkit-scrollbar {
+.tab-list::-webkit-scrollbar {
   display: none;
 }
 
@@ -61,7 +146,7 @@ body {
   cursor: pointer;
 }
 
-#tab-bar.overflowing .tab-scroll {
+.tab-bar.overflowing .tab-scroll {
   display: flex;
 }
 
@@ -83,7 +168,7 @@ body {
  * New tab split button, like the one in VS Code's terminal panel: + opens the
  * first profile, the chevron lists all profiles.
  */
-#new-tab {
+.new-tab {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -91,11 +176,11 @@ body {
   border-radius: 5px;
 }
 
-#new-tab:hover {
+.new-tab:hover {
   outline: 1px dashed var(--vscode-toolbar-hoverOutline, transparent);
 }
 
-#new-tab button {
+.new-tab button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,15 +193,15 @@ body {
   cursor: pointer;
 }
 
-#new-tab-default {
+.new-tab-default {
   width: 22px;
 }
 
-#new-tab-profile {
+.new-tab-profile {
   width: 16px;
 }
 
-#new-tab button:hover {
+.new-tab button:hover {
   background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
 }
 
@@ -125,17 +210,17 @@ body {
   outline-offset: -1px;
 }
 
-#new-tab button:focus-visible {
+.new-tab button:focus-visible {
   outline: 1px solid var(--vscode-focusBorder, #007fd4);
   outline-offset: -1px;
 }
 
-#new-tab-default svg {
+.new-tab-default svg {
   width: 16px;
   height: 16px;
 }
 
-#new-tab-profile svg {
+.new-tab-profile svg {
   width: 14px;
   height: 14px;
 }
@@ -255,19 +340,19 @@ body {
 }
 
 /* Theme colors reinforce the icon shapes (agentTabs.statusColors) */
-#tab-bar.status-colors .tab[data-status="working"] {
+.tab-bar.status-colors .tab[data-status="working"] {
   --status-color: var(--vscode-charts-blue, #3794ff);
 }
 
-#tab-bar.status-colors .tab[data-status="blocked"] {
+.tab-bar.status-colors .tab[data-status="blocked"] {
   --status-color: var(--vscode-editorWarning-foreground, #cca700);
 }
 
-#tab-bar.status-colors .tab[data-status="done"] {
+.tab-bar.status-colors .tab[data-status="done"] {
   --status-color: var(--vscode-charts-green, #89d185);
 }
 
-#tab-bar.status-colors .tab[data-status="error"] {
+.tab-bar.status-colors .tab[data-status="error"] {
   --status-color: var(--vscode-errorForeground, #f48771);
 }
 
@@ -276,9 +361,9 @@ body {
 }
 
 /* Needs input, done and failed also color the name, since they need the user */
-#tab-bar.status-colors .tab[data-status="blocked"] .tab-label,
-#tab-bar.status-colors .tab[data-status="done"] .tab-label,
-#tab-bar.status-colors .tab[data-status="error"] .tab-label {
+.tab-bar.status-colors .tab[data-status="blocked"] .tab-label,
+.tab-bar.status-colors .tab[data-status="done"] .tab-label,
+.tab-bar.status-colors .tab[data-status="error"] .tab-label {
   color: var(--status-color);
 }
 

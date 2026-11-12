@@ -38,6 +38,8 @@ suite('Agent Tabs extension', () => {
       'agentTabs.moveTabRight',
       'agentTabs.moveTabToStart',
       'agentTabs.moveTabToEnd',
+      'agentTabs.focusPreviousPane',
+      'agentTabs.focusNextPane',
       'agentTabs.closeTab'
     ]) {
       await vscode.commands.executeCommand(command);

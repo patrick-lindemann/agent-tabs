@@ -13,6 +13,12 @@ describe('webview message validation', () => {
       { type: 'closeTab', id: 'tab' },
       { type: 'switchTab', id: 'tab' },
       { type: 'moveTab', id: 'tab', index: 0 },
+      { type: 'moveTab', id: 'tab', index: 0, pane: 'pane' },
+      { type: 'splitTab', id: 'tab', pane: 'pane', side: 'after' },
+      { type: 'focusPane', pane: 'pane' },
+      { type: 'resizePanes', sizes: [1, 0.5] },
+      { type: 'newTab', pane: 'pane' },
+      { type: 'newTabWithProfile', pane: 'pane' },
       { type: 'openFile', id: 'tab', path: 'a.ts', line: 3, column: 2 },
       { type: 'openLink', url: 'https://example.com/a?b=1' },
       { type: 'focus', focused: true }
@@ -24,6 +30,12 @@ describe('webview message validation', () => {
     expect(isWebviewMessage({ type: 'resize', id: 'tab', cols: 80, rows: 24 })).toBe(true);
     expect(isWebviewMessage({ type: 'resize', id: '', cols: 80, rows: 24 })).toBe(false);
     expect(isWebviewMessage({ type: 'newTab', extra: true })).toBe(false);
+    expect(isWebviewMessage({ type: 'splitTab', id: 'tab', pane: 'pane', side: 'left' })).toBe(
+      false
+    );
+    expect(isWebviewMessage({ type: 'resizePanes', sizes: [1, 0] })).toBe(false);
+    expect(isWebviewMessage({ type: 'resizePanes', sizes: [Number.NaN] })).toBe(false);
+    expect(isWebviewMessage({ type: 'newTab', pane: '' })).toBe(false);
     for (const index of [-1, 1.5, '2', undefined]) {
       expect(isWebviewMessage({ type: 'moveTab', id: 'tab', index }), String(index)).toBe(false);
     }

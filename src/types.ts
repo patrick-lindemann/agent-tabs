@@ -149,8 +149,14 @@ export interface OpenTab {
   conversation?: string;
   /** The multiplexer session the tab showed, to attach to it again */
   session?: string;
-  /** The tab was the active one */
+  /** Its pane showed it; without `pane` there was one pane, and this tab had focus */
   active?: boolean;
+  /** Its pane's position from the top, 0 for the first; none with one pane */
+  pane?: number;
+  /** Its pane's share of the view's height */
+  paneSize?: number;
+  /** It was the tab of the pane with focus */
+  focused?: boolean;
 }
 
 /** A multiplexer session that runs a tab's program */
@@ -167,7 +173,9 @@ export interface SessionRef {
 export type {
   AgentId,
   ExtensionMessage,
+  PaneInfo,
   ProfileIcon,
+  SplitSide,
   TabInfo,
   TabStatus,
   WebviewMessage

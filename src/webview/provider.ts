@@ -4,7 +4,14 @@ import { confirmClose, discoverProfiles, manageProfiles, pickProfile, pickTab } 
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
 import { Tabs } from '../terminal/tabs';
-import type { ClosedTab, ExtensionMessage, LaunchSpec, OpenTab, TerminalInstance } from '../types';
+import type {
+  ClosedTab,
+  ExtensionMessage,
+  LaunchSpec,
+  OpenTab,
+  SplitSide,
+  TerminalInstance
+} from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
 import { dispatchMessage, type MessageHandlerContext } from './messages';
@@ -33,6 +40,8 @@ function workspaceKey(): string {
 export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerContext {
   private view?: vscode.WebviewView;
   private disposed = false;
+  /** There is more than one pane, as last told to the `agentTabs.split` context key */
+  private split = false;
 
   private readonly config = new ConfigManager();
   private readonly picker = new CommandInputPicker();
@@ -138,11 +147,14 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     void vscode.commands.executeCommand('setContext', 'agentTabs.focused', focused);
   }
 
-  handleNewTab(): void {
+  /** The + of a pane's tab strip, which opens the tab in that pane */
+  handleNewTab(pane?: string): void {
+    if (pane) this.tabs.focusPane(pane);
     void this.createTerminal();
   }
 
-  handleNewTabWithProfile(): void {
+  handleNewTabWithProfile(pane?: string): void {
+    if (pane) this.tabs.focusPane(pane);
     void this.pickProfileAndCreateTerminal();
   }
 
@@ -158,8 +170,20 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     this.tabs.switchTo(id);
   }
 
-  handleMoveTab(id: string, index: number): void {
-    this.tabs.move(id, index);
+  handleMoveTab(id: string, index: number, pane?: string): void {
+    this.tabs.move(id, index, pane);
+  }
+
+  handleSplitTab(id: string, pane: string, side: SplitSide): void {
+    this.tabs.split(id, pane, side);
+  }
+
+  handleFocusPane(pane: string): void {
+    this.tabs.focusPane(pane);
+  }
+
+  handleResizePanes(sizes: number[]): void {
+    this.tabs.resizePanes(sizes);
   }
 
   handleOpenFile(id: string, path: string, line?: number, column?: number): void {
@@ -175,6 +199,16 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   createTerminal(launch?: LaunchSpec): Promise<string | undefined> {
     return this.tabs.create(launch);
+  }
+
+  /** Opens the first profile in a new pane below the focused one, like Split Terminal */
+  splitTerminal(): Promise<string | undefined> {
+    return this.tabs.create(undefined, true);
+  }
+
+  /** Focuses the pane above (-1) or below (1) */
+  focusNextPane(step: 1 | -1): void {
+    this.tabs.focusNextPane(step);
   }
 
   async pickProfileAndCreateTerminal(): Promise<void> {
@@ -282,8 +316,12 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     return true;
   }
 
+  /** Closes the other tabs of the tab's pane, like Close Others in an editor group */
   async closeOtherTerminals(id: string): Promise<void> {
-    const others = this.tabs.state.getAllIds().filter((other) => other !== id);
+    const { state } = this.tabs;
+    const pane = state.getPaneId(id);
+    if (!pane) return;
+    const others = state.getPaneTabs(pane).filter((other) => other !== id);
     if (await this.requestClose(others)) {
       this.tabs.switchTo(id);
     }
@@ -352,8 +390,14 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   private refresh(): void {
     const { state } = this.tabs;
     const { autoTabTitles, tabTitleWords, statusColors, monochromeIcons } = this.config.getConfig();
-    const tabs = state.getTabsInfo(autoTabTitles, tabTitleWords);
-    this.post({ type: 'tabsUpdate', tabs, statusColors, monochromeIcons });
+    const panes = state.getPanesInfo(autoTabTitles, tabTitleWords);
+    this.post({ type: 'tabsUpdate', panes, statusColors, monochromeIcons });
+    // Scopes the pane keybindings, like VS Code's terminal while it is split
+    const split = panes.length > 1;
+    if (split !== this.split) {
+      this.split = split;
+      void vscode.commands.executeCommand('setContext', 'agentTabs.split', split);
+    }
 
     if (this.view) {
       const count = state.getAll().filter((tab) => state.needsAttention(tab)).length;

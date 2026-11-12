@@ -36,6 +36,10 @@ Close VS Code with a few agents open, and the next window of the workspace opens
 
 Closed a tab by accident? `Cmd+Shift+T` opens it again and continues its conversation, for Claude Code, pi and Cursor; press it again for the tab closed before. Agent Tabs gives each conversation an ID when the tab starts and remembers the last ten closed tabs of a workspace once a message was sent. A tab with a message you have not sent yet asks before it closes.
 
+### Split the view
+
+Drag a tab onto the top or bottom half of a terminal to open it in a new pane above or below, each with its own tabs; drag it onto another pane's tab strip to move it there. Drag the edge between two panes to resize them. `Cmd+\` (`Ctrl+Shift+5` on Windows and Linux) opens a new tab in a pane below, like Split Terminal. New tabs and the tab keys act on the pane you clicked into last. The next window opens the panes again with their tabs and sizes.
+
 ### Works like VS Code
 
 Tabs use the keys you know from editors and can be dragged into another order, clicking `src/app.ts:42` in an agent's output opens it in the editor, and the terminal takes VS Code's theme and font. Closing a tab whose agent is still working asks first. When an agent exits, Enter starts it again in the same tab.
@@ -71,8 +75,10 @@ The same keys as VS Code's editor tabs, active while Agent Tabs has focus. On Wi
 | Go to tab 1–9 / last tab | `Ctrl+1` … `Ctrl+9` / `Ctrl+0`, `Cmd+9` | `Alt+1` … `Alt+9` / `Alt+0` |
 | Recently used tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Move tab left / right | `Cmd+K` `Cmd+Shift+←` / `Cmd+K` `Cmd+Shift+→` | `Ctrl+Shift+PageUp` / `Ctrl+Shift+PageDown` |
+| Split into a new pane below | `Cmd+\`, `Ctrl+Shift+5` | `Ctrl+Shift+5` |
+| Focus pane above / below | `Cmd+Alt+↑` / `Cmd+Alt+↓` | `Alt+↑` / `Alt+↓` |
 
-Move Tab to Start and Move Tab to End have no key, as in VS Code; bind one in Keyboard Shortcuts if you like.
+Move Tab to Start and Move Tab to End have no key, as in VS Code; bind one in Keyboard Shortcuts if you like. With several panes, the tab keys, Close Others and the tab positions act on the focused pane, and the pane keys follow VS Code's split terminal; they only apply while the view is split.
 
 Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the line, `Cmd+Backspace` and `Option+Backspace` delete to the line start or the previous word, and `Shift+Enter` inserts a new line in agents that support it.
 

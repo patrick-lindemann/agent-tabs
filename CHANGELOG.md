@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Split panes**: drag a tab onto the top or bottom half of a terminal to open it in a new pane above or below, each with its own tabs, or onto another pane's tab strip to move it there. Drag the edge between panes to resize them. **Split Terminal** (`Cmd+\` on macOS, `Ctrl+Shift+5`) opens a new tab in a pane below, and **Focus Pane Above/Below** (`Cmd+Alt+↑/↓` on macOS, `Alt+↑/↓`) moves between panes, as in VS Code's split terminal. The next window opens the panes again with their tabs and sizes
 - Tabs can be dragged to another position in the tab strip, and moved with the keys of VS Code's Move Editor Left/Right: `Cmd+K Cmd+Shift+←/→` on macOS, `Ctrl+Shift+PageUp/PageDown` on Windows and Linux. **Move Tab to Start** and **Move Tab to End** are in the Command Palette. The order is kept for the next window
 
 ## [3.3.1] - 2026-11-11

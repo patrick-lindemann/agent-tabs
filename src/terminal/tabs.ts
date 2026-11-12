@@ -14,6 +14,7 @@ import type {
   LaunchSpec,
   OpenTab,
   SessionRef,
+  SplitSide,
   TerminalInstance
 } from '../types';
 import { typed } from './draft';
@@ -146,17 +147,25 @@ export class Tabs {
   }
 
   /**
-   * Opens a tab. Without a launch it runs the first profile. Returns
-   * undefined when the user cancelled choosing its folder.
+   * Opens a tab in the focused pane, or with `split` in a new pane below
+   * it. Without a launch it runs the first profile. Returns undefined when
+   * the user cancelled choosing its folder.
    */
-  async create(launch?: LaunchSpec): Promise<string | undefined> {
+  async create(launch?: LaunchSpec, split = false): Promise<string | undefined> {
     const folder = await this.pty.selectWorkingDirectory();
     if (!folder) return undefined;
     const { path: cwd, folderIndex } = folder;
+    // An empty pane (none is focused only while the view has no tab) takes the tab
+    const focused = this.state.getFocusedPaneId();
+    const pane =
+      split && this.state.getPaneTabs(focused).length > 0
+        ? this.state.addPane(focused, 'after')?.id
+        : undefined;
     return this.open({
       launch: launch ?? this.config.getConfig().defaultProfile,
       cwd,
-      workspaceFolderIndex: folderIndex
+      workspaceFolderIndex: folderIndex,
+      pane
     });
   }
 
@@ -197,9 +206,9 @@ export class Tabs {
       if (history) this.host.post({ type: 'output', id, data: history });
       this.pty.redraw(id);
     }
+    this.host.refresh();
     const active = this.state.getActiveId();
     if (active) this.host.post({ type: 'switchTab', id: active });
-    this.host.refresh();
   }
 
   /**
@@ -246,27 +255,53 @@ export class Tabs {
     );
     const listed = new Set(saved.map((tab) => tab.session));
     const opened: string[] = [];
-    let active: string | undefined;
+    /** The tabs their panes showed; the focused pane's last */
+    const shownInPane: string[] = [];
+    let focused: string | undefined;
+    // The panes the saved tabs were in, by position; the first is the
+    // focused pane, the others open below it as their first tab opens
+    const panes = new Map<number, string>([[0, this.state.getFocusedPaneId()]]);
+    let lastPane = this.state.getFocusedPaneId();
+    const paneFor = (tab: OpenTab): string => {
+      const index = tab.pane ?? 0;
+      let pane = panes.get(index);
+      if (!pane) {
+        pane = this.state.addPane(lastPane, 'after', tab.paneSize)?.id ?? lastPane;
+        panes.set(index, pane);
+        lastPane = pane;
+      } else if (index === 0 && tab.paneSize !== undefined) {
+        this.state.setPaneSize(pane, tab.paneSize);
+      }
+      return pane;
+    };
     this.restoring = true;
     try {
       for (const tab of saved) {
         const entry = tab.session ? own.get(tab.session) : undefined;
         if (tab.session && (shown.has(tab.session) || entry?.attached)) continue;
+        const pane = paneFor(tab);
         if (entry) {
           own.delete(entry.name);
-          opened.push(this.openSession(entry));
+          opened.push(this.openSession(entry, pane));
         } else {
           opened.push(
             this.open({
               launch: this.current(tab.launch),
               cwd: tab.cwd,
               workspaceFolderIndex: tab.workspaceFolderIndex,
-              conversation: tab.conversation ? { id: tab.conversation, started: true } : undefined
+              conversation: tab.conversation ? { id: tab.conversation, started: true } : undefined,
+              pane
             })
           );
         }
-        if (tab.active) active = opened[opened.length - 1];
+        const id = opened[opened.length - 1];
+        if (tab.active) shownInPane.push(id);
+        // Saved with one pane, the active tab had focus
+        if (tab.focused || (tab.active && tab.pane === undefined)) focused = id;
       }
+      // Sessions the last window did not list open in the pane that had focus
+      if (focused) this.state.setActive(focused);
+      else this.state.focusPane(panes.get(0) ?? lastPane);
       const sessions = [...own.values()]
         .filter((entry) => this.workspace !== '' || listed.has(entry.name))
         .filter((entry) => !entry.attached && !shown.has(entry.name))
@@ -277,18 +312,20 @@ export class Tabs {
     } finally {
       this.restoring = false;
     }
-    if (active) this.switchTo(active);
+    for (const id of shownInPane) this.state.setActive(id, false);
+    if (focused) this.switchTo(focused);
+    else if (opened.length > 0) this.refresh();
     this.saveOpen();
     return opened.length;
   }
 
   /** Opens a tab that attaches to a session of this workspace */
-  private openSession({
-    name,
-    multiplexer,
-    tag
-  }: SessionEntry & { multiplexer: MultiplexerId }): string {
+  private openSession(
+    { name, multiplexer, tag }: SessionEntry & { multiplexer: MultiplexerId },
+    pane?: string
+  ): string {
     return this.open({
+      pane,
       launch: this.current(tag.launch),
       cwd: tag.cwd,
       workspaceFolderIndex: tag.workspaceFolderIndex,
@@ -308,14 +345,30 @@ export class Tabs {
   private saveOpen(): void {
     if (!this.openTabs || this.restoring || !this.host.isAttached()) return;
     const activeId = this.state.getActiveId();
-    const tabs: OpenTab[] = this.state.getAll().map((instance) => ({
-      launch: stored(instance.launch),
-      cwd: instance.cwd,
-      workspaceFolderIndex: instance.workspaceFolderIndex,
-      conversation: instance.conversation?.started ? instance.conversation.id : undefined,
-      session: instance.session?.name,
-      active: instance.id === activeId || undefined
-    }));
+    const panes = this.state.getPaneIds();
+    const split = panes.length > 1;
+    const tabs: OpenTab[] = panes.flatMap((pane, index) =>
+      this.state.getPaneTabs(pane).flatMap((id) => {
+        const instance = this.state.get(id);
+        if (!instance) return [];
+        const tab: OpenTab = {
+          launch: stored(instance.launch),
+          cwd: instance.cwd,
+          workspaceFolderIndex: instance.workspaceFolderIndex,
+          conversation: instance.conversation?.started ? instance.conversation.id : undefined,
+          session: instance.session?.name
+        };
+        if (!split) {
+          tab.active = id === activeId || undefined;
+          return [tab];
+        }
+        tab.active = instance.isActive || undefined;
+        tab.focused = id === activeId || undefined;
+        tab.pane = index;
+        tab.paneSize = this.state.getPaneSize(pane);
+        return [tab];
+      })
+    );
     const json = JSON.stringify(tabs);
     if (json === this.savedOpen) return;
     this.savedOpen = json;
@@ -386,18 +439,23 @@ export class Tabs {
     this.closedTabs.set([tab, ...others].slice(0, MAX_CLOSED_TABS));
   }
 
-  private open(tab: {
+  /** Opens a tab in a pane, by default the focused one, and shows it there */
+  private open({
+    pane,
+    ...tab
+  }: {
     launch: LaunchSpec;
     cwd?: string;
     workspaceFolderIndex?: number;
     session?: SessionRef;
     conversation?: TerminalInstance['conversation'];
+    pane?: string;
   }): string {
     const id = this.state.generateId();
     const instance: TerminalInstance = { id, isActive: false, ...tab };
 
     // Add the instance first so setActive can find it
-    this.state.set(id, instance);
+    this.state.set(id, instance, pane);
     this.recent = [id, ...this.recent];
     this.state.setActive(id);
     this.host.post({ type: 'createTab', id });
@@ -419,22 +477,22 @@ export class Tabs {
     this.status.forget(id);
     this.notices.delete(id);
     this.history.delete(id);
+    const wasActive = this.state.getActiveId() === id;
     this.state.delete(id);
     this.recent = this.recent.filter((other) => other !== id);
     this.host.post({ type: 'removeTab', id });
     // Before a new tab may ask for its folder
     this.saveOpen();
 
-    if (this.state.getActiveId() !== id) {
-      this.refresh();
-      return;
-    }
-    const remaining = this.state.getAllIds();
-    if (remaining.length > 0) {
-      this.switchTo(remaining[remaining.length - 1]);
-    } else {
-      this.state.clearActive();
+    // Its pane shows its last tab now, or closed and gave its neighbor focus
+    const active = this.state.getActiveId();
+    if (this.state.count === 0) {
       void this.create();
+    } else if (wasActive && active) {
+      this.switchTo(active);
+    } else {
+      this.scheduleSeen();
+      this.refresh();
     }
   }
 
@@ -443,13 +501,14 @@ export class Tabs {
     this.recent = [id, ...this.recent.filter((other) => other !== id)];
     this.state.setActive(id);
     this.scheduleSeen();
-    this.host.post({ type: 'switchTab', id });
+    // The layout first, so the webview knows the pane it focuses
     this.refresh();
+    this.host.post({ type: 'switchTab', id });
   }
 
-  /** Switches to the tab at a 1-based position; 0 is the last tab */
+  /** Switches to the tab at a 1-based position in the focused pane; 0 is its last tab */
   switchToPosition(position: number): void {
-    const ids = this.state.getAllIds();
+    const ids = this.state.getPaneTabs();
     const id = position === 0 ? ids[ids.length - 1] : ids[position - 1];
     if (id) {
       this.switchTo(id);
@@ -457,11 +516,44 @@ export class Tabs {
   }
 
   /**
-   * Moves a tab to a 0-based position, e.g. after it was dragged; the
-   * position is clamped to the tab strip
+   * Moves a tab to a 0-based position, e.g. after it was dragged, in its own
+   * pane or another; the position is clamped to the tab strip
    */
-  move(id: string, index: number): void {
-    if (this.state.move(id, index)) this.refresh();
+  move(id: string, index: number, pane?: string): void {
+    const from = this.state.getPaneId(id);
+    if (!this.state.move(id, index, pane)) return;
+    if (pane && pane !== from) this.switchTo(id);
+    else this.refresh();
+  }
+
+  /**
+   * Moves a tab into a new pane above or below a pane, e.g. after it was
+   * dropped on the top or bottom of its terminal
+   */
+  split(id: string, pane: string, side: SplitSide): void {
+    if (this.state.split(id, pane, side)) this.switchTo(id);
+  }
+
+  /** Gives a pane focus, e.g. after the user clicked into it */
+  focusPane(pane: string): void {
+    if (this.state.focusPane(pane)) {
+      const id = this.state.getActiveId();
+      if (id) this.recent = [id, ...this.recent.filter((other) => other !== id)];
+      this.refresh();
+    }
+  }
+
+  /** Focuses the pane above (-1) or below (1) the focused one, without wrapping */
+  focusNextPane(step: 1 | -1): void {
+    const panes = this.state.getPaneIds();
+    const pane = panes[panes.indexOf(this.state.getFocusedPaneId()) + step];
+    const id = pane && this.state.getPaneTabs(pane).length > 0 && this.state.getShownIn(pane);
+    if (id) this.switchTo(id);
+  }
+
+  /** The panes' heights after the user dragged an edge between them */
+  resizePanes(sizes: number[]): void {
+    if (this.state.resizePanes(sizes)) this.saveOpen();
   }
 
   /**
@@ -471,7 +563,7 @@ export class Tabs {
   moveActive(to: 'left' | 'right' | 'first' | 'last'): void {
     const id = this.state.getActiveId();
     if (!id) return;
-    const ids = this.state.getAllIds();
+    const ids = this.state.getPaneTabs();
     const index = ids.indexOf(id);
     const target = { left: index - 1, right: index + 1, first: 0, last: ids.length - 1 }[to];
     this.move(id, target);
@@ -482,9 +574,9 @@ export class Tabs {
     return [...this.recent];
   }
 
-  /** Switches to the next (1) or previous (-1) tab, wrapping around */
+  /** Switches to the next (1) or previous (-1) tab of the focused pane, wrapping around */
   cycle(step: 1 | -1): void {
-    const ids = this.state.getAllIds();
+    const ids = this.state.getPaneTabs();
     if (ids.length <= 1) return;
     const current = ids.indexOf(this.state.getActiveId() ?? '');
     this.switchTo(ids[(current + step + ids.length) % ids.length]);
@@ -600,15 +692,22 @@ export class Tabs {
    */
   scheduleSeen(): void {
     clearTimeout(this.seenTimer);
-    const activeId = this.state.getActiveId();
-    const instance = activeId ? this.state.get(activeId) : undefined;
-    if (!instance?.unseen || !this.isInView(instance)) return;
+    // Every pane's tab is in view, not only the focused pane's
+    const instances = this.state
+      .getShownIds()
+      .flatMap((id) => this.state.get(id) ?? [])
+      .filter((instance) => instance.unseen && this.isInView(instance));
+    if (instances.length === 0) return;
 
     this.seenTimer = setTimeout(() => {
-      if (instance.unseen && this.isInView(instance)) {
-        instance.unseen = undefined;
-        this.refresh();
+      let changed = false;
+      for (const instance of instances) {
+        if (instance.unseen && this.isInView(instance)) {
+          instance.unseen = undefined;
+          changed = true;
+        }
       }
+      if (changed) this.refresh();
     }, SEEN_DELAY_MS);
   }
 

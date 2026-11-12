@@ -53,6 +53,98 @@ describe('active tab', () => {
   });
 });
 
+describe('panes', () => {
+  it('splits a tab into a new pane below or above, which gets focus and half the height', () => {
+    const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }));
+    const [first] = state.getPaneIds();
+    const below = state.split('b', first, 'after');
+    expect(state.getPaneIds()).toEqual([first, below]);
+    expect(state.getPaneTabs(first)).toEqual(['a', 'c']);
+    expect(state.getPaneTabs(below)).toEqual(['b']);
+    expect(state.getFocusedPaneId()).toBe(below);
+    expect(state.getActiveId()).toBe('b');
+    expect([state.getPaneSize(first), below && state.getPaneSize(below)]).toEqual([0.5, 0.5]);
+    const above = state.split('c', first, 'before');
+    expect(state.getPaneIds()).toEqual([above, first, below]);
+    expect(state.getAllIds()).toEqual(['c', 'a', 'b']);
+  });
+
+  it("does not split a pane's only tab from itself", () => {
+    const state = manager(tab());
+    const [pane] = state.getPaneIds();
+    expect(state.split('a', pane, 'after')).toBeUndefined();
+    expect(state.getPaneIds()).toEqual([pane]);
+  });
+
+  it('keeps a shown tab in each pane and the focused pane for commands', () => {
+    const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }));
+    const [first] = state.getPaneIds();
+    state.setActive('a');
+    const second = state.split('c', first, 'after') as string;
+    expect(state.getShownIds()).toEqual(['a', 'c']);
+    state.setActive('b', false);
+    expect(state.getShownIds()).toEqual(['b', 'c']);
+    expect(state.getActiveId()).toBe('c');
+    expect(state.focusPane(first)).toBe(true);
+    expect(state.getActiveId()).toBe('b');
+    expect(state.focusPane(first)).toBe(false);
+    expect(state.getPaneTabs()).toEqual(['a', 'b']);
+    expect(state.getPaneTabs(second)).toEqual(['c']);
+  });
+
+  it('closes a pane with its last tab and gives the pane above its height and focus', () => {
+    const state = manager(tab(), tab({ id: 'b' }));
+    const [first] = state.getPaneIds();
+    const second = state.split('b', first, 'after') as string;
+    state.delete('b');
+    expect(state.getPaneIds()).toEqual([first]);
+    expect(state.getFocusedPaneId()).toBe(first);
+    expect(state.getPaneSize(first)).toBe(1);
+    expect(state.getPaneTabs(second)).toEqual([]);
+  });
+
+  it('keeps the last pane when its last tab closes', () => {
+    const state = manager(tab());
+    const [pane] = state.getPaneIds();
+    state.delete('a');
+    expect(state.getPaneIds()).toEqual([pane]);
+    expect(state.getActiveId()).toBeUndefined();
+  });
+
+  it('moves a tab into another pane at a position, which shows it', () => {
+    const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }));
+    const [first] = state.getPaneIds();
+    const second = state.split('c', first, 'after') as string;
+    expect(state.move('a', 0, second)).toBe(true);
+    expect(state.getPaneTabs(second)).toEqual(['a', 'c']);
+    expect(state.getActiveId()).toBe('a');
+    expect(state.getShownIds()).toEqual(['b', 'a']);
+    // The pane it left closes once it is empty
+    state.move('b', 5, second);
+    expect(state.getPaneIds()).toEqual([second]);
+    expect(state.getPaneTabs(second)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('describes each pane with its tabs, size and focus', () => {
+    const state = manager(tab(), tab({ id: 'b' }));
+    const [first] = state.getPaneIds();
+    const second = state.split('b', first, 'after') as string;
+    state.resizePanes([3, 1]);
+    expect(
+      state.getPanesInfo(false, 4).map(({ id, size, focused, tabs }) => ({
+        id,
+        size,
+        focused,
+        tabs: tabs.map((info) => [info.id, info.isActive])
+      }))
+    ).toEqual([
+      { id: first, size: 3, focused: false, tabs: [['a', true]] },
+      { id: second, size: 1, focused: true, tabs: [['b', true]] }
+    ]);
+    expect(state.resizePanes([1])).toBe(false);
+  });
+});
+
 describe('tab status', () => {
   // Highest priority first
   it.each([
@@ -68,8 +160,9 @@ describe('tab status', () => {
   ] as Array<[string, Partial<TerminalInstance>, string | undefined]>)(
     'shows %s',
     (_, changes, expected) => {
-      const instance = tab(changes);
-      expect(manager(instance).getStatus(instance)).toBe(expected);
+      // Behind another tab, which its pane shows
+      const instance = tab({ id: 'background', ...changes });
+      expect(manager(tab(), instance).getStatus(instance)).toBe(expected);
     }
   );
 

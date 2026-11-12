@@ -61,6 +61,21 @@ describe('webview keybindings', () => {
     expect(isTabShortcut(event('KeyA', 'a', { metaKey: true }), true, true)).toBe(false);
   });
 
+  it('leaves the split keys to VS Code, and the pane keys only while split', () => {
+    expect(isTabShortcut(event('Backslash', '\\', { metaKey: true }), true)).toBe(true);
+    expect(isTabShortcut(event('Backslash', '\\', { ctrlKey: true }), true)).toBe(false);
+    const split5 = event('Digit5', '%', { ctrlKey: true, shiftKey: true });
+    expect(isTabShortcut(split5, false)).toBe(true);
+    expect(isTabShortcut(split5, true)).toBe(true);
+    const macUp = event('ArrowUp', 'ArrowUp', { metaKey: true, altKey: true });
+    expect(isTabShortcut(macUp, true)).toBe(false);
+    expect(isTabShortcut(macUp, true, false, true)).toBe(true);
+    // Alt+Up recalls history in some agents; it is only taken while split
+    const up = event('ArrowUp', 'ArrowUp', { altKey: true });
+    expect(isTabShortcut(up, false)).toBe(false);
+    expect(isTabShortcut(up, false, false, true)).toBe(true);
+  });
+
   it('tells Cmd+K and lone modifier keys apart from other keys', () => {
     expect(isCmdK(event('KeyK', 'k', { metaKey: true }))).toBe(true);
     expect(isCmdK(event('KeyK', 'K', { metaKey: true, shiftKey: true }))).toBe(false);

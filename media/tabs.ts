@@ -2,48 +2,70 @@ import { AGENT_ICONS, CLOSE_ICON, IDLE_ICON, STATUS_ICONS, TERMINAL_ICON } from 
 import type { TabInfo, WebviewOutgoingMessage } from './types';
 
 /** Drag data type of a tab, so dropping it elsewhere inserts no text */
-const TAB_DRAG_TYPE = 'application/x-agent-tabs-tab';
+export const TAB_DRAG_TYPE = 'application/x-agent-tabs-tab';
 
 /** Distance from the strip's edge in pixels at which a drag scrolls it */
 const DRAG_SCROLL_EDGE = 24;
 
+/** The tab being dragged, shared by the tab strips and the panes they may drop on */
+export const drag: { id: string | undefined } = { id: undefined };
+
+const SCROLL_LEFT_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.928 7.976l4.357 4.357-.618.62L5 8.284v-.618L9.667 3l.618.619-4.357 4.357z"/></svg>';
+const SCROLL_RIGHT_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M10.072 8.024L5.715 3.667l.618-.62L11 7.716v.618L6.333 13l-.618-.619 4.357-4.357z"/></svg>';
+const NEW_TAB_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/></svg>';
+const PROFILE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z"/></svg>';
+
 /**
- * Browser-style tab strip above the terminal. Tabs share its width and
- * scroll sideways once they reach their minimum width. Tabs can be dragged
- * to another position.
+ * A pane's browser-style tab strip above its terminal. Tabs share its width
+ * and scroll sideways once they reach their minimum width. Tabs can be
+ * dragged to another position, also into another pane's strip.
  */
 export class TabBar {
-  private readonly bar: HTMLElement;
+  /** The strip, to put at the top of its pane */
+  readonly bar: HTMLElement;
   private readonly list: HTMLElement;
   private readonly scrollLeft: HTMLButtonElement;
   private readonly scrollRight: HTMLButtonElement;
   private renderedActiveId: string | undefined;
-  /** The tab being dragged */
-  private draggedId: string | undefined;
+  private readonly resizeObserver: ResizeObserver;
 
   constructor(
+    private readonly paneId: string,
     private readonly post: (message: WebviewOutgoingMessage) => void,
     /** Clicking the active tab returns focus to its terminal */
     private readonly focusActive: () => void
   ) {
-    const bar = document.getElementById('tab-bar');
-    const list = document.getElementById('tab-list');
-    const scrollLeft = document.getElementById('tab-scroll-left');
-    const scrollRight = document.getElementById('tab-scroll-right');
-    if (!bar || !list || !scrollLeft || !scrollRight) {
-      throw new Error('Tab bar elements not found');
-    }
-    this.bar = bar;
-    this.list = list;
-    this.scrollLeft = scrollLeft as HTMLButtonElement;
-    this.scrollRight = scrollRight as HTMLButtonElement;
+    this.bar = element('div', 'tab-bar');
+    this.scrollLeft = button('tab-scroll', 'Scroll Left', SCROLL_LEFT_ICON);
+    this.list = element('div', 'tab-list');
+    this.list.setAttribute('role', 'tablist');
+    this.list.setAttribute('aria-label', 'Terminal tabs');
+    this.scrollRight = button('tab-scroll', 'Scroll Right', SCROLL_RIGHT_ICON);
+    const newTab = element('div', 'new-tab');
+    newTab.setAttribute('role', 'group');
+    newTab.setAttribute('aria-label', 'New Tab');
+    const newTabDefault = button('new-tab-default', 'New Tab', NEW_TAB_ICON);
+    const newTabProfile = button('new-tab-profile', 'Use Profile…', PROFILE_ICON);
+    newTab.append(newTabDefault, newTabProfile);
+    this.bar.append(this.scrollLeft, this.list, this.scrollRight, newTab);
+
+    this.resizeObserver = new ResizeObserver(() => this.updateScrollButtons());
     this.setupScrolling();
     this.setupDragAndDrop();
-    this.setupNewTabButtons();
+    this.setupNewTabButtons(newTabDefault, newTabProfile);
   }
 
   /** The tab elements by tab ID, kept between renders */
   private readonly elements = new Map<string, TabElement>();
+
+  dispose(): void {
+    this.resizeObserver.disconnect();
+    this.bar.remove();
+  }
 
   /**
    * Shows the tabs. Elements of tabs that stay are updated in place, since
@@ -133,15 +155,20 @@ export class TabBar {
     root.draggable = true;
     root.ondragstart = (event) => {
       if (!event.dataTransfer) return;
-      this.draggedId = id;
+      drag.id = id;
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData(TAB_DRAG_TYPE, id);
       root.classList.add('dragged');
+      document.body.classList.add('dragging-tab');
     };
     root.ondragend = () => {
-      this.draggedId = undefined;
+      drag.id = undefined;
       root.classList.remove('dragged');
-      this.clearDropIndicator();
+      document.body.classList.remove('dragging-tab');
+      for (const tab of document.querySelectorAll('.drop-before, .drop-after')) {
+        tab.classList.remove('drop-before', 'drop-after');
+      }
+      for (const zone of document.querySelectorAll('.drop-zone')) zone.remove();
     };
 
     root.append(status, label, close);
@@ -232,7 +259,7 @@ export class TabBar {
       { passive: false }
     );
     this.list.addEventListener('scroll', () => this.updateScrollButtons(), { passive: true });
-    new ResizeObserver(() => this.updateScrollButtons()).observe(this.list);
+    this.resizeObserver.observe(this.list);
 
     const scrollByTab = (direction: number) => {
       const tabWidth = this.list.querySelector('.tab')?.clientWidth ?? 100;
@@ -243,12 +270,13 @@ export class TabBar {
   }
 
   /**
-   * Dragging a tab shows where it will go with a line between tabs, and
-   * dropping it there moves it. Near the strip's edges the strip scrolls.
+   * Dragging a tab over the strip shows where it will go with a line between
+   * tabs, and dropping it there moves it, also from another pane's strip.
+   * Near the strip's edges the strip scrolls.
    */
   private setupDragAndDrop(): void {
     this.list.addEventListener('dragover', (event) => {
-      if (!this.draggedId) return;
+      if (!drag.id) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
       const rect = this.list.getBoundingClientRect();
@@ -260,14 +288,19 @@ export class TabBar {
       if (!this.list.contains(event.relatedTarget as Node | null)) this.clearDropIndicator();
     });
     this.list.addEventListener('drop', (event) => {
-      const id = this.draggedId;
+      const id = drag.id;
       if (!id) return;
       event.preventDefault();
       this.clearDropIndicator();
       const index = this.dropIndex(event.clientX);
       const element = this.elements.get(id);
+      if (!element) {
+        // From another pane; the layout the extension sends next moves it
+        this.post({ type: 'moveTab', id, index, pane: this.paneId });
+        return;
+      }
       const others = this.otherTabs(id);
-      if (!element || index === this.tabElements().indexOf(element.root)) return;
+      if (index === this.tabElements().indexOf(element.root)) return;
       // Moved at once; the tab list the extension sends next agrees
       this.list.insertBefore(element.root, others[index] ?? null);
       this.post({ type: 'moveTab', id, index });
@@ -288,8 +321,8 @@ export class TabBar {
    * other tab whose middle is left of it
    */
   private dropIndex(x: number): number {
-    if (!this.draggedId) return 0;
-    return this.otherTabs(this.draggedId).filter((tab) => {
+    if (!drag.id) return 0;
+    return this.otherTabs(drag.id).filter((tab) => {
       const rect = tab.getBoundingClientRect();
       return rect.left + rect.width / 2 < x;
     }).length;
@@ -297,8 +330,8 @@ export class TabBar {
 
   /** Marks the edge of the tab where the dragged tab would go */
   private showDropIndicator(x: number): void {
-    if (!this.draggedId) return;
-    const others = this.otherTabs(this.draggedId);
+    if (!drag.id) return;
+    const others = this.otherTabs(drag.id);
     const index = this.dropIndex(x);
     const before = others[index];
     const after = before ? undefined : others[others.length - 1];
@@ -314,15 +347,17 @@ export class TabBar {
     }
   }
 
-  /** Split button like VS Code's terminal: + opens the first profile, ⌄ lists them */
-  private setupNewTabButtons(): void {
-    const newTab = document.getElementById('new-tab-default');
-    const withProfile = document.getElementById('new-tab-profile');
-    for (const button of [newTab, withProfile]) {
-      if (button) keepFocus(button);
-    }
-    newTab?.addEventListener('click', () => this.post({ type: 'newTab' }));
-    withProfile?.addEventListener('click', () => this.post({ type: 'newTabWithProfile' }));
+  /**
+   * Split button like VS Code's terminal: + opens the first profile, ⌄ lists
+   * them; the tab opens in this pane
+   */
+  private setupNewTabButtons(newTab: HTMLElement, withProfile: HTMLElement): void {
+    keepFocus(newTab);
+    keepFocus(withProfile);
+    newTab.addEventListener('click', () => this.post({ type: 'newTab', pane: this.paneId }));
+    withProfile.addEventListener('click', () =>
+      this.post({ type: 'newTabWithProfile', pane: this.paneId })
+    );
   }
 
   /** Shows the scroll buttons while tabs overflow */
@@ -341,6 +376,21 @@ interface TabElement {
   label: HTMLSpanElement;
   close: HTMLButtonElement;
   statusHtml: string;
+}
+
+function element(tag: 'div', className: string): HTMLDivElement {
+  const created = document.createElement(tag);
+  created.className = className;
+  return created;
+}
+
+function button(className: string, label: string, icon: string): HTMLButtonElement {
+  const created = document.createElement('button');
+  created.className = className;
+  created.title = label;
+  created.setAttribute('aria-label', label);
+  created.innerHTML = icon;
+  return created;
 }
 
 /** Keeps focus in the terminal when a button is clicked */

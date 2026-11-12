@@ -65,6 +65,15 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('agentTabs.moveTabToEnd', () => {
       terminalProvider?.moveActiveTerminal('last');
+    }),
+    vscode.commands.registerCommand('agentTabs.split', () => {
+      void terminalProvider?.splitTerminal();
+    }),
+    vscode.commands.registerCommand('agentTabs.focusPreviousPane', () => {
+      terminalProvider?.focusNextPane(-1);
+    }),
+    vscode.commands.registerCommand('agentTabs.focusNextPane', () => {
+      terminalProvider?.focusNextPane(1);
     })
   );
 
