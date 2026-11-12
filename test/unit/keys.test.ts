@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTabShortcut, keySequence } from '../../media/keys';
+import { isCmdK, isModifierKey, isTabShortcut, keySequence } from '../../media/keys';
 
 const event = (
   code: string,
@@ -29,6 +29,8 @@ describe('webview keybindings', () => {
     ['Ctrl+F4', event('F4', 'F4', { ctrlKey: true })],
     ['Ctrl+Shift+T', event('KeyT', 'T', { ctrlKey: true, shiftKey: true })],
     ['Ctrl+PageDown', event('PageDown', 'PageDown', { ctrlKey: true })],
+    ['Ctrl+Shift+PageUp', event('PageUp', 'PageUp', { ctrlKey: true, shiftKey: true })],
+    ['Ctrl+Shift+PageDown', event('PageDown', 'PageDown', { ctrlKey: true, shiftKey: true })],
     ['Alt+1', event('Digit1', '1', { altKey: true })],
     ['Alt+0', event('Digit0', '0', { altKey: true })],
     ['Ctrl+Tab', event('Tab', 'Tab', { ctrlKey: true })]
@@ -46,6 +48,40 @@ describe('webview keybindings', () => {
   ])('types %s into the terminal', (_name, input, mac) =>
     expect(isTabShortcut(input, mac)).toBe(false)
   );
+
+  it('leaves Cmd+K Cmd+Shift+Left/Right to VS Code on macOS, else types it', () => {
+    const cmdK = event('KeyK', 'k', { metaKey: true });
+    const left = event('ArrowLeft', 'ArrowLeft', { metaKey: true, shiftKey: true });
+    const right = event('ArrowRight', 'ArrowRight', { metaKey: true, shiftKey: true });
+    expect(isTabShortcut(cmdK, true)).toBe(true);
+    expect(isTabShortcut(cmdK, false)).toBe(false);
+    expect(isTabShortcut(left, true, true)).toBe(true);
+    expect(isTabShortcut(right, true, true)).toBe(true);
+    expect(isTabShortcut(left, true)).toBe(false);
+    expect(isTabShortcut(event('KeyA', 'a', { metaKey: true }), true, true)).toBe(false);
+  });
+
+  it('leaves the split keys to VS Code, and the pane keys only while split', () => {
+    expect(isTabShortcut(event('Backslash', '\\', { metaKey: true }), true)).toBe(true);
+    expect(isTabShortcut(event('Backslash', '\\', { ctrlKey: true }), true)).toBe(false);
+    const split5 = event('Digit5', '%', { ctrlKey: true, shiftKey: true });
+    expect(isTabShortcut(split5, false)).toBe(true);
+    expect(isTabShortcut(split5, true)).toBe(true);
+    const macUp = event('ArrowUp', 'ArrowUp', { metaKey: true, altKey: true });
+    expect(isTabShortcut(macUp, true)).toBe(false);
+    expect(isTabShortcut(macUp, true, false, true)).toBe(true);
+    // Alt+Up recalls history in some agents; it is only taken while split
+    const up = event('ArrowUp', 'ArrowUp', { altKey: true });
+    expect(isTabShortcut(up, false)).toBe(false);
+    expect(isTabShortcut(up, false, false, true)).toBe(true);
+  });
+
+  it('tells Cmd+K and lone modifier keys apart from other keys', () => {
+    expect(isCmdK(event('KeyK', 'k', { metaKey: true }))).toBe(true);
+    expect(isCmdK(event('KeyK', 'K', { metaKey: true, shiftKey: true }))).toBe(false);
+    expect(isModifierKey(event('MetaLeft', 'Meta'))).toBe(true);
+    expect(isModifierKey(event('KeyK', 'k'))).toBe(false);
+  });
 
   it('maps platform key sequences', () => {
     expect(keySequence(event('Enter', 'Enter', { shiftKey: true }), false)).toBe('\x1b[13;2u');

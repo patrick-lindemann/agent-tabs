@@ -1,12 +1,13 @@
-import { TabBar } from './tabs';
+import { Panes } from './panes';
 import { Terminals } from './terminal';
 import type { WebviewIncomingMessage, WebviewOutgoingMessage } from './types';
 
 function start(): void {
   const vscode = acquireVsCodeApi();
   const post = (message: WebviewOutgoingMessage) => vscode.postMessage(message);
-  const terminals = new Terminals(post);
-  const tabs = new TabBar(post, () => terminals.focusActive());
+  let panes: Panes | undefined;
+  const terminals = new Terminals(post, () => (panes?.count ?? 0) > 1);
+  panes = new Panes(post, terminals);
 
   window.addEventListener('message', (event: MessageEvent<WebviewIncomingMessage>) => {
     const message = event.data;
@@ -18,7 +19,7 @@ function start(): void {
         terminals.clear(message.id);
         break;
       case 'tabsUpdate':
-        tabs.render(message.tabs, message.statusColors, message.monochromeIcons);
+        panes?.render(message.layout, message.statusColors, message.monochromeIcons);
         break;
       case 'createTab':
         terminals.create(message.id);

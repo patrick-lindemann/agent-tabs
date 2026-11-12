@@ -4,7 +4,14 @@ import { confirmClose, discoverProfiles, manageProfiles, pickProfile, pickTab } 
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
 import { Tabs } from '../terminal/tabs';
-import type { ClosedTab, ExtensionMessage, LaunchSpec, OpenTab, TerminalInstance } from '../types';
+import type {
+  ClosedTab,
+  ExtensionMessage,
+  LaunchSpec,
+  OpenTab,
+  SplitSide,
+  TerminalInstance
+} from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
 import { dispatchMessage, type MessageHandlerContext } from './messages';
@@ -14,6 +21,9 @@ const CLOSED_TABS_KEY = 'agentTabs.closedTabs';
 
 /** Workspace state key of the open tabs, which the next window opens again */
 const OPEN_TABS_KEY = 'agentTabs.openTabs';
+
+/** Workspace state key of the splits of the open tabs' panes */
+const LAYOUT_KEY = 'agentTabs.layout';
 
 /**
  * Identifies the workspace in the tags of its multiplexer sessions: the
@@ -33,6 +43,8 @@ function workspaceKey(): string {
 export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerContext {
   private view?: vscode.WebviewView;
   private disposed = false;
+  /** There is more than one pane, as last told to the `agentTabs.split` context key */
+  private split = false;
 
   private readonly config = new ConfigManager();
   private readonly picker = new CommandInputPicker();
@@ -60,7 +72,9 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
       },
       workspaceState && {
         get: () => workspaceState.get<OpenTab[]>(OPEN_TABS_KEY, []),
-        set: (tabs) => void workspaceState.update(OPEN_TABS_KEY, tabs)
+        set: (tabs) => void workspaceState.update(OPEN_TABS_KEY, tabs),
+        getLayout: () => workspaceState.get<unknown>(LAYOUT_KEY),
+        setLayout: (layout) => void workspaceState.update(LAYOUT_KEY, layout)
       }
     );
   }
@@ -138,11 +152,14 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     void vscode.commands.executeCommand('setContext', 'agentTabs.focused', focused);
   }
 
-  handleNewTab(): void {
+  /** The + of a pane's tab strip, which opens the tab in that pane */
+  handleNewTab(pane?: string): void {
+    if (pane) this.tabs.focusPane(pane);
     void this.createTerminal();
   }
 
-  handleNewTabWithProfile(): void {
+  handleNewTabWithProfile(pane?: string): void {
+    if (pane) this.tabs.focusPane(pane);
     void this.pickProfileAndCreateTerminal();
   }
 
@@ -158,6 +175,22 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     this.tabs.switchTo(id);
   }
 
+  handleMoveTab(id: string, index: number, pane?: string): void {
+    this.tabs.move(id, index, pane);
+  }
+
+  handleSplitTab(id: string, pane: string, side: SplitSide): void {
+    this.tabs.split(id, pane, side);
+  }
+
+  handleFocusPane(pane: string): void {
+    this.tabs.focusPane(pane);
+  }
+
+  handleResizeSplit(split: string, sizes: number[]): void {
+    this.tabs.resizeSplit(split, sizes);
+  }
+
   handleOpenFile(id: string, path: string, line?: number, column?: number): void {
     void openFile(path, this.tabs.state.get(id)?.cwd, line, column);
   }
@@ -171,6 +204,19 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   createTerminal(launch?: LaunchSpec): Promise<string | undefined> {
     return this.tabs.create(launch);
+  }
+
+  /**
+   * Opens the first profile in a new pane below the focused one, like Split
+   * Terminal does in a sidebar, or with `side` to its right
+   */
+  splitTerminal(side: 'bottom' | 'right' = 'bottom'): Promise<string | undefined> {
+    return this.tabs.create(undefined, side);
+  }
+
+  /** Focuses the next (1) or previous (-1) pane */
+  focusNextPane(step: 1 | -1): void {
+    this.tabs.focusNextPane(step);
   }
 
   async pickProfileAndCreateTerminal(): Promise<void> {
@@ -226,7 +272,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
    */
   async pickTerminal(step: 1 | -1 = 1): Promise<void> {
     const { state } = this.tabs;
-    const { autoTabTitles } = this.config.getConfig();
+    const config = this.config.getConfig();
     const instances = this.tabs
       .recentlyUsed()
       .map((id) => state.get(id))
@@ -234,7 +280,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     const id = await pickTab(
       instances.map((instance) => ({
         id: instance.id,
-        label: state.getFullLabel(instance, autoTabTitles),
+        label: state.getFullLabel(instance, config),
         description: instance.isActive ? 'active' : undefined,
         detail: state.describeStatus(instance)
       })),
@@ -248,12 +294,13 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   /**
    * Closes tabs the user asked to close. Closing ends the agent's process, so
-   * tabs whose agent is working, waiting for an answer or has unsent input
-   * ask first, unless `agentTabs.confirmClose` is off.
+   * tabs whose agent is working or waiting for an answer, or whose detached
+   * session still runs, ask first, unless `agentTabs.confirmClose` is off.
    */
   async requestClose(ids: string[]): Promise<boolean> {
     const { state } = this.tabs;
-    const { confirmClose: confirm, autoTabTitles, tabTitleWords } = this.config.getConfig();
+    const config = this.config.getConfig();
+    const confirm = config.confirmClose;
     const busy = ids
       .map((id) => state.get(id))
       .filter((instance): instance is TerminalInstance => instance !== undefined)
@@ -263,7 +310,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     if (busy.length > 0 && confirm) {
       const confirmed = await confirmClose(
         busy.map(({ instance, reason }) => ({
-          label: state.getLabel(instance, autoTabTitles, tabTitleWords),
+          label: state.getLabel(instance, config),
           agent: instance.launch.label,
           reason: reason as NonNullable<typeof reason>
         }))
@@ -278,8 +325,12 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     return true;
   }
 
+  /** Closes the other tabs of the tab's pane, like Close Others in an editor group */
   async closeOtherTerminals(id: string): Promise<void> {
-    const others = this.tabs.state.getAllIds().filter((other) => other !== id);
+    const { state } = this.tabs;
+    const pane = state.getPaneId(id);
+    if (!pane) return;
+    const others = state.getPaneTabs(pane).filter((other) => other !== id);
     if (await this.requestClose(others)) {
       this.tabs.switchTo(id);
     }
@@ -303,6 +354,11 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   switchToTerminalAt(position: number): void {
     this.tabs.switchToPosition(position);
+  }
+
+  /** Moves the active tab left or right, or to the start or end of the strip */
+  moveActiveTerminal(to: 'left' | 'right' | 'first' | 'last'): void {
+    this.tabs.moveActive(to);
   }
 
   switchToNextTerminal(): void {
@@ -342,9 +398,16 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
    */
   private refresh(): void {
     const { state } = this.tabs;
-    const { autoTabTitles, tabTitleWords, statusColors, monochromeIcons } = this.config.getConfig();
-    const tabs = state.getTabsInfo(autoTabTitles, tabTitleWords);
-    this.post({ type: 'tabsUpdate', tabs, statusColors, monochromeIcons });
+    const config = this.config.getConfig();
+    const { statusColors, monochromeIcons } = config;
+    const layout = state.getLayoutInfo(config);
+    this.post({ type: 'tabsUpdate', layout, statusColors, monochromeIcons });
+    // Scopes the pane keybindings, like VS Code's terminal while it is split
+    const split = state.paneCount > 1;
+    if (split !== this.split) {
+      this.split = split;
+      void vscode.commands.executeCommand('setContext', 'agentTabs.split', split);
+    }
 
     if (this.view) {
       const count = state.getAll().filter((tab) => state.needsAttention(tab)).length;

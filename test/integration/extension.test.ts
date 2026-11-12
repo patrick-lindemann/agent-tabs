@@ -31,7 +31,17 @@ suite('Agent Tabs extension', () => {
   // Switching itself is unit tested in tabs.test.ts; here no process starts,
   // so the commands must not fail without tabs or a resolved view
   test('runs tab navigation without tabs', async () => {
-    for (const command of ['agentTabs.nextTab', 'agentTabs.previousTab', 'agentTabs.closeTab']) {
+    for (const command of [
+      'agentTabs.nextTab',
+      'agentTabs.previousTab',
+      'agentTabs.moveTabLeft',
+      'agentTabs.moveTabRight',
+      'agentTabs.moveTabToStart',
+      'agentTabs.moveTabToEnd',
+      'agentTabs.focusPreviousPane',
+      'agentTabs.focusNextPane',
+      'agentTabs.closeTab'
+    ]) {
       await vscode.commands.executeCommand(command);
     }
     await vscode.commands.executeCommand('agentTabs.switchToTabAt', 1);

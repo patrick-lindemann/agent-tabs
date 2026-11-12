@@ -10,7 +10,7 @@ Agent Tabs runs Claude Code, Codex, Gemini CLI, pi and other CLI coding agents i
 
 ### See what every agent is doing
 
-Each tab shows its agent's status: working, needs input, done or failed. A result that comes in while you're in another tab stays marked until you look at it, and the view's badge counts the tabs waiting for you. Agents report their status themselves through the [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status); for the others, Agent Tabs recognizes their prompts.
+Each tab shows its agent's status: working, needs input, done or failed. A result that comes in while you're in another tab stays marked until you look at it, and the view's badge counts the tabs waiting for you. Agents report their status themselves through the [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status); for the others, Agent Tabs recognizes their prompts. A pi tab also stays working while subagents of [pi-subagents](https://github.com/nicobailon/pi-subagents) run in the background after pi's own turn ended, see [Subagents](#subagents).
 
 ![Tabs with the status of each agent and pi asking a question](media/screenshots/tabs.png)
 
@@ -34,11 +34,15 @@ Close VS Code with a few agents open, and the next window of the workspace opens
 
 ### Reopen closed tabs
 
-Closed a tab by accident? `Cmd+Shift+T` opens it again and continues its conversation, for Claude Code, pi and Cursor; press it again for the tab closed before. Agent Tabs gives each conversation an ID when the tab starts and remembers the last ten closed tabs of a workspace once a message was sent. A tab with a message you have not sent yet asks before it closes.
+Closed a tab by accident? `Cmd+Shift+T` opens it again and continues its conversation, for Claude Code, pi and Cursor; press it again for the tab closed before. Agent Tabs gives each conversation an ID when the tab starts and remembers the last ten closed tabs of a workspace once a message was sent.
+
+### Split the view
+
+Drag a tab onto a terminal to open it in a new pane beside it, each with its own tabs: near the left or right edge for a pane side by side, else on the top or bottom half for one above or below. Panes split again the same way, in either direction. Drag a tab onto another pane's tab strip to move it there, and the edge between two panes to resize them. `Cmd+\` (`Ctrl+Shift+5` on Windows and Linux) opens a new tab in a pane below, like Split Terminal, and Split Terminal Right in a pane to the right. New tabs and the tab keys act on the pane you clicked into last. The next window opens the panes again with their tabs and sizes.
 
 ### Works like VS Code
 
-Tabs use the keys you know from editors, clicking `src/app.ts:42` in an agent's output opens it in the editor, and the terminal takes VS Code's theme and font. Closing a tab whose agent is still working asks first. When an agent exits, Enter starts it again in the same tab.
+Tabs use the keys you know from editors and can be dragged into another order, clicking `src/app.ts:42` in an agent's output opens it in the editor, and the terminal takes VS Code's theme and font. Closing a tab whose agent is still working asks first. When an agent exits, Enter starts it again in the same tab.
 
 ## Supported agents
 
@@ -70,6 +74,12 @@ The same keys as VS Code's editor tabs, active while Agent Tabs has focus. On Wi
 | Next / previous tab | `Cmd+Alt+→` / `Cmd+Alt+←`, `Cmd+Shift+]` / `Cmd+Shift+[` | `Ctrl+PageDown` / `Ctrl+PageUp` |
 | Go to tab 1–9 / last tab | `Ctrl+1` … `Ctrl+9` / `Ctrl+0`, `Cmd+9` | `Alt+1` … `Alt+9` / `Alt+0` |
 | Recently used tabs | `Ctrl+Tab` / `Ctrl+Shift+Tab` | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Move tab left / right | `Cmd+K` `Cmd+Shift+←` / `Cmd+K` `Cmd+Shift+→` | `Ctrl+Shift+PageUp` / `Ctrl+Shift+PageDown` |
+| Split into a new pane below | `Cmd+\`, `Ctrl+Shift+5` | `Ctrl+Shift+5` |
+| Split into a new pane to the right | `Cmd+K` `Cmd+\` | — |
+| Focus previous / next pane | `Cmd+Alt+↑` / `Cmd+Alt+↓` | `Alt+↑` / `Alt+↓` |
+
+Move Tab to Start and Move Tab to End have no key, as in VS Code; bind one in Keyboard Shortcuts if you like. With several panes, the tab keys, Close Others and the tab positions act on the focused pane, and the pane keys follow VS Code's split terminal; they only apply while the view is split.
 
 Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the line, `Cmd+Backspace` and `Option+Backspace` delete to the line start or the previous word, and `Shift+Enter` inserts a new line in agents that support it.
 
@@ -84,14 +94,15 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 | `agentTabs.multiplexer` | `none` | Run tabs in `tmux` (3.2+) or `abduco` sessions that outlive the window. |
 | `agentTabs.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
 | `agentTabs.restoreTabs` | `true` | Open the tabs of the last window again, continuing the conversations of Claude Code, pi and Cursor. |
-| `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent. |
+| `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working or waiting for input, or whose detached session still runs. |
 
 **Tab names and icons**
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `agentTabs.autoTabTitles` | `true` | Name tabs after the agent's session instead of the profile. |
+| `agentTabs.autoTabTitles` | `true` | Name tabs after the agent's session, or the first message until the agent names it, instead of the profile. |
 | `agentTabs.tabTitleWords` | `4` | Words in a tab name (1–12); filler words are dropped. |
+| `agentTabs.transformTabTitles` | `true` | Write tab names from your first message and Claude Code's generated session names in sentence case: `fix-login-bug` becomes `Fix login bug`. |
 | `agentTabs.monochromeIcons` | `false` | Agent logos in the text color instead of brand colors. |
 
 **Status**
@@ -134,6 +145,20 @@ curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-tabs/main/i
 - **An agent shows as not installed:** VS Code does not see it on its `PATH`. Start VS Code from a shell where the command works, or add its folder through `agentTabs.env`.
 - **An agent needs shell aliases or functions:** turn off `agentTabs.directMode`.
 - **The terminal stays blank after a VS Code update:** update Agent Tabs; its terminal module must match VS Code's version.
+
+## Subagents
+
+[pi-subagents](https://github.com/nicobailon/pi-subagents) runs subagents in the background: pi starts them, its turn ends, and the subagents' results start a new turn later. pi itself reports **done** when its turn ends. pi-subagents (0.77+) reports each background run on its own, as a child record of the Program Status Protocol (`id=subagents/<run>`, `app=pi-subagents`), and Agent Tabs combines them with pi's status:
+
+| pi | A background run | Tab |
+| --- | --- | --- |
+| Working or done | Working | Working |
+| Any | Waiting for an answer | Needs input |
+| Done | None left working | Done |
+
+A run counts until pi-subagents reports it finished, failed, stopped or cleared. Closing a tab with running subagents asks first. The status shows with tmux too, which Agent Tabs reads it from; it needs nothing to set up. pi-subagents' `programStatus: false` setting, or `PI_PROGRAM_STATUS=0`, turns its reports off, and the tab shows only pi's own status again.
+
+Agent Tabs ignores child records of other agents. Claude Code reports its background shells as child records, and a dev server would keep the tab working for as long as it runs.
 
 ## Sessions that outlive the window
 

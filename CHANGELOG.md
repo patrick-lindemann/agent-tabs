@@ -5,6 +5,29 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [3.4.0] - 2026-11-12
+
+### Added
+
+- **Split panes**: drag a tab onto a terminal to open it in a new pane beside it, each with its own tabs: near the left or right edge side by side, else above or below. Panes split again in either direction. Drag a tab onto another pane's tab strip to move it there, and the edge between panes to resize them. **Split Terminal Down** (`Cmd+\` on macOS, `Ctrl+Shift+5`) and **Split Terminal Right** (`Cmd+K Cmd+\` on macOS) open a new tab in a new pane, and **Focus Previous/Next Pane** (`Cmd+Alt+↑/↓` on macOS, `Alt+↑/↓`) moves between panes, as in VS Code's split terminal. The next window opens the panes again with their tabs and sizes
+- Tabs can be dragged to another position in the tab strip, and moved with the keys of VS Code's Move Editor Left/Right: `Cmd+K Cmd+Shift+←/→` on macOS, `Ctrl+Shift+PageUp/PageDown` on Windows and Linux. **Move Tab to Start** and **Move Tab to End** are in the Command Palette. The order is kept for the next window
+- An agent's tab is named after the first message you send as soon as the agent starts working, until the agent sets its own title, in sentence case like the agents' titles (`why does the build fail` becomes `Why does the build fail`). Before, a pi tab kept the profile's name until the session was named, which an extension such as pi-auto-session-name does only after the answer
+
+### Changed
+
+- A Claude Code session name that `/rename` generates, e.g. `fix-login-bug`, shows as `Fix login bug`. `agentTabs.transformTabTitles: false` shows it, and the first message, as written
+- The dialog before closing tabs says in its title why a tab is in use, lists each tab with its reason when several are, and its second button is **Don't Ask Again**
+
+### Fixed
+
+- A pi tab stays **working** while background subagents of [pi-subagents](https://github.com/nicobailon/pi-subagents) (0.77+) run, and shows **needs input** while one waits for an answer. It showed **done** as soon as pi's own turn ended, while the subagents were still working. Agent Tabs reads the status pi-subagents reports for each run, so closing such a tab also asks first
+
+### Removed
+
+- Closing a tab no longer asks when you typed a message without sending it. Agent Tabs cannot see an agent's input, so it guessed from the keys you pressed, and often asked after the text had been deleted
+
 ## [3.3.1] - 2026-11-11
 
 ### Fixed

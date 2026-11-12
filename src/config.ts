@@ -55,6 +55,7 @@ export class ConfigManager {
       programStatus,
       autoTabTitles: config.get<boolean>('autoTabTitles', true),
       tabTitleWords: titleWordsSetting(config.get('tabTitleWords')),
+      transformTabTitles: config.get<boolean>('transformTabTitles', true),
       statusColors: config.get<boolean>('statusColors', true),
       confirmClose: config.get<boolean>('confirmClose', true),
       monochromeIcons: config.get<boolean>('monochromeIcons', false),

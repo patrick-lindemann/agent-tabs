@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
-import { isTabShortcut, keySequence } from './keys';
+import { isCmdK, isModifierKey, isTabShortcut, keySequence } from './keys';
 import { FileLinkProvider, parseFileTarget } from './links';
 import { isAtBottom, trackScroll, viewportOf } from './scroll';
 import { ThemeBuilder } from './theme';
@@ -12,28 +12,92 @@ const IS_MAC = /Mac/i.test(
     navigator.userAgent
 );
 
-/** The xterm.js terminals, one per tab, of which only the active one is shown */
+/**
+ * The xterm.js terminals, one per tab. Each pane shows the terminal of its
+ * active tab; the others wait hidden. The active terminal is the focused
+ * pane's, which takes keyboard focus.
+ */
 export class Terminals {
   private readonly entries = new Map<string, TerminalEntry>();
   private readonly theme = new ThemeBuilder();
-  private readonly container: HTMLElement;
+  /** Holds the terminals no pane shows */
+  private readonly hidden: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
   private readonly stopWatchingTheme: () => void;
   private activeId: string | undefined;
+  /** The terminal each pane's container shows */
+  private readonly placed = new Map<HTMLElement, string>();
+  /** The last key pressed was Cmd+K, which starts a VS Code chord */
+  private afterCmdK = false;
   private font: { fontSize: number; fontFamily?: string; lineHeight: number } = {
     fontSize: 12,
     lineHeight: 1.2
   };
 
-  constructor(private readonly post: (message: WebviewOutgoingMessage) => void) {
-    const container = document.getElementById('terminals-container');
-    if (!container) {
-      throw new Error('Terminal container not found');
-    }
-    this.container = container;
-    this.resizeObserver = new ResizeObserver(() => this.fitActive());
-    this.resizeObserver.observe(container);
+  constructor(
+    private readonly post: (message: WebviewOutgoingMessage) => void,
+    /** Whether the view has more than one pane, for the pane focus keys */
+    private readonly isSplit: () => boolean = () => false
+  ) {
+    this.hidden = document.createElement('div');
+    this.hidden.className = 'hidden-terminals';
+    document.body.appendChild(this.hidden);
+    this.resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const id = this.placed.get(entry.target as HTMLElement);
+        if (id) this.fit(id);
+      }
+    });
     this.stopWatchingTheme = this.theme.watch(() => this.applyAppearance());
+  }
+
+  /**
+   * Shows a tab's terminal in a pane's container, in place of the one it
+   * showed, which waits hidden again
+   */
+  place(id: string, container: HTMLElement): void {
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    const previous = this.placed.get(container);
+    if (previous === id && entry.element.parentElement === container) return;
+    if (previous && previous !== id) this.hide(previous);
+    // Taken from the pane that showed it before
+    for (const [other, shown] of this.placed) {
+      if (shown === id && other !== container) this.placed.delete(other);
+    }
+    if (!this.placed.has(container)) this.resizeObserver.observe(container);
+    this.placed.set(container, id);
+    // Moving the element loses the scroll position; it is restored below
+    const { isAtBottom: follow, lastScrollTop } = entry;
+    container.appendChild(entry.element);
+    entry.element.style.display = 'block';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        entry.fitAddon.fit();
+        requestAnimationFrame(() => restoreScroll(entry, follow, lastScrollTop));
+        this.reportSize(id, entry);
+      });
+    });
+  }
+
+  /** A pane closed; its terminal waits hidden until another pane shows it */
+  release(container: HTMLElement): void {
+    const id = this.placed.get(container);
+    this.placed.delete(container);
+    this.resizeObserver.unobserve(container);
+    if (id && ![...this.placed.values()].includes(id)) this.hide(id);
+  }
+
+  private hide(id: string): void {
+    const entry = this.entries.get(id);
+    if (!entry || entry.element.parentElement === this.hidden) return;
+    entry.element.style.display = 'none';
+    this.hidden.appendChild(entry.element);
+  }
+
+  /** Makes a shown terminal the active one, e.g. after its pane was clicked */
+  setActive(id: string | undefined): void {
+    this.activeId = id;
   }
 
   /** Uses the terminal font VS Code is configured with */
@@ -59,7 +123,7 @@ export class Terminals {
       terminal.options.lineHeight = options.lineHeight;
       if (changed && entry.colorSchemeReports) this.post({ type: 'input', id, data: report });
     }
-    this.fitActive();
+    for (const id of this.placed.values()) this.fit(id);
   }
 
   /** The answer to DSR 996: `CSI ? 997 ; 1 n` for dark, `2` for light */
@@ -74,7 +138,7 @@ export class Terminals {
     element.className = 'terminal-wrapper';
     element.id = `terminal-${id}`;
     element.style.display = 'none';
-    this.container.appendChild(element);
+    this.hidden.appendChild(element);
 
     // Webviews cannot open windows, so the extension opens links, like
     // VS Code's terminal does: URLs in the output and OSC 8 hyperlinks
@@ -152,22 +216,18 @@ export class Terminals {
     entry.lastScrollTop = 0;
   }
 
+  /**
+   * Makes a terminal the active one and gives it keyboard focus; its pane
+   * shows it already, after the layout that came before
+   */
   show(id: string): void {
-    for (const [entryId, entry] of this.entries) {
-      entry.element.style.display = entryId === id ? 'block' : 'none';
-    }
     this.activeId = id;
-
     const active = this.entries.get(id);
     if (!active) return;
-    const { isAtBottom: follow, lastScrollTop } = active;
-    // Double RAF ensures the browser has completed layout after the display change
+    // After `place` has laid it out
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        active.fitAddon.fit();
-        active.terminal.focus();
-        requestAnimationFrame(() => restoreScroll(active, follow, lastScrollTop));
-        this.reportSize(id, active);
+        if (this.activeId === id) active.terminal.focus();
       });
     });
   }
@@ -175,6 +235,9 @@ export class Terminals {
   remove(id: string): void {
     const entry = this.entries.get(id);
     if (!entry) return;
+    for (const [container, shown] of this.placed) {
+      if (shown === id) this.placed.delete(container);
+    }
     entry.terminal.dispose();
     entry.element.remove();
     this.entries.delete(id);
@@ -207,6 +270,7 @@ export class Terminals {
 
   dispose(): void {
     this.resizeObserver.disconnect();
+    this.hidden.remove();
     this.stopWatchingTheme();
     for (const entry of this.entries.values()) {
       entry.terminal.dispose();
@@ -222,10 +286,10 @@ export class Terminals {
     };
   }
 
-  private fitActive(): void {
-    const id = this.activeId;
-    const active = id ? this.entries.get(id) : undefined;
-    if (!id || !active) return;
+  /** Fits a shown terminal to its pane, e.g. after the pane was resized */
+  private fit(id: string): void {
+    const active = this.entries.get(id);
+    if (!active || active.element.style.display === 'none') return;
     const follow = isAtBottom(active.terminal);
     const scrollTop = viewportOf(active)?.scrollTop ?? 0;
     active.fitAddon.fit();
@@ -255,8 +319,12 @@ export class Terminals {
    * for the same keystroke.
    */
   private handleKey(terminal: Terminal, id: string, event: KeyboardEvent): boolean {
+    const afterCmdK = this.afterCmdK;
+    if (event.type === 'keydown' && !isModifierKey(event)) {
+      this.afterCmdK = isCmdK(event);
+    }
     // Let the event reach VS Code's keybindings without typing it
-    if (isTabShortcut(event, IS_MAC)) {
+    if (isTabShortcut(event, IS_MAC, afterCmdK, this.isSplit())) {
       return false;
     }
 

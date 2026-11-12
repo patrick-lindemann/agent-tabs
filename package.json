@@ -2,7 +2,7 @@
   "name": "agent-tabs",
   "displayName": "Agent Tabs: Coding Agents in the Sidebar",
   "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "publisher": "patrick-lindemann",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -141,6 +141,48 @@
         "category": "Agent Tabs"
       },
       {
+        "command": "agentTabs.moveTabLeft",
+        "title": "Move Tab Left",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.moveTabRight",
+        "title": "Move Tab Right",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.moveTabToStart",
+        "title": "Move Tab to Start",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.moveTabToEnd",
+        "title": "Move Tab to End",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.split",
+        "title": "Split Terminal Down",
+        "category": "Agent Tabs",
+        "icon": "$(split-vertical)"
+      },
+      {
+        "command": "agentTabs.splitRight",
+        "title": "Split Terminal Right",
+        "category": "Agent Tabs",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "agentTabs.focusPreviousPane",
+        "title": "Focus Previous Pane",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.focusNextPane",
+        "title": "Focus Next Pane",
+        "category": "Agent Tabs"
+      },
+      {
         "command": "agentTabs.closeTabFromMenu",
         "title": "Close",
         "category": "Agent Tabs"
@@ -206,6 +248,46 @@
         "command": "agentTabs.previousTab",
         "mac": "cmd+shift+[",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.moveTabLeft",
+        "key": "ctrl+shift+pageup",
+        "mac": "cmd+k cmd+shift+left",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.moveTabRight",
+        "key": "ctrl+shift+pagedown",
+        "mac": "cmd+k cmd+shift+right",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.split",
+        "key": "ctrl+shift+5",
+        "mac": "cmd+\\",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.split",
+        "mac": "ctrl+shift+5",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.splitRight",
+        "mac": "cmd+k cmd+\\",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.focusPreviousPane",
+        "key": "alt+up",
+        "mac": "cmd+alt+up",
+        "when": "agentTabs.split && (agentTabs.focused || focusedView == 'agentTabs.terminalView')"
+      },
+      {
+        "command": "agentTabs.focusNextPane",
+        "key": "alt+down",
+        "mac": "cmd+alt+down",
+        "when": "agentTabs.split && (agentTabs.focused || focusedView == 'agentTabs.terminalView')"
       },
       {
         "command": "agentTabs.switchToTabAt",
@@ -443,13 +525,13 @@
         "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent, since closing ends its session.",
+          "markdownDescription": "Ask before closing a tab whose agent is working or waiting for input, or whose detached session still runs, since closing ends its session.",
           "order": 4
         },
         "agentTabs.autoTabTitles": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the profile's name.",
+          "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. Until the agent sets a title, an agent's tab shows the first message you sent. When off, tabs show the profile's name.",
           "order": 5
         },
         "agentTabs.tabTitleWords": {
@@ -458,6 +540,12 @@
           "minimum": 1,
           "maximum": 12,
           "markdownDescription": "Maximum number of words in a tab's name with `#agentTabs.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages.",
+          "order": 6
+        },
+        "agentTabs.transformTabTitles": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Write tab names in sentence case like the titles agents write: the first message you send, e.g. `why does the build fail` as `Why does the build fail`, and a Claude Code session name that `/rename` generated, e.g. `fix-login-bug`, as `Fix login bug`. When off, tabs show the message and the name as written.",
           "order": 6
         },
         "agentTabs.monochromeIcons": {

@@ -18,6 +18,7 @@ import type {
   LaunchSpec,
   OnExitAction,
   OpenTab,
+  SplitSide,
   TerminalConfig
 } from '../../src/types';
 import { status } from './agents';
@@ -132,6 +133,7 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     programStatus: true,
     autoTabTitles: true,
     tabTitleWords: 4,
+    transformTabTitles: true,
     statusColors: true,
     confirmClose: true,
     monochromeIcons: false,
@@ -145,8 +147,8 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
 
 /** Tabs whose `create` fails the test instead of returning no tab */
 class TestTabs extends Tabs {
-  override async create(launch?: LaunchSpec): Promise<string> {
-    const id = await super.create(launch);
+  override async create(launch?: LaunchSpec, split?: SplitSide): Promise<string> {
+    const id = await super.create(launch, split);
     if (!id) throw new Error('no tab opened');
     return id;
   }
@@ -181,9 +183,14 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
   };
   const open = {
     tabs: [] as OpenTab[],
+    layout: undefined as unknown,
     get: () => open.tabs,
     set: (tabs: OpenTab[]) => {
       open.tabs = tabs;
+    },
+    getLayout: () => open.layout,
+    setLayout: (layout: unknown) => {
+      open.layout = layout;
     }
   };
   const tabs = new TestTabs(manager, host, WORKSPACE, closed, open);
@@ -314,6 +321,57 @@ describe('switching tabs', () => {
     expect(tabs.state.getActiveId()).toBe(b);
   });
 
+  it('moves a dragged tab to a position, clamped to the strip', async () => {
+    const { tabs, open, host } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const pi = launchForCommand('pi', [], true);
+    const c = await tabs.create(pi);
+    const refreshes = host.refreshes;
+    tabs.move(c, 0);
+    expect(tabs.state.getAllIds()).toEqual([c, a, b]);
+    expect(open.tabs[0].launch).toEqual(pi);
+    expect(host.refreshes).toBe(refreshes + 1);
+    tabs.move(c, 99);
+    expect(tabs.state.getAllIds()).toEqual([a, b, c]);
+    tabs.move(c, 2);
+    tabs.move('nope', 0);
+    expect(host.refreshes).toBe(refreshes + 2);
+    expect(tabs.state.getActiveId()).toBe(c);
+  });
+
+  it('moves the active tab left, right, to the start and end without wrapping', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const c = await tabs.create();
+    tabs.switchTo(b);
+    tabs.moveActive('left');
+    expect(tabs.state.getAllIds()).toEqual([b, a, c]);
+    tabs.moveActive('left');
+    expect(tabs.state.getAllIds()).toEqual([b, a, c]);
+    tabs.moveActive('right');
+    expect(tabs.state.getAllIds()).toEqual([a, b, c]);
+    tabs.moveActive('last');
+    expect(tabs.state.getAllIds()).toEqual([a, c, b]);
+    tabs.moveActive('right');
+    expect(tabs.state.getAllIds()).toEqual([a, c, b]);
+    tabs.moveActive('first');
+    expect(tabs.state.getAllIds()).toEqual([b, a, c]);
+    expect(tabs.state.getActiveId()).toBe(b);
+  });
+
+  it('switches by position and cycles in the moved order', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    tabs.move(b, 0);
+    tabs.switchToPosition(1);
+    expect(tabs.state.getActiveId()).toBe(b);
+    tabs.cycle(1);
+    expect(tabs.state.getActiveId()).toBe(a);
+  });
+
   it('lists tabs most recently used first', async () => {
     const { tabs } = setup();
     const a = await tabs.create();
@@ -323,6 +381,122 @@ describe('switching tabs', () => {
     expect(tabs.recentlyUsed()).toEqual([a, c, b]);
     tabs.close(c);
     expect(tabs.recentlyUsed()).toEqual([a, b]);
+  });
+});
+
+describe('panes', () => {
+  it('splits a tab into a new pane below, which shows it and gets focus', async () => {
+    const { tabs, posted } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const [first] = tabs.state.getPaneIds();
+    posted.length = 0;
+    tabs.split(b, first, 'bottom');
+    const [, second] = tabs.state.getPaneIds();
+    expect(tabs.state.getPaneTabs(first)).toEqual([a]);
+    expect(tabs.state.getPaneTabs(second)).toEqual([b]);
+    expect(tabs.state.getActiveId()).toBe(b);
+    expect(posted).toEqual([{ type: 'switchTab', id: b }]);
+  });
+
+  it('opens a new tab in the focused pane, and Split Terminal in a new pane beside it', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create(undefined, 'right');
+    const [first, second] = tabs.state.getPaneIds();
+    expect(tabs.state.getPaneTabs(second)).toEqual([b]);
+    tabs.focusPane(first);
+    const c = await tabs.create();
+    expect(tabs.state.getPaneTabs(first)).toEqual([a, c]);
+    expect(tabs.state.getShownIds()).toEqual([c, b]);
+  });
+
+  it('cycles, switches by position and moves within the focused pane', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const c = await tabs.create(undefined, 'bottom');
+    const d = await tabs.create();
+    tabs.cycle(1);
+    expect(tabs.state.getActiveId()).toBe(c);
+    tabs.switchToPosition(0);
+    expect(tabs.state.getActiveId()).toBe(d);
+    tabs.moveActive('first');
+    expect(tabs.state.getAllIds()).toEqual([a, b, d, c]);
+  });
+
+  it('focuses the next or previous pane in reading order, wrapping around', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create(undefined, 'right');
+    const c = await tabs.create(undefined, 'bottom');
+    tabs.focusNextPane(1);
+    expect(tabs.state.getActiveId()).toBe(a);
+    tabs.focusNextPane(-1);
+    expect(tabs.state.getActiveId()).toBe(c);
+    tabs.focusNextPane(-1);
+    expect(tabs.state.getActiveId()).toBe(b);
+    expect(tabs.recentlyUsed()[0]).toBe(b);
+  });
+
+  it('closes a pane with its last tab, and the pane before it takes focus', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create(undefined, 'right');
+    tabs.close(b);
+    expect(tabs.state.getPaneIds()).toHaveLength(1);
+    expect(tabs.state.getActiveId()).toBe(a);
+  });
+
+  it('keeps the focused pane when a tab in another pane closes', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const c = await tabs.create(undefined, 'bottom');
+    tabs.close(a);
+    expect(tabs.state.getActiveId()).toBe(c);
+    expect(tabs.state.getShownIds()).toEqual([b, c]);
+  });
+
+  it("moves a tab dropped on another pane's strip into that pane", async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const c = await tabs.create(undefined, 'right');
+    const [, second] = tabs.state.getPaneIds();
+    tabs.move(a, 0, second);
+    expect(tabs.state.getPaneTabs(second)).toEqual([a, c]);
+    expect(tabs.state.getActiveId()).toBe(a);
+    expect(tabs.state.getShownIds()).toEqual([b, a]);
+  });
+
+  it("counts a result as seen in every pane's shown tab, not only the focused one", async () => {
+    const { tabs, host, status: tabStatus } = setup();
+    const a = await tabs.create();
+    const agentA = spawned[0];
+    await tabs.create(undefined, 'right');
+    // In view without focus, a result is not news
+    agentA.emit(status('state=working') + status('state=done'));
+    expect(tabStatus(a)).toBeUndefined();
+
+    host.visible = false;
+    agentA.emit(status('state=working') + status('state=done'));
+    expect(tabStatus(a)).toBe('done');
+    host.visible = true;
+    tabs.scheduleSeen();
+    vi.advanceTimersByTime(1000);
+    expect(tabStatus(a)).toBeUndefined();
+  });
+
+  it('keeps the sizes the user dragged for the next window', async () => {
+    const { tabs, open } = setup();
+    await tabs.create();
+    await tabs.create(undefined, 'right');
+    const layout = tabs.state.getLayoutInfo(config({ autoTabTitles: false }));
+    tabs.resizeSplit(layout.id, [2, 1]);
+    expect(open.layout).toEqual({ direction: 'row', sizes: [2, 1], children: [0, 1] });
+    tabs.resizeSplit(layout.id, [1]);
+    expect(open.layout).toEqual({ direction: 'row', sizes: [2, 1], children: [0, 1] });
   });
 });
 
@@ -457,6 +631,73 @@ describe('typed input', () => {
   });
 });
 
+describe('tab names from the first message', () => {
+  const send = (tabs: Tabs, id: string, text: string) => {
+    for (const key of text) tabs.input(id, key);
+    tabs.input(id, '\r');
+  };
+  const label = (tabs: Tabs, id: string) => {
+    const instance = tabs.state.get(id);
+    return instance && tabs.state.getLabel(instance, config());
+  };
+
+  it('names the tab when the agent starts working, until it sets a title', async () => {
+    const { tabs, pty } = setup();
+    const id = await tabs.create();
+    send(tabs, id, 'Refactor the API client');
+    expect(label(tabs, id)).toBe('Claude Code');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Refactor API client');
+
+    pty().emit('\x1b]0;✳ Retry logic for uploads\x07');
+    expect(label(tabs, id)).toBe('Retry logic uploads');
+    send(tabs, id, 'Something else entirely');
+    pty().emit(status('state=working'));
+    expect(tabs.state.get(id)?.messageLabel).toBe('Refactor the API client');
+  });
+
+  it('ignores commands, corrections and an Enter that only answers a dialog', async () => {
+    const { tabs, pty } = setup();
+    const id = await tabs.create();
+    send(tabs, id, '/model');
+    send(tabs, id, 'Fix teh\x7f\x7fhe login');
+    // Enter on a trust dialog after the message
+    tabs.input(id, '\r');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Fix login');
+  });
+
+  it('drops text it cannot follow, e.g. after moving the cursor', async () => {
+    const { tabs, pty } = setup();
+    const id = await tabs.create();
+    tabs.input(id, 'Fix');
+    tabs.input(id, '\x1b[D');
+    send(tabs, id, 'x');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Claude Code');
+
+    send(tabs, id, 'Add tests');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Add tests');
+  });
+
+  it('names the tab on Enter for agents that do not report their status', async () => {
+    const { tabs } = setup();
+    installed.add('gemini');
+    const id = await tabs.create(launchForCommand('gemini', [], false));
+    tabs.input(id, '\x1b[200~Explain the\nbuild\x1b[201~');
+    tabs.input(id, '\r');
+    expect(tabs.state.get(id)?.messageLabel).toBe('Explain the build');
+  });
+
+  it('leaves programs that are not agents alone', async () => {
+    const { tabs } = setup();
+    const id = await tabs.create(launchForCommand('htop', [], false));
+    send(tabs, id, 'quit');
+    expect(tabs.state.get(id)?.messageLabel).toBeUndefined();
+  });
+});
+
 describe('process exit', () => {
   it.each([
     ['auto', 0, false],
@@ -494,6 +735,15 @@ describe('process exit', () => {
     await vi.runAllTimersAsync();
     expect(spawned).toHaveLength(2);
     expect(tabs.state.getAllIds()).not.toContain(id);
+  });
+
+  it("ends pi-subagents' runs when pi exits", async () => {
+    const { tabs, status: tabStatus } = setup();
+    const id = await tabs.create(launchForCommand('pi', [], true));
+    spawned[0].emit(status('state=working:id=subagents/run1:app=pi-subagents'));
+    expect(tabStatus(id)).toBe('working');
+    spawned[0].exit(1);
+    expect(tabStatus(id)).not.toBe('working');
   });
 
   it('shows the exit code, and Enter restarts the same command', async () => {
@@ -562,11 +812,14 @@ describe('process exit', () => {
     const { tabs, status: tabStatus, posted } = setup();
     const id = await tabs.create();
     await tabs.create();
-    spawned[0].emit(`\x1b]0;✳ Fix login\x07${status('state=error')}`);
+    tabs.input(id, 'Fix login');
+    tabs.input(id, '\r');
+    spawned[0].emit(`${status('state=working')}\x1b]0;✳ Fix login\x07${status('state=error')}`);
     spawned[0].exit(1);
     tabs.input(id, '\r');
     expect(tabStatus(id)).toBeUndefined();
     expect(tabs.state.get(id)?.titleLabel).toBeUndefined();
+    expect(tabs.state.get(id)?.messageLabel).toBeUndefined();
     expect(posted).toContainEqual({ type: 'clear', id });
   });
 
@@ -1282,40 +1535,36 @@ describe('reopening closed tabs', () => {
 });
 
 describe('asking before closing', () => {
-  it('asks for typed but unsent input, not after it was deleted', async () => {
+  it('does not ask for typed input, sent or not', async () => {
     const { tabs, instance } = setup();
     const id = await tabs.create();
-    const risk = () => tabs.state.closeRisk(instance(id));
-    expect(risk()).toBeUndefined();
-    tabs.input(id, 'hi');
-    expect(risk()).toBe('draft');
-    tabs.input(id, '\x7f');
-    tabs.input(id, '\x7f');
-    expect(risk()).toBeUndefined();
+    tabs.input(id, 'hello');
+    tabs.input(id, '\x17');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+    tabs.input(id, 'go');
+    tabs.input(id, '\r');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });
 
-  it('counts a message as sent when the agent starts working, not on Enter', async () => {
+  it('asks while the agent works or waits for an answer', async () => {
     const { tabs, instance, pty } = setup();
     const id = await tabs.create();
-    pty().emit(status('state=idle'));
-    tabs.input(id, 'do it');
-    tabs.input(id, '\r');
-    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
     pty().emit(status('state=working'));
     expect(tabs.state.closeRisk(instance(id))).toBe('working');
+    pty().emit(status('state=blocked'));
+    expect(tabs.state.closeRisk(instance(id))).toBe('waiting');
     pty().emit(status('state=done'));
     expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });
 
-  it.each([
-    ['with programStatus off', { programStatus: false }, 'claude'],
-    ['for an agent that has not reported yet', {}, 'codex']
-  ] as const)('counts Enter as sending %s', async (_case, overrides, command) => {
-    const { tabs, instance } = setup(overrides);
-    const id = await tabs.create(launchForCommand(command, [], false));
-    tabs.input(id, 'go');
+  it('starts the conversation when an agent that reports its status works, not on Enter', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    pty().emit(status('state=idle'));
     tabs.input(id, '\r');
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+    expect(instance(id).conversation?.started).toBe(false);
+    pty().emit(status('state=working'));
+    expect(instance(id).conversation?.started).toBe(true);
   });
 
   it('starts the conversation on Enter with programStatus off', async () => {
@@ -1328,34 +1577,10 @@ describe('asking before closing', () => {
     expect(closed.tabs).toHaveLength(1);
   });
 
-  it('counts Enter as sending for agents without status', async () => {
-    installed.add('gemini');
-    const { tabs, instance } = setup();
-    const id = await tabs.create(launchForCommand('gemini', [], false));
-    installed.delete('gemini');
-    tabs.input(id, 'go');
-    tabs.input(id, '\r');
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
-  });
-
-  it('asks after editing it cannot follow, until the next message', async () => {
+  it('does not ask after an exit', async () => {
     const { tabs, instance, pty } = setup();
     const id = await tabs.create();
-    tabs.input(id, 'hello');
-    tabs.input(id, '\x17');
-    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
     pty().emit(status('state=working'));
-    pty().emit(status('state=done'));
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
-  });
-
-  it('ignores mouse and focus reports and does not ask after an exit', async () => {
-    const { tabs, instance, pty } = setup();
-    const id = await tabs.create();
-    tabs.input(id, '\x1b[I');
-    tabs.input(id, '\x1b[<0;3;4M');
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
-    tabs.input(id, 'x');
     pty().exit(1);
     expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });
@@ -1450,6 +1675,77 @@ describe('restoring the tabs of the last window', () => {
       id: claude.id
     });
     expect(open.tabs).toEqual(previous.open.tabs);
+  });
+
+  it('saves one pane as before, without pane fields or a layout', async () => {
+    const { tabs, open } = setup();
+    await tabs.create();
+    await tabs.create(PI);
+    expect(open.tabs.map((tab) => [tab.pane, tab.focused, tab.active])).toEqual([
+      [undefined, undefined, undefined],
+      [undefined, undefined, true]
+    ]);
+    expect(open.layout).toBeUndefined();
+  });
+
+  it('opens nested panes again with their tabs, sizes, shown tabs and focus', async () => {
+    const previous = setup();
+    const a = await previous.tabs.create();
+    await previous.tabs.create(PI);
+    const c = await previous.tabs.create(undefined, 'right');
+    const d = await previous.tabs.create(PI, 'bottom');
+    previous.tabs.switchTo(a);
+    const outer = previous.tabs.state.getLayoutInfo(config({ autoTabTitles: false }));
+    previous.tabs.resizeSplit(outer.id, [3, 1]);
+    expect(previous.tabs.state.getShownIds()).toEqual([a, c, d]);
+
+    const { tabs, open } = setup();
+    open.tabs = previous.open.tabs;
+    open.layout = previous.open.layout;
+    await expect(tabs.restore()).resolves.toBe(4);
+    const panes = tabs.state.getPaneIds();
+    const labels = (pane: string) =>
+      tabs.state.getPaneTabs(pane).map((id) => tabs.state.get(id)?.launch.label);
+    expect(panes.map(labels)).toEqual([['Claude Code', 'Pi'], ['Claude Code'], ['Pi']]);
+    const layout = tabs.state.getLayoutInfo(config({ autoTabTitles: false }));
+    expect(layout.type === 'split' && [layout.direction, layout.sizes]).toEqual(['row', [3, 1]]);
+    const [first, , third, fourth] = tabs.state.getAllIds();
+    expect(tabs.state.getShownIds()).toEqual([first, third, fourth]);
+    expect(tabs.state.getActiveId()).toBe(first);
+    expect(open.tabs).toEqual(previous.open.tabs);
+    expect(open.layout).toEqual(previous.open.layout);
+  });
+
+  it('opens the tabs in one pane when the saved layout does not fit them', async () => {
+    const previous = setup();
+    await previous.tabs.create();
+    await previous.tabs.create(PI, 'right');
+
+    const { tabs, open } = setup();
+    open.tabs = previous.open.tabs;
+    open.layout = { direction: 'row', sizes: [1], children: [0] };
+    await expect(tabs.restore()).resolves.toBe(2);
+    expect(tabs.state.getPaneIds()).toHaveLength(1);
+    expect(tabs.state.getAllIds()).toHaveLength(2);
+  });
+
+  it('closes the panes whose tabs did not open again', async () => {
+    const previous = setup();
+    await previous.tabs.create();
+    await previous.tabs.create(PI, 'right');
+
+    const { tabs, open } = setup();
+    // The second pane's tab shows its session in another window
+    tmux.add('elsewhere', { created: 1 }, { attached: true });
+    open.tabs = previous.open.tabs.map((tab, index) =>
+      index === 1 ? { ...tab, session: 'elsewhere' } : tab
+    );
+    open.layout = previous.open.layout;
+    const restored = tabs.restore();
+    await vi.runAllTimersAsync();
+    await expect(restored).resolves.toBe(1);
+    expect(tabs.state.getPaneIds()).toHaveLength(1);
+    expect(tabs.state.getActiveId()).toBe(tabs.state.getAllIds()[0]);
   });
 
   it('restores nothing with restoreTabs off', async () => {

@@ -27,6 +27,33 @@ export function isWebviewMessage(value: unknown): value is WebviewMessage {
     case 'closeTab':
     case 'switchTab':
       return isId(value.id);
+    case 'moveTab':
+      return (
+        isId(value.id) &&
+        typeof value.index === 'number' &&
+        Number.isInteger(value.index) &&
+        value.index >= 0 &&
+        value.index <= 10_000 &&
+        (value.pane === undefined || isId(value.pane))
+      );
+    case 'splitTab':
+      return (
+        isId(value.id) &&
+        isId(value.pane) &&
+        typeof value.side === 'string' &&
+        ['top', 'bottom', 'left', 'right'].includes(value.side)
+      );
+    case 'focusPane':
+      return isId(value.pane);
+    case 'resizeSplit':
+      return (
+        isId(value.split) &&
+        Array.isArray(value.sizes) &&
+        value.sizes.length <= 100 &&
+        value.sizes.every(
+          (size) => typeof size === 'number' && Number.isFinite(size) && size > 0 && size <= 1000
+        )
+      );
     case 'openFile':
       return (
         isId(value.id) &&
@@ -40,6 +67,10 @@ export function isWebviewMessage(value: unknown): value is WebviewMessage {
       return typeof value.focused === 'boolean';
     case 'newTab':
     case 'newTabWithProfile':
+      return (
+        Object.keys(value).every((key) => key === 'type' || key === 'pane') &&
+        (value.pane === undefined || isId(value.pane))
+      );
     case 'newTabWithCommand':
       return Object.keys(value).length === 1;
     default:

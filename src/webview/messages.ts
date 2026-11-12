@@ -1,4 +1,4 @@
-import type { WebviewMessage } from '../types';
+import type { SplitSide, WebviewMessage } from '../types';
 import { isWebviewMessage } from '../validate';
 
 /**
@@ -9,11 +9,15 @@ export interface MessageHandlerContext {
   handleReady(cols: number, rows: number): void;
   handleInput(id: string, data: string): void;
   handleResize(id: string, cols: number, rows: number): void;
-  handleNewTab(): void;
-  handleNewTabWithProfile(): void;
+  handleNewTab(pane?: string): void;
+  handleNewTabWithProfile(pane?: string): void;
   handleNewTabWithCommand(): void;
   handleCloseTab(id: string): void;
   handleSwitchTab(id: string): void;
+  handleMoveTab(id: string, index: number, pane?: string): void;
+  handleSplitTab(id: string, pane: string, side: SplitSide): void;
+  handleFocusPane(pane: string): void;
+  handleResizeSplit(split: string, sizes: number[]): void;
   handleOpenFile(id: string, path: string, line?: number, column?: number): void;
   handleOpenLink(url: string): void;
   handleFocus(focused: boolean): void;
@@ -36,11 +40,11 @@ const messageHandlers: MessageHandlerMap = {
   resize: (message, ctx) => {
     ctx.handleResize(message.id, message.cols, message.rows);
   },
-  newTab: (_message, ctx) => {
-    ctx.handleNewTab();
+  newTab: (message, ctx) => {
+    ctx.handleNewTab(message.pane);
   },
-  newTabWithProfile: (_message, ctx) => {
-    ctx.handleNewTabWithProfile();
+  newTabWithProfile: (message, ctx) => {
+    ctx.handleNewTabWithProfile(message.pane);
   },
   newTabWithCommand: (_message, ctx) => {
     ctx.handleNewTabWithCommand();
@@ -50,6 +54,18 @@ const messageHandlers: MessageHandlerMap = {
   },
   switchTab: (message, ctx) => {
     ctx.handleSwitchTab(message.id);
+  },
+  moveTab: (message, ctx) => {
+    ctx.handleMoveTab(message.id, message.index, message.pane);
+  },
+  splitTab: (message, ctx) => {
+    ctx.handleSplitTab(message.id, message.pane, message.side);
+  },
+  focusPane: (message, ctx) => {
+    ctx.handleFocusPane(message.pane);
+  },
+  resizeSplit: (message, ctx) => {
+    ctx.handleResizeSplit(message.split, message.sizes);
   },
   openFile: (message, ctx) => {
     ctx.handleOpenFile(message.id, message.path, message.line, message.column);

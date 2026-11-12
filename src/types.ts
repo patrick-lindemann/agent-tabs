@@ -1,5 +1,4 @@
 import type { AgentId, ProfileIcon } from './protocol';
-import type { Draft } from './terminal/draft';
 import type { MultiplexerId } from './terminal/multiplexer';
 
 // Muted but distinct workspace accent colors
@@ -82,6 +81,7 @@ export interface TerminalConfig {
   programStatus: boolean;
   autoTabTitles: boolean;
   tabTitleWords: number;
+  transformTabTitles: boolean;
   statusColors: boolean;
   confirmClose: boolean;
   monochromeIcons: boolean;
@@ -105,12 +105,26 @@ export interface TerminalInstance {
   launch: LaunchSpec;
   /** Short label from the terminal title, e.g. Claude Code's conversation summary */
   titleLabel?: string;
+  /** Label from the first message sent, shown until the program sets a title */
+  messageLabel?: string;
+  /**
+   * Text typed into an agent's input since the last Enter, while no message
+   * label is set, or undefined when it cannot be followed
+   */
+  typedText?: string;
+  /** A message label waiting for the agent to start working, which shows the message was sent */
+  sentLabel?: string;
   /** The process ended and the tab waits for Enter (restart) or Esc (close) */
   exited?: boolean;
   /** The program reported its state through OSC 7501 */
   reportsStatus?: boolean;
   programState?: ProgramState;
   statusMessage?: string;
+  /**
+   * The program's child records (OSC 7501 reports with an `id`) that are
+   * working or blocked, by id, e.g. pi-subagents' background runs
+   */
+  children?: Map<string, 'working' | 'blocked'>;
   /** Waiting for an answer the agent did not report, e.g. a dialog that rang the bell */
   needsInput?: boolean;
   /** Last OSC 9 notification since the current run started */
@@ -128,8 +142,6 @@ export interface TerminalInstance {
    * message was sent in it, so the tab can be reopened after it closes
    */
   conversation?: { id: string; started: boolean };
-  /** Characters typed since the last message; see `terminal/draft.ts` */
-  draft?: Draft;
 }
 
 /** A closed tab that can be reopened with its conversation */
@@ -149,8 +161,15 @@ export interface OpenTab {
   conversation?: string;
   /** The multiplexer session the tab showed, to attach to it again */
   session?: string;
-  /** The tab was the active one */
+  /** Its pane showed it; without `pane` there was one pane, and this tab had focus */
   active?: boolean;
+  /**
+   * Its pane's position among the panes in reading order, 0 for the first,
+   * in the layout kept with the tabs; none with one pane
+   */
+  pane?: number;
+  /** It was the tab of the pane with focus */
+  focused?: boolean;
 }
 
 /** A multiplexer session that runs a tab's program */
@@ -167,7 +186,12 @@ export interface SessionRef {
 export type {
   AgentId,
   ExtensionMessage,
+  LayoutInfo,
+  PaneInfo,
   ProfileIcon,
+  SplitDirection,
+  SplitInfo,
+  SplitSide,
   TabInfo,
   TabStatus,
   WebviewMessage
