@@ -78,8 +78,7 @@ export function applyProgramStatus(
   if (report.state === 'working') {
     instance.unseen = undefined;
     instance.lastNotification = undefined;
-    // A message was sent, so the input is empty and the conversation exists
-    instance.draft = 0;
+    // A message was sent, so the conversation exists
     if (instance.conversation) instance.conversation.started = true;
     return;
   }
@@ -115,7 +114,6 @@ export function resetStatus(instance: TerminalInstance): void {
   instance.titleLabel = undefined;
   instance.unseen = undefined;
   instance.missing = undefined;
-  instance.draft = undefined;
 }
 
 /**

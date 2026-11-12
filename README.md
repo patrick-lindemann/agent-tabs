@@ -34,7 +34,7 @@ Close VS Code with a few agents open, and the next window of the workspace opens
 
 ### Reopen closed tabs
 
-Closed a tab by accident? `Cmd+Shift+T` opens it again and continues its conversation, for Claude Code, pi and Cursor; press it again for the tab closed before. Agent Tabs gives each conversation an ID when the tab starts and remembers the last ten closed tabs of a workspace once a message was sent. A tab with a message you have not sent yet asks before it closes.
+Closed a tab by accident? `Cmd+Shift+T` opens it again and continues its conversation, for Claude Code, pi and Cursor; press it again for the tab closed before. Agent Tabs gives each conversation an ID when the tab starts and remembers the last ten closed tabs of a workspace once a message was sent.
 
 ### Split the view
 
@@ -94,7 +94,7 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 | `agentTabs.multiplexer` | `none` | Run tabs in `tmux` (3.2+) or `abduco` sessions that outlive the window. |
 | `agentTabs.onExit` | `auto` | When an agent exits: `auto` closes the tab after a clean exit and keeps it after an error, or `close`, `restart`, `keep`. |
 | `agentTabs.restoreTabs` | `true` | Open the tabs of the last window again, continuing the conversations of Claude Code, pi and Cursor. |
-| `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent. |
+| `agentTabs.confirmClose` | `true` | Ask before closing a tab whose agent is working or waiting for input, or whose detached session still runs. |
 
 **Tab names and icons**
 

@@ -1,7 +1,6 @@
 import { shortTitle } from '../profiles';
 import type { LayoutInfo, SplitSide, TabInfo, TabStatus, TerminalInstance } from '../types';
 import { WORKSPACE_ACCENT_COLORS } from '../types';
-import { hasDraft } from './draft';
 import { type Pane, PaneLayout, type SavedLayout } from './layout';
 
 function clamp(value: number, min: number, max: number): number {
@@ -9,7 +8,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /** Why closing a tab would lose something */
-export type CloseRisk = 'working' | 'waiting' | 'draft' | 'session';
+export type CloseRisk = 'working' | 'waiting' | 'session';
 
 const STATUS_LABELS: Record<TabStatus, string> = {
   working: 'Working',
@@ -331,16 +330,15 @@ export class TerminalStateManager {
   }
 
   /**
-   * Why closing a tab would lose something: its agent is working, waiting
-   * for an answer, or has input that was not sent, or its detached session
-   * still runs and would end; undefined when nothing.
+   * Why closing a tab would lose something: its agent is working or waiting
+   * for an answer, or its detached session still runs and would end;
+   * undefined when nothing.
    */
   closeRisk(instance: TerminalInstance): CloseRisk | undefined {
     if (instance.detached) return 'session';
     if (this.isBusy(instance)) {
       return instance.programState === 'working' && !instance.needsInput ? 'working' : 'waiting';
     }
-    if (!instance.exited && hasDraft(instance.draft)) return 'draft';
     return undefined;
   }
 

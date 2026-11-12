@@ -5,6 +5,12 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- Closing a tab no longer asks when you typed a message without sending it. Agent Tabs cannot see an agent's input, so it guessed from the keys you pressed, and often asked after the text had been deleted
+
 ## [3.4.0] - 2026-11-12
 
 ### Added

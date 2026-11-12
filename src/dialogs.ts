@@ -213,13 +213,12 @@ export interface BusyTab {
 const REASONS: Record<BusyTab['reason'], string> = {
   working: 'is still working',
   waiting: 'is waiting for your input',
-  draft: 'has a message you have not sent',
   session: 'still runs in its detached session'
 };
 
 /**
- * Asks before closing tabs whose agent is working, waiting for an answer or
- * has unsent input.
+ * Asks before closing tabs whose agent is working or waiting for an answer,
+ * or whose detached session still runs.
  * "Don't Ask Again" turns off `agentTabs.confirmClose`.
  */
 export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
@@ -228,7 +227,7 @@ export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
   const message = single ? `Close "${first.label}"?` : `Close ${String(busy.length)} tabs?`;
   const detail = single
     ? `${first.agent} ${REASONS[first.reason]}. Closing the tab ends its session.`
-    : 'Their agents are working, waiting for input, have a message you have not sent or still run in a detached session. Closing the tabs ends their sessions.';
+    : 'Their agents are working, waiting for input or still run in a detached session. Closing the tabs ends their sessions.';
   const close = busy.length === 1 ? 'Close' : 'Close All';
   const dontAsk = "Close and Don't Ask Again";
 

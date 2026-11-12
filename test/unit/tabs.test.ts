@@ -1455,40 +1455,36 @@ describe('reopening closed tabs', () => {
 });
 
 describe('asking before closing', () => {
-  it('asks for typed but unsent input, not after it was deleted', async () => {
+  it('does not ask for typed input, sent or not', async () => {
     const { tabs, instance } = setup();
     const id = await tabs.create();
-    const risk = () => tabs.state.closeRisk(instance(id));
-    expect(risk()).toBeUndefined();
-    tabs.input(id, 'hi');
-    expect(risk()).toBe('draft');
-    tabs.input(id, '\x7f');
-    tabs.input(id, '\x7f');
-    expect(risk()).toBeUndefined();
+    tabs.input(id, 'hello');
+    tabs.input(id, '\x17');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+    tabs.input(id, 'go');
+    tabs.input(id, '\r');
+    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });
 
-  it('counts a message as sent when the agent starts working, not on Enter', async () => {
+  it('asks while the agent works or waits for an answer', async () => {
     const { tabs, instance, pty } = setup();
     const id = await tabs.create();
-    pty().emit(status('state=idle'));
-    tabs.input(id, 'do it');
-    tabs.input(id, '\r');
-    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
     pty().emit(status('state=working'));
     expect(tabs.state.closeRisk(instance(id))).toBe('working');
+    pty().emit(status('state=blocked'));
+    expect(tabs.state.closeRisk(instance(id))).toBe('waiting');
     pty().emit(status('state=done'));
     expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });
 
-  it.each([
-    ['with programStatus off', { programStatus: false }, 'claude'],
-    ['for an agent that has not reported yet', {}, 'codex']
-  ] as const)('counts Enter as sending %s', async (_case, overrides, command) => {
-    const { tabs, instance } = setup(overrides);
-    const id = await tabs.create(launchForCommand(command, [], false));
-    tabs.input(id, 'go');
+  it('starts the conversation when an agent that reports its status works, not on Enter', async () => {
+    const { tabs, instance, pty } = setup();
+    const id = await tabs.create();
+    pty().emit(status('state=idle'));
     tabs.input(id, '\r');
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
+    expect(instance(id).conversation?.started).toBe(false);
+    pty().emit(status('state=working'));
+    expect(instance(id).conversation?.started).toBe(true);
   });
 
   it('starts the conversation on Enter with programStatus off', async () => {
@@ -1501,34 +1497,10 @@ describe('asking before closing', () => {
     expect(closed.tabs).toHaveLength(1);
   });
 
-  it('counts Enter as sending for agents without status', async () => {
-    installed.add('gemini');
-    const { tabs, instance } = setup();
-    const id = await tabs.create(launchForCommand('gemini', [], false));
-    installed.delete('gemini');
-    tabs.input(id, 'go');
-    tabs.input(id, '\r');
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
-  });
-
-  it('asks after editing it cannot follow, until the next message', async () => {
+  it('does not ask after an exit', async () => {
     const { tabs, instance, pty } = setup();
     const id = await tabs.create();
-    tabs.input(id, 'hello');
-    tabs.input(id, '\x17');
-    expect(tabs.state.closeRisk(instance(id))).toBe('draft');
     pty().emit(status('state=working'));
-    pty().emit(status('state=done'));
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
-  });
-
-  it('ignores mouse and focus reports and does not ask after an exit', async () => {
-    const { tabs, instance, pty } = setup();
-    const id = await tabs.create();
-    tabs.input(id, '\x1b[I');
-    tabs.input(id, '\x1b[<0;3;4M');
-    expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
-    tabs.input(id, 'x');
     pty().exit(1);
     expect(tabs.state.closeRisk(instance(id))).toBeUndefined();
   });

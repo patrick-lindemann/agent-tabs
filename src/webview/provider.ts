@@ -294,8 +294,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   /**
    * Closes tabs the user asked to close. Closing ends the agent's process, so
-   * tabs whose agent is working, waiting for an answer or has unsent input
-   * ask first, unless `agentTabs.confirmClose` is off.
+   * tabs whose agent is working or waiting for an answer, or whose detached
+   * session still runs, ask first, unless `agentTabs.confirmClose` is off.
    */
   async requestClose(ids: string[]): Promise<boolean> {
     const { state } = this.tabs;

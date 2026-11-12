@@ -525,7 +525,7 @@
         "agentTabs.confirmClose": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Ask before closing a tab whose agent is working, waiting for input or has a message you have not sent, since closing ends its session.",
+          "markdownDescription": "Ask before closing a tab whose agent is working or waiting for input, or whose detached session still runs, since closing ends its session.",
           "order": 4
         },
         "agentTabs.autoTabTitles": {

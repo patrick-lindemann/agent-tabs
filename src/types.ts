@@ -1,5 +1,4 @@
 import type { AgentId, ProfileIcon } from './protocol';
-import type { Draft } from './terminal/draft';
 import type { MultiplexerId } from './terminal/multiplexer';
 
 // Muted but distinct workspace accent colors
@@ -128,8 +127,6 @@ export interface TerminalInstance {
    * message was sent in it, so the tab can be reopened after it closes
    */
   conversation?: { id: string; started: boolean };
-  /** Characters typed since the last message; see `terminal/draft.ts` */
-  draft?: Draft;
 }
 
 /** A closed tab that can be reopened with its conversation */

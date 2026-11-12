@@ -17,7 +17,6 @@ import type {
   SplitSide,
   TerminalInstance
 } from '../types';
-import { typed } from './draft';
 import type { SavedLayout } from './layout';
 import {
   getMultiplexer,
@@ -616,7 +615,7 @@ export class Tabs {
     this.pty.write(id, data);
     // Focus and mouse reports from clicking into the terminal are not answers
     if (isTerminalReport(data)) return;
-    if (instance) this.trackDraft(instance, data);
+    if (instance && data === '\r') this.enterPressed(instance);
 
     this.prompt.onUserInput(id);
     // A question is answered with Enter or dismissed with Esc; arrow keys and
@@ -633,22 +632,14 @@ export class Tabs {
   }
 
   /**
-   * Counts unsent input. Once the agent reported its status, a message
-   * counts as sent when it starts working, since Enter may only answer a
-   * question or pick an entry. Before that, and with `programStatus` off,
-   * Enter sends it. An agent that should report but has not yet, e.g. an
-   * older version, gets its conversation marked only by a report, since
-   * Enter may answer a dialog before the first message.
+   * Marks the conversation as started on Enter for agents that do not report
+   * their status, or with `programStatus` off. Agents that report it start
+   * the conversation when they start working, since Enter may only answer a
+   * question or a dialog before the first message.
    */
-  private trackDraft(instance: TerminalInstance, data: string): void {
-    if (data !== '\r') {
-      instance.draft = typed(instance.draft ?? 0, data);
-      return;
-    }
+  private enterPressed(instance: TerminalInstance): void {
     const { programStatus } = this.config.getConfig();
-    if (programStatus && instance.reportsStatus) return;
-    instance.draft = 0;
-    if (programStatus && reportsStatus(instance.launch.agent)) return;
+    if (programStatus && (instance.reportsStatus || reportsStatus(instance.launch.agent))) return;
     if (instance.conversation && !instance.conversation.started) {
       instance.conversation.started = true;
       this.conversationStarted(instance);
