@@ -737,6 +737,15 @@ describe('process exit', () => {
     expect(tabs.state.getAllIds()).not.toContain(id);
   });
 
+  it("ends pi-subagents' runs when pi exits", async () => {
+    const { tabs, status: tabStatus } = setup();
+    const id = await tabs.create(launchForCommand('pi', [], true));
+    spawned[0].emit(status('state=working:id=subagents/run1:app=pi-subagents'));
+    expect(tabStatus(id)).toBe('working');
+    spawned[0].exit(1);
+    expect(tabStatus(id)).not.toBe('working');
+  });
+
   it('shows the exit code, and Enter restarts the same command', async () => {
     const { tabs, output } = setup();
     const id = await tabs.create(launchForCommand('pi', ['--model', 'x'], true));

@@ -984,6 +984,7 @@ export class Tabs {
   private showDetached(instance: TerminalInstance): void {
     instance.detached = true;
     instance.programState = undefined;
+    instance.children = undefined;
     instance.statusMessage = 'Detached';
     instance.needsInput = false;
     this.prompt.removeTerminal(instance.id);
@@ -999,6 +1000,7 @@ export class Tabs {
     this.endSession(instance);
     instance.exited = true;
     instance.programState = undefined;
+    instance.children = undefined;
     instance.statusMessage = undefined;
     instance.needsInput = false;
     this.prompt.removeTerminal(instance.id);
@@ -1140,6 +1142,8 @@ export class Tabs {
 
     instance.exited = true;
     instance.programState = undefined;
+    // The runs' records end with the process, as the protocol says
+    instance.children = undefined;
     instance.statusMessage = undefined;
     instance.needsInput = false;
     if (exitCode !== 0 && !this.isInView(instance)) {

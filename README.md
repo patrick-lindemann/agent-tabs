@@ -10,7 +10,7 @@ Agent Tabs runs Claude Code, Codex, Gemini CLI, pi and other CLI coding agents i
 
 ### See what every agent is doing
 
-Each tab shows its agent's status: working, needs input, done or failed. A result that comes in while you're in another tab stays marked until you look at it, and the view's badge counts the tabs waiting for you. Agents report their status themselves through the [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status); for the others, Agent Tabs recognizes their prompts.
+Each tab shows its agent's status: working, needs input, done or failed. A result that comes in while you're in another tab stays marked until you look at it, and the view's badge counts the tabs waiting for you. Agents report their status themselves through the [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status); for the others, Agent Tabs recognizes their prompts. A pi tab also stays working while subagents of [pi-subagents](https://github.com/nicobailon/pi-subagents) run in the background after pi's own turn ended, see [Subagents](#subagents).
 
 ![Tabs with the status of each agent and pi asking a question](media/screenshots/tabs.png)
 
@@ -145,6 +145,20 @@ curl -fsSL https://raw.githubusercontent.com/patrick-lindemann/agent-tabs/main/i
 - **An agent shows as not installed:** VS Code does not see it on its `PATH`. Start VS Code from a shell where the command works, or add its folder through `agentTabs.env`.
 - **An agent needs shell aliases or functions:** turn off `agentTabs.directMode`.
 - **The terminal stays blank after a VS Code update:** update Agent Tabs; its terminal module must match VS Code's version.
+
+## Subagents
+
+[pi-subagents](https://github.com/nicobailon/pi-subagents) runs subagents in the background: pi starts them, its turn ends, and the subagents' results start a new turn later. pi itself reports **done** when its turn ends. pi-subagents (0.77+) reports each background run on its own, as a child record of the Program Status Protocol (`id=subagents/<run>`, `app=pi-subagents`), and Agent Tabs combines them with pi's status:
+
+| pi | A background run | Tab |
+| --- | --- | --- |
+| Working or done | Working | Working |
+| Any | Waiting for an answer | Needs input |
+| Done | None left working | Done |
+
+A run counts until pi-subagents reports it finished, failed, stopped or cleared. Closing a tab with running subagents asks first. The status shows with tmux too, which Agent Tabs reads it from; it needs nothing to set up. pi-subagents' `programStatus: false` setting, or `PI_PROGRAM_STATUS=0`, turns its reports off, and the tab shows only pi's own status again.
+
+Agent Tabs ignores child records of other agents. Claude Code reports its background shells as child records, and a dev server would keep the tab working for as long as it runs.
 
 ## Sessions that outlive the window
 

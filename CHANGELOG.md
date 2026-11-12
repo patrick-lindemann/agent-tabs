@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The dialog before closing tabs says in its title why a tab is in use, lists each tab with its reason when several are, and its second button is **Don't Ask Again**
 
+### Fixed
+
+- A pi tab stays **working** while background subagents of [pi-subagents](https://github.com/nicobailon/pi-subagents) (0.77+) run, and shows **needs input** while one waits for an answer. It showed **done** as soon as pi's own turn ended, while the subagents were still working. Agent Tabs reads the status pi-subagents reports for each run, so closing such a tab also asks first
+
 ### Removed
 
 - Closing a tab no longer asks when you typed a message without sending it. Agent Tabs cannot see an agent's input, so it guessed from the keys you pressed, and often asked after the text had been deleted

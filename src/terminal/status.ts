@@ -16,6 +16,11 @@ import {
  *
  * - OSC 7501 reports set the tab status. A finished run in a tab that is
  *   not in view stays marked until the tab is shown.
+ * - Reports with an `id` are child records. pi-subagents reports each
+ *   background run as one, and the tab counts as working while one of them
+ *   is working, also after pi's own record reported done. Other programs'
+ *   child records are ignored: Claude Code's background shells, e.g. a dev
+ *   server, can run for as long as the session.
  * - A bell while working means a dialog asks something the agent did not
  *   report, e.g. pi's ask_user_question tool. It counts as blocked until
  *   the user types or the agent reports again.
@@ -60,12 +65,21 @@ export function applyProgramStatus(
   report: ProgramStatusReport,
   inView: boolean
 ): void {
+  instance.reportsStatus = true;
+  if (report.id !== undefined) {
+    // A clear names no app; it ends the runs beneath it either way
+    if (report.app === SUBAGENTS_APP || report.state === 'clear') {
+      applyChildStatus(instance, report.id, report.state);
+    }
+    return;
+  }
   const previous = instance.programState;
   const notification = instance.lastNotification;
-  instance.reportsStatus = true;
   instance.needsInput = false;
 
   if (report.state === 'clear') {
+    // A clear without id removes every record, the children's too
+    instance.children = undefined;
     instance.programState = undefined;
     instance.statusMessage = undefined;
     instance.lastNotification = undefined;
@@ -107,11 +121,53 @@ export function applyProgramStatus(
   }
 }
 
+/** The `app` of pi-subagents' child records, one per background run */
+const SUBAGENTS_APP = 'pi-subagents';
+
+/**
+ * Keeps a child record while it is working or blocked. Any other state ends
+ * it for the tab; a clear also removes the records beneath it, as the
+ * protocol says.
+ */
+function applyChildStatus(
+  instance: TerminalInstance,
+  id: string,
+  state: ProgramStatusReport['state']
+): void {
+  if (state === 'working' || state === 'blocked') {
+    instance.children ??= new Map();
+    instance.children.set(id, state);
+    return;
+  }
+  const children = instance.children;
+  if (!children) return;
+  children.delete(id);
+  if (state === 'clear') {
+    for (const child of [...children.keys()]) {
+      if (child.startsWith(`${id}/`)) children.delete(child);
+    }
+  }
+  if (children.size === 0) instance.children = undefined;
+}
+
+/** The state of the program's child records: blocked wins over working */
+export function childState(instance: TerminalInstance): 'working' | 'blocked' | undefined {
+  const states = instance.children?.values();
+  if (!states) return undefined;
+  let state: 'working' | undefined;
+  for (const child of states) {
+    if (child === 'blocked') return 'blocked';
+    state = 'working';
+  }
+  return state;
+}
+
 /** Clears what a previous run reported, before the tab restarts */
 export function resetStatus(instance: TerminalInstance): void {
   instance.exited = false;
   instance.reportsStatus = false;
   instance.programState = undefined;
+  instance.children = undefined;
   instance.statusMessage = undefined;
   instance.needsInput = false;
   instance.lastNotification = undefined;

@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { WORKSPACE_ACCENT_COLORS } from '../types';
 import { type Pane, PaneLayout, type SavedLayout } from './layout';
+import { childState } from './status';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(Math.trunc(value), max));
@@ -346,7 +347,8 @@ export class TerminalStateManager {
       !instance.exited &&
       (instance.needsInput ||
         instance.programState === 'working' ||
-        instance.programState === 'blocked')
+        instance.programState === 'blocked' ||
+        childState(instance) !== undefined)
     );
   }
 
@@ -358,7 +360,7 @@ export class TerminalStateManager {
   closeRisk(instance: TerminalInstance): CloseRisk | undefined {
     if (instance.detached) return 'session';
     if (this.isBusy(instance)) {
-      return instance.programState === 'working' && !instance.needsInput ? 'working' : 'waiting';
+      return this.getStatus(instance) === 'blocked' ? 'waiting' : 'working';
     }
     return undefined;
   }
@@ -383,8 +385,17 @@ export class TerminalStateManager {
     if (instance.needsInput) {
       return 'blocked';
     }
-    if (instance.programState === 'working' || instance.programState === 'blocked') {
-      return instance.programState;
+    if (instance.programState === 'blocked') {
+      return 'blocked';
+    }
+    // A child record, e.g. a background subagent, keeps the tab working
+    // after the program's own turn is done
+    const children = childState(instance);
+    if (children === 'blocked' || instance.programState === 'working') {
+      return children ?? 'working';
+    }
+    if (children === 'working') {
+      return 'working';
     }
     if (instance.unseen) {
       return instance.unseen;

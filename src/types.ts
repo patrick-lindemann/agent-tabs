@@ -120,6 +120,11 @@ export interface TerminalInstance {
   reportsStatus?: boolean;
   programState?: ProgramState;
   statusMessage?: string;
+  /**
+   * The program's child records (OSC 7501 reports with an `id`) that are
+   * working or blocked, by id, e.g. pi-subagents' background runs
+   */
+  children?: Map<string, 'working' | 'blocked'>;
   /** Waiting for an answer the agent did not report, e.g. a dialog that rang the bell */
   needsInput?: boolean;
   /** Last OSC 9 notification since the current run started */
