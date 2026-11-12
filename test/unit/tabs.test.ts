@@ -133,6 +133,7 @@ function config(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     programStatus: true,
     autoTabTitles: true,
     tabTitleWords: 4,
+    transformTabTitles: true,
     statusColors: true,
     confirmClose: true,
     monochromeIcons: false,
@@ -491,7 +492,7 @@ describe('panes', () => {
     const { tabs, open } = setup();
     await tabs.create();
     await tabs.create(undefined, 'right');
-    const layout = tabs.state.getLayoutInfo(false, 4);
+    const layout = tabs.state.getLayoutInfo(config({ autoTabTitles: false }));
     tabs.resizeSplit(layout.id, [2, 1]);
     expect(open.layout).toEqual({ direction: 'row', sizes: [2, 1], children: [0, 1] });
     tabs.resizeSplit(layout.id, [1]);
@@ -630,6 +631,73 @@ describe('typed input', () => {
   });
 });
 
+describe('tab names from the first message', () => {
+  const send = (tabs: Tabs, id: string, text: string) => {
+    for (const key of text) tabs.input(id, key);
+    tabs.input(id, '\r');
+  };
+  const label = (tabs: Tabs, id: string) => {
+    const instance = tabs.state.get(id);
+    return instance && tabs.state.getLabel(instance, config());
+  };
+
+  it('names the tab when the agent starts working, until it sets a title', async () => {
+    const { tabs, pty } = setup();
+    const id = await tabs.create();
+    send(tabs, id, 'Refactor the API client');
+    expect(label(tabs, id)).toBe('Claude Code');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Refactor API client');
+
+    pty().emit('\x1b]0;✳ Retry logic for uploads\x07');
+    expect(label(tabs, id)).toBe('Retry logic uploads');
+    send(tabs, id, 'Something else entirely');
+    pty().emit(status('state=working'));
+    expect(tabs.state.get(id)?.messageLabel).toBe('Refactor the API client');
+  });
+
+  it('ignores commands, corrections and an Enter that only answers a dialog', async () => {
+    const { tabs, pty } = setup();
+    const id = await tabs.create();
+    send(tabs, id, '/model');
+    send(tabs, id, 'Fix teh\x7f\x7fhe login');
+    // Enter on a trust dialog after the message
+    tabs.input(id, '\r');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Fix login');
+  });
+
+  it('drops text it cannot follow, e.g. after moving the cursor', async () => {
+    const { tabs, pty } = setup();
+    const id = await tabs.create();
+    tabs.input(id, 'Fix');
+    tabs.input(id, '\x1b[D');
+    send(tabs, id, 'x');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Claude Code');
+
+    send(tabs, id, 'Add tests');
+    pty().emit(status('state=working'));
+    expect(label(tabs, id)).toBe('Add tests');
+  });
+
+  it('names the tab on Enter for agents that do not report their status', async () => {
+    const { tabs } = setup();
+    installed.add('gemini');
+    const id = await tabs.create(launchForCommand('gemini', [], false));
+    tabs.input(id, '\x1b[200~Explain the\nbuild\x1b[201~');
+    tabs.input(id, '\r');
+    expect(tabs.state.get(id)?.messageLabel).toBe('Explain the build');
+  });
+
+  it('leaves programs that are not agents alone', async () => {
+    const { tabs } = setup();
+    const id = await tabs.create(launchForCommand('htop', [], false));
+    send(tabs, id, 'quit');
+    expect(tabs.state.get(id)?.messageLabel).toBeUndefined();
+  });
+});
+
 describe('process exit', () => {
   it.each([
     ['auto', 0, false],
@@ -735,11 +803,14 @@ describe('process exit', () => {
     const { tabs, status: tabStatus, posted } = setup();
     const id = await tabs.create();
     await tabs.create();
-    spawned[0].emit(`\x1b]0;✳ Fix login\x07${status('state=error')}`);
+    tabs.input(id, 'Fix login');
+    tabs.input(id, '\r');
+    spawned[0].emit(`${status('state=working')}\x1b]0;✳ Fix login\x07${status('state=error')}`);
     spawned[0].exit(1);
     tabs.input(id, '\r');
     expect(tabStatus(id)).toBeUndefined();
     expect(tabs.state.get(id)?.titleLabel).toBeUndefined();
+    expect(tabs.state.get(id)?.messageLabel).toBeUndefined();
     expect(posted).toContainEqual({ type: 'clear', id });
   });
 
@@ -1615,7 +1686,7 @@ describe('restoring the tabs of the last window', () => {
     const c = await previous.tabs.create(undefined, 'right');
     const d = await previous.tabs.create(PI, 'bottom');
     previous.tabs.switchTo(a);
-    const outer = previous.tabs.state.getLayoutInfo(false, 4);
+    const outer = previous.tabs.state.getLayoutInfo(config({ autoTabTitles: false }));
     previous.tabs.resizeSplit(outer.id, [3, 1]);
     expect(previous.tabs.state.getShownIds()).toEqual([a, c, d]);
 
@@ -1627,7 +1698,7 @@ describe('restoring the tabs of the last window', () => {
     const labels = (pane: string) =>
       tabs.state.getPaneTabs(pane).map((id) => tabs.state.get(id)?.launch.label);
     expect(panes.map(labels)).toEqual([['Claude Code', 'Pi'], ['Claude Code'], ['Pi']]);
-    const layout = tabs.state.getLayoutInfo(false, 4);
+    const layout = tabs.state.getLayoutInfo(config({ autoTabTitles: false }));
     expect(layout.type === 'split' && [layout.direction, layout.sizes]).toEqual(['row', [3, 1]]);
     const [first, , third, fourth] = tabs.state.getAllIds();
     expect(tabs.state.getShownIds()).toEqual([first, third, fourth]);

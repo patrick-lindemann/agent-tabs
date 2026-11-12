@@ -531,7 +531,7 @@
         "agentTabs.autoTabTitles": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. When off, tabs show the profile's name.",
+          "markdownDescription": "Name tabs with the agent's shortened terminal title, e.g. `Refactor API client` from Claude Code's conversation summary or a pi session named with `/name`. Until the agent sets a title, an agent's tab shows the first message you sent. When off, tabs show the profile's name.",
           "order": 5
         },
         "agentTabs.tabTitleWords": {
@@ -540,6 +540,12 @@
           "minimum": 1,
           "maximum": 12,
           "markdownDescription": "Maximum number of words in a tab's name with `#agentTabs.autoTabTitles#`, e.g. 4 turns `Refactor the API client for v2` into `Refactor API client v2`. Filler words such as `the` or `die` are left out for about 60 languages.",
+          "order": 6
+        },
+        "agentTabs.transformTabTitles": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Write a Claude Code session name that `/rename` generated, e.g. `fix-login-bug`, as `Fix login bug` in tab names. When off, tabs show the name as Claude Code writes it.",
           "order": 6
         },
         "agentTabs.monochromeIcons": {

@@ -18,6 +18,7 @@ import type {
   TerminalInstance
 } from '../types';
 import type { SavedLayout } from './layout';
+import { labelFromMessage, typed } from './message';
 import {
   getMultiplexer,
   MULTIPLEXER_IDS,
@@ -615,6 +616,7 @@ export class Tabs {
     this.pty.write(id, data);
     // Focus and mouse reports from clicking into the terminal are not answers
     if (isTerminalReport(data)) return;
+    if (instance) this.followMessage(instance, data);
     if (instance && data === '\r') this.enterPressed(instance);
 
     this.prompt.onUserInput(id);
@@ -632,14 +634,45 @@ export class Tabs {
   }
 
   /**
+   * Whether a message counts as sent when the agent starts working rather
+   * than on Enter, since Enter may only answer a question or a dialog
+   */
+  private sentWhenWorking(instance: TerminalInstance): boolean {
+    const { programStatus } = this.config.getConfig();
+    return programStatus && (instance.reportsStatus || reportsStatus(instance.launch.agent));
+  }
+
+  /**
+   * Names an agent's tab after the first message sent in it, until the agent
+   * sets a title. An agent that reports its status gets the label when it
+   * starts working, from the last text sent before, so an Enter that only
+   * answered a dialog does not replace it.
+   */
+  private followMessage(instance: TerminalInstance, data: string): void {
+    if (instance.messageLabel !== undefined || !instance.launch.agent) return;
+    if (data !== '\r') {
+      instance.typedText = typed(instance.typedText, data);
+      return;
+    }
+    const label = labelFromMessage(instance.typedText);
+    instance.typedText = '';
+    if (this.sentWhenWorking(instance)) {
+      if (label) instance.sentLabel = label;
+      return;
+    }
+    if (label) {
+      instance.messageLabel = label;
+      this.refresh();
+    }
+  }
+
+  /**
    * Marks the conversation as started on Enter for agents that do not report
    * their status, or with `programStatus` off. Agents that report it start
-   * the conversation when they start working, since Enter may only answer a
-   * question or a dialog before the first message.
+   * the conversation when they start working.
    */
   private enterPressed(instance: TerminalInstance): void {
-    const { programStatus } = this.config.getConfig();
-    if (programStatus && (instance.reportsStatus || reportsStatus(instance.launch.agent))) return;
+    if (this.sentWhenWorking(instance)) return;
     if (instance.conversation && !instance.conversation.started) {
       instance.conversation.started = true;
       this.conversationStarted(instance);
@@ -786,6 +819,7 @@ export class Tabs {
       const id = newConversation(instance.launch);
       if (id) instance.conversation = { id, started: false };
     }
+    instance.typedText = '';
     this.notices.delete(instance.id);
     const { conversation } = instance;
     const notice = conversation?.started

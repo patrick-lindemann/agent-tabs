@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { launchForCommand } from '../../src/profiles';
-import { TerminalStateManager } from '../../src/terminal/state';
+import { TerminalStateManager, type TitleOptions } from '../../src/terminal/state';
 import type { TerminalInstance } from '../../src/types';
 import { WORKSPACE_ACCENT_COLORS } from '../../src/types';
 
@@ -10,6 +10,12 @@ const tab = (overrides: Partial<TerminalInstance> = {}): TerminalInstance => ({
   launch: launchForCommand('claude', [], false),
   ...overrides
 });
+
+/** The default title settings, with the given words per name */
+function titles(tabTitleWords = 4, overrides: Partial<TitleOptions> = {}): TitleOptions {
+  return { autoTabTitles: true, tabTitleWords, transformTabTitles: true, ...overrides };
+}
+const profileNames = titles(4, { autoTabTitles: false });
 
 function manager(...instances: TerminalInstance[]) {
   const state = new TerminalStateManager();
@@ -102,7 +108,7 @@ describe('panes', () => {
     expect(state.getPaneIds()).toEqual([first]);
     expect(state.getFocusedPaneId()).toBe(first);
     expect(state.getPaneTabs(second)).toEqual([]);
-    expect(state.getLayoutInfo(false, 4).type).toBe('pane');
+    expect(state.getLayoutInfo(profileNames).type).toBe('pane');
   });
 
   it('keeps the last pane when its last tab closes', () => {
@@ -131,7 +137,7 @@ describe('panes', () => {
     const state = manager(tab(), tab({ id: 'b' }));
     const [first] = state.getPaneIds();
     const second = state.split('b', first, 'right') as string;
-    const layout = state.getLayoutInfo(false, 4);
+    const layout = state.getLayoutInfo(profileNames);
     if (layout.type !== 'split') throw new Error('not split');
     expect(state.resizeSplit(layout.id, [3, 1])).toBe(true);
     expect(state.resizeSplit(layout.id, [1])).toBe(false);
@@ -140,7 +146,7 @@ describe('panes', () => {
       info.type === 'pane'
         ? [info.id, info.focused, info.tabs.map((t) => [t.id, t.isActive])]
         : [info.direction, info.sizes, info.children.map(strip)];
-    expect(strip(state.getLayoutInfo(false, 4))).toEqual([
+    expect(strip(state.getLayoutInfo(profileNames))).toEqual([
       'row',
       [3, 1],
       [
@@ -227,17 +233,26 @@ describe('tab labels', () => {
   it('uses the shortened title with automatic titles, else the profile name', () => {
     const instance = tab({ titleLabel: 'Refactor the API client for retries' });
     const state = manager(instance);
-    expect(state.getLabel(instance, true, 3)).toBe('Refactor API client');
-    expect(state.getLabel(instance, false, 3)).toBe('Claude Code');
-    expect(state.getFullLabel(instance, true)).toBe(
+    expect(state.getLabel(instance, titles(3))).toBe('Refactor API client');
+    expect(state.getLabel(instance, profileNames)).toBe('Claude Code');
+    expect(state.getFullLabel(instance, titles())).toBe(
       'Claude Code / Refactor the API client for retries'
     );
-    expect(state.getFullLabel(instance, false)).toBe('Claude Code');
+    expect(state.getFullLabel(instance, profileNames)).toBe('Claude Code');
   });
 
   it('uses the profile name until the agent sets a title', () => {
     const instance = tab();
-    expect(manager(instance).getLabel(instance, true, 4)).toBe('Claude Code');
+    expect(manager(instance).getLabel(instance, titles())).toBe('Claude Code');
+  });
+
+  it("writes Claude Code's generated session names as a sentence unless turned off", () => {
+    const instance = tab({ titleLabel: 'fix-login-bug' });
+    const state = manager(instance);
+    expect(state.getLabel(instance, titles())).toBe('Fix login bug');
+    expect(state.getFullLabel(instance, titles())).toBe('Claude Code / Fix login bug');
+    const asWritten = titles(4, { transformTabTitles: false });
+    expect(state.getLabel(instance, asWritten)).toBe('fix-login-bug');
   });
 });
 
@@ -245,7 +260,7 @@ describe('tab list', () => {
   it('describes every tab for the webview', () => {
     const a = tab({ isActive: true, programState: 'working' });
     const b = tab({ id: 'b', workspaceFolderIndex: 9, titleLabel: 'Fix login' });
-    expect(manager(a, b).getTabsInfo(true, 4)).toEqual([
+    expect(manager(a, b).getTabsInfo(titles())).toEqual([
       {
         id: 'a',
         label: 'Claude Code',

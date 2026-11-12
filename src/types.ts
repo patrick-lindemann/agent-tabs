@@ -81,6 +81,7 @@ export interface TerminalConfig {
   programStatus: boolean;
   autoTabTitles: boolean;
   tabTitleWords: number;
+  transformTabTitles: boolean;
   statusColors: boolean;
   confirmClose: boolean;
   monochromeIcons: boolean;
@@ -104,6 +105,15 @@ export interface TerminalInstance {
   launch: LaunchSpec;
   /** Short label from the terminal title, e.g. Claude Code's conversation summary */
   titleLabel?: string;
+  /** Label from the first message sent, shown until the program sets a title */
+  messageLabel?: string;
+  /**
+   * Text typed into an agent's input since the last Enter, while no message
+   * label is set, or undefined when it cannot be followed
+   */
+  typedText?: string;
+  /** A message label waiting for the agent to start working, which shows the message was sent */
+  sentLabel?: string;
   /** The process ended and the tab waits for Enter (restart) or Esc (close) */
   exited?: boolean;
   /** The program reported its state through OSC 7501 */

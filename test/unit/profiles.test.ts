@@ -13,7 +13,8 @@ import {
   resolveProfiles,
   shortTitle,
   splitCommandLine,
-  terminalLaunch
+  terminalLaunch,
+  transformTitle
 } from '../../src/profiles';
 import type { AgentId } from '../../src/types';
 
@@ -494,6 +495,16 @@ describe('tab labels from terminal titles', () => {
 
   it('keeps an unknown program title without leading glyphs', () => {
     expect(label('htop', '● build: 3 errors')).toBe('build: 3 errors');
+  });
+});
+
+describe('transformed titles', () => {
+  it("writes Claude Code's generated session names as a sentence", () => {
+    expect(transformTitle('fix-login-bug', 'claude')).toBe('Fix login bug');
+    expect(transformTitle('Fix login-bug', 'claude')).toBe('Fix login-bug');
+    expect(transformTitle('x86-64', 'claude')).toBe('x86-64');
+    expect(transformTitle('fix-login-bug', 'pi')).toBe('fix-login-bug');
+    expect(transformTitle('fix-login-bug', undefined)).toBe('fix-login-bug');
   });
 });
 

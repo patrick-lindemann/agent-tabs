@@ -272,7 +272,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
    */
   async pickTerminal(step: 1 | -1 = 1): Promise<void> {
     const { state } = this.tabs;
-    const { autoTabTitles } = this.config.getConfig();
+    const config = this.config.getConfig();
     const instances = this.tabs
       .recentlyUsed()
       .map((id) => state.get(id))
@@ -280,7 +280,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     const id = await pickTab(
       instances.map((instance) => ({
         id: instance.id,
-        label: state.getFullLabel(instance, autoTabTitles),
+        label: state.getFullLabel(instance, config),
         description: instance.isActive ? 'active' : undefined,
         detail: state.describeStatus(instance)
       })),
@@ -299,7 +299,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
    */
   async requestClose(ids: string[]): Promise<boolean> {
     const { state } = this.tabs;
-    const { confirmClose: confirm, autoTabTitles, tabTitleWords } = this.config.getConfig();
+    const config = this.config.getConfig();
+    const confirm = config.confirmClose;
     const busy = ids
       .map((id) => state.get(id))
       .filter((instance): instance is TerminalInstance => instance !== undefined)
@@ -309,7 +310,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     if (busy.length > 0 && confirm) {
       const confirmed = await confirmClose(
         busy.map(({ instance, reason }) => ({
-          label: state.getLabel(instance, autoTabTitles, tabTitleWords),
+          label: state.getLabel(instance, config),
           agent: instance.launch.label,
           reason: reason as NonNullable<typeof reason>
         }))
@@ -397,8 +398,9 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
    */
   private refresh(): void {
     const { state } = this.tabs;
-    const { autoTabTitles, tabTitleWords, statusColors, monochromeIcons } = this.config.getConfig();
-    const layout = state.getLayoutInfo(autoTabTitles, tabTitleWords);
+    const config = this.config.getConfig();
+    const { statusColors, monochromeIcons } = config;
+    const layout = state.getLayoutInfo(config);
     this.post({ type: 'tabsUpdate', layout, statusColors, monochromeIcons });
     // Scopes the pane keybindings, like VS Code's terminal while it is split
     const split = state.paneCount > 1;

@@ -58,7 +58,11 @@ function tab(agent: AgentId, options: { inView?: boolean; programStatus?: boolea
       return state.isBusy(instance);
     },
     get label(): string {
-      return state.getLabel(instance, true, 4);
+      return state.getLabel(instance, {
+        autoTabTitles: true,
+        tabTitleWords: 4,
+        transformTabTitles: true
+      });
     }
   };
 }

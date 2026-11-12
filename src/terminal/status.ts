@@ -80,6 +80,10 @@ export function applyProgramStatus(
     instance.lastNotification = undefined;
     // A message was sent, so the conversation exists
     if (instance.conversation) instance.conversation.started = true;
+    if (instance.sentLabel && instance.messageLabel === undefined) {
+      instance.messageLabel = instance.sentLabel;
+    }
+    instance.sentLabel = undefined;
     return;
   }
   if (report.state === 'blocked' && !report.message && notification) {
@@ -112,6 +116,9 @@ export function resetStatus(instance: TerminalInstance): void {
   instance.needsInput = false;
   instance.lastNotification = undefined;
   instance.titleLabel = undefined;
+  instance.messageLabel = undefined;
+  instance.sentLabel = undefined;
+  instance.typedText = undefined;
   instance.unseen = undefined;
   instance.missing = undefined;
 }

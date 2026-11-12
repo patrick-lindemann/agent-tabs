@@ -100,8 +100,9 @@ Line editing follows VS Code too: `Cmd+←/→` jumps to the start or end of the
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `agentTabs.autoTabTitles` | `true` | Name tabs after the agent's session instead of the profile. |
+| `agentTabs.autoTabTitles` | `true` | Name tabs after the agent's session, or the first message until the agent names it, instead of the profile. |
 | `agentTabs.tabTitleWords` | `4` | Words in a tab name (1–12); filler words are dropped. |
+| `agentTabs.transformTabTitles` | `true` | Show Claude Code's generated session names such as `fix-login-bug` as `Fix login bug`. |
 | `agentTabs.monochromeIcons` | `false` | Agent logos in the text color instead of brand colors. |
 
 **Status**

@@ -712,6 +712,16 @@ export function shortTitle(text: string, maxWords: number): string | undefined {
 }
 
 /**
+ * Writes a session name that Claude Code's `/rename` generated as a
+ * sentence: `fix-login-bug` becomes `Fix login bug`. Other labels, and
+ * those of other agents, stay as they are.
+ */
+export function transformTitle(label: string, agent: AgentId | undefined): string {
+  if (agent !== 'claude' || !/^[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)+$/.test(label)) return label;
+  return label[0].toUpperCase() + label.slice(1).replaceAll('-', ' ');
+}
+
+/**
  * Turns a terminal title (OSC 0/2) into a short tab label, or undefined when
  * it carries nothing beyond the program name or folder.
  *

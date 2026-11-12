@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- An agent's tab is named after the first message you send as soon as the agent starts working, until the agent sets its own title. Before, a pi tab kept the profile's name until the session was named, which an extension such as pi-auto-session-name does only after the answer
+
 ### Changed
+
+- A Claude Code session name that `/rename` generates, e.g. `fix-login-bug`, shows as `Fix login bug`. `agentTabs.transformTabTitles: false` shows it as Claude Code writes it
 
 - The dialog before closing tabs says in its title why a tab is in use, lists each tab with its reason when several are, and its second button is **Don't Ask Again**
 

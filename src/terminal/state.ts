@@ -1,11 +1,24 @@
-import { shortTitle } from '../profiles';
-import type { LayoutInfo, SplitSide, TabInfo, TabStatus, TerminalInstance } from '../types';
+import { shortTitle, transformTitle } from '../profiles';
+import type {
+  LayoutInfo,
+  SplitSide,
+  TabInfo,
+  TabStatus,
+  TerminalConfig,
+  TerminalInstance
+} from '../types';
 import { WORKSPACE_ACCENT_COLORS } from '../types';
 import { type Pane, PaneLayout, type SavedLayout } from './layout';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(Math.trunc(value), max));
 }
+
+/** The settings that decide a tab's label */
+export type TitleOptions = Pick<
+  TerminalConfig,
+  'autoTabTitles' | 'tabTitleWords' | 'transformTabTitles'
+>;
 
 /** Why closing a tab would lose something */
 export type CloseRisk = 'working' | 'waiting' | 'session';
@@ -266,9 +279,9 @@ export class TerminalStateManager {
   }
 
   /** The layout with each pane's tabs, for the webview */
-  getLayoutInfo(autoTitles: boolean, titleWords: number): LayoutInfo {
+  getLayoutInfo(titles: TitleOptions): LayoutInfo {
     return this.layout.info((pane) => ({
-      tabs: this.getTabsInfo(autoTitles, titleWords, pane.tabs)
+      tabs: this.getTabsInfo(titles, pane.tabs)
     }));
   }
 
@@ -277,12 +290,12 @@ export class TerminalStateManager {
   }
 
   /** Describes tabs for the webview, by default all of them */
-  getTabsInfo(autoTitles: boolean, titleWords: number, ids = this.getAllIds()): TabInfo[] {
+  getTabsInfo(titles: TitleOptions, ids = this.getAllIds()): TabInfo[] {
     const instances = ids.flatMap((id) => this.terminals.get(id) ?? []);
     return instances.map((t) => ({
       id: t.id,
-      label: this.getLabel(t, autoTitles, titleWords),
-      description: this.getFullLabel(t, true),
+      label: this.getLabel(t, titles),
+      description: this.getFullLabel(t, { ...titles, autoTabTitles: true }),
       icon: t.launch.icon ?? t.launch.agent ?? 'sparkle',
       isActive: t.isActive,
       accentColor: this.getAccentColor(t.workspaceFolderIndex),
@@ -293,18 +306,26 @@ export class TerminalStateManager {
 
   /**
    * With automatic titles, the shortened terminal title, e.g. `Refactor API
-   * client` from Claude Code's conversation summary or a named pi session.
-   * Otherwise, or until the program sets a title, the profile's name.
+   * client` from Claude Code's conversation summary or a named pi session,
+   * and until the program sets one, the first message sent. Otherwise the
+   * profile's name.
    */
-  getLabel(instance: TerminalInstance, autoTitles: boolean, titleWords: number): string {
-    const title = autoTitles ? instance.titleLabel : undefined;
-    return (title && shortTitle(title, titleWords)) ?? instance.launch.label;
+  getLabel(instance: TerminalInstance, titles: TitleOptions): string {
+    const title = this.getTitle(instance, titles);
+    return (title && shortTitle(title, titles.tabTitleWords)) ?? instance.launch.label;
   }
 
   /** `pi / Refactor the API client`: agent and full title, e.g. for the tab picker */
-  getFullLabel(instance: TerminalInstance, autoTitles: boolean): string {
-    const title = autoTitles ? instance.titleLabel : undefined;
+  getFullLabel(instance: TerminalInstance, titles: TitleOptions): string {
+    const title = this.getTitle(instance, titles);
     return title ? `${instance.launch.label} / ${title}` : instance.launch.label;
+  }
+
+  private getTitle(instance: TerminalInstance, titles: TitleOptions): string | undefined {
+    const title = titles.autoTabTitles ? (instance.titleLabel ?? instance.messageLabel) : undefined;
+    return title && titles.transformTabTitles
+      ? transformTitle(title, instance.launch.agent)
+      : title;
   }
 
   /** `Needs input: approve Bash`, or undefined when idle */
