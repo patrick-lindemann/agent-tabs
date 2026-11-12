@@ -35,6 +35,17 @@ describe('active tab', () => {
     expect(state.getActiveId()).toBe('a');
   });
 
+  it('moves a tab in the order, clamped to the first and last position', () => {
+    const state = manager(tab(), tab({ id: 'b' }), tab({ id: 'c' }));
+    expect(state.move('a', 2)).toBe(true);
+    expect(state.getAllIds()).toEqual(['b', 'c', 'a']);
+    expect(state.move('a', -5)).toBe(true);
+    expect(state.getAllIds()).toEqual(['a', 'b', 'c']);
+    expect(state.move('a', 0)).toBe(false);
+    expect(state.move('missing', 1)).toBe(false);
+    expect(state.get('a')?.id).toBe('a');
+  });
+
   it('generates unique ids', () => {
     const state = new TerminalStateManager();
     const ids = new Set(Array.from({ length: 100 }, () => state.generateId()));

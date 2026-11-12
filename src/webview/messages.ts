@@ -14,6 +14,7 @@ export interface MessageHandlerContext {
   handleNewTabWithCommand(): void;
   handleCloseTab(id: string): void;
   handleSwitchTab(id: string): void;
+  handleMoveTab(id: string, index: number): void;
   handleOpenFile(id: string, path: string, line?: number, column?: number): void;
   handleOpenLink(url: string): void;
   handleFocus(focused: boolean): void;
@@ -50,6 +51,9 @@ const messageHandlers: MessageHandlerMap = {
   },
   switchTab: (message, ctx) => {
     ctx.handleSwitchTab(message.id);
+  },
+  moveTab: (message, ctx) => {
+    ctx.handleMoveTab(message.id, message.index);
   },
   openFile: (message, ctx) => {
     ctx.handleOpenFile(message.id, message.path, message.line, message.column);

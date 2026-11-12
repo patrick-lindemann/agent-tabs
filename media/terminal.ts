@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
-import { isTabShortcut, keySequence } from './keys';
+import { isCmdK, isModifierKey, isTabShortcut, keySequence } from './keys';
 import { FileLinkProvider, parseFileTarget } from './links';
 import { isAtBottom, trackScroll, viewportOf } from './scroll';
 import { ThemeBuilder } from './theme';
@@ -20,6 +20,8 @@ export class Terminals {
   private readonly resizeObserver: ResizeObserver;
   private readonly stopWatchingTheme: () => void;
   private activeId: string | undefined;
+  /** The last key pressed was Cmd+K, which starts a VS Code chord */
+  private afterCmdK = false;
   private font: { fontSize: number; fontFamily?: string; lineHeight: number } = {
     fontSize: 12,
     lineHeight: 1.2
@@ -255,8 +257,12 @@ export class Terminals {
    * for the same keystroke.
    */
   private handleKey(terminal: Terminal, id: string, event: KeyboardEvent): boolean {
+    const afterCmdK = this.afterCmdK;
+    if (event.type === 'keydown' && !isModifierKey(event)) {
+      this.afterCmdK = isCmdK(event);
+    }
     // Let the event reach VS Code's keybindings without typing it
-    if (isTabShortcut(event, IS_MAC)) {
+    if (isTabShortcut(event, IS_MAC, afterCmdK)) {
       return false;
     }
 

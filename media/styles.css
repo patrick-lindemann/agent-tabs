@@ -159,6 +159,34 @@ body {
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
+  position: relative;
+}
+
+/*
+ * Dragging a tab: it fades, and a line in the drag-and-drop color marks
+ * where it goes
+ */
+.tab.dragged {
+  opacity: 0.5;
+}
+
+.tab.drop-before::before,
+.tab.drop-after::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--vscode-tab-dragAndDropBorder, var(--vscode-focusBorder, #007fd4));
+  pointer-events: none;
+}
+
+.tab.drop-before::before {
+  left: -3px;
+}
+
+.tab.drop-after::after {
+  right: -1px;
 }
 
 .tab:hover {

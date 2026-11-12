@@ -11,25 +11,47 @@ export interface KeyboardEventLike {
  * Keys bound to Agent Tabs commands, which the terminal leaves to VS Code
  * instead of typing them. They follow VS Code's editor tabs; on Windows and
  * Linux closing is Ctrl+Shift+W, because Ctrl+W deletes a word in the agents.
+ *
+ * On macOS, moving a tab is the chord Cmd+K Cmd+Shift+Left/Right, so
+ * Cmd+Shift+Left/Right goes to VS Code only `afterCmdK`, as the key right
+ * after Cmd+K; otherwise the terminal gets it.
  */
-export function isTabShortcut(event: KeyboardEventLike, isMac: boolean): boolean {
+export function isTabShortcut(
+  event: KeyboardEventLike,
+  isMac: boolean,
+  afterCmdK = false
+): boolean {
   const { code, ctrlKey, metaKey, altKey, shiftKey } = event;
   const mods = `${ctrlKey ? 'Ctrl+' : ''}${altKey ? 'Alt+' : ''}${shiftKey ? 'Shift+' : ''}${metaKey ? 'Meta+' : ''}`;
   const digit = /^Digit[0-9]$/.test(code);
+  const arrow = code === 'ArrowLeft' || code === 'ArrowRight';
   if (code === 'Tab' && (mods === 'Ctrl+' || mods === 'Ctrl+Shift+')) return true;
   if (isMac) {
     return (
       (mods === 'Ctrl+' && digit) ||
+      isCmdK(event) ||
+      (afterCmdK && mods === 'Shift+Meta+' && arrow) ||
       (mods === 'Meta+' && ['KeyN', 'KeyW', 'Digit9'].includes(code)) ||
       (mods === 'Shift+Meta+' && ['KeyT', 'BracketLeft', 'BracketRight'].includes(code)) ||
-      (mods === 'Alt+Meta+' && (code === 'ArrowLeft' || code === 'ArrowRight'))
+      (mods === 'Alt+Meta+' && arrow)
     );
   }
   return (
     (mods === 'Alt+' && digit) ||
     (mods === 'Ctrl+' && ['KeyN', 'PageUp', 'PageDown', 'F4'].includes(code)) ||
-    (mods === 'Ctrl+Shift+' && (code === 'KeyT' || code === 'KeyW'))
+    (mods === 'Ctrl+Shift+' && ['KeyT', 'KeyW', 'PageUp', 'PageDown'].includes(code))
   );
+}
+
+/** Cmd+K, which starts VS Code's chords on macOS, e.g. Cmd+K Cmd+Shift+Left */
+export function isCmdK(event: KeyboardEventLike): boolean {
+  const { code, ctrlKey, metaKey, altKey, shiftKey } = event;
+  return code === 'KeyK' && metaKey && !ctrlKey && !altKey && !shiftKey;
+}
+
+/** A key that only changes others, such as Shift, pressed on its own */
+export function isModifierKey(event: KeyboardEventLike): boolean {
+  return ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key);
 }
 
 export function keySequence(event: KeyboardEventLike, isMac: boolean): string | undefined {

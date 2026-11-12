@@ -27,6 +27,14 @@ export function isWebviewMessage(value: unknown): value is WebviewMessage {
     case 'closeTab':
     case 'switchTab':
       return isId(value.id);
+    case 'moveTab':
+      return (
+        isId(value.id) &&
+        typeof value.index === 'number' &&
+        Number.isInteger(value.index) &&
+        value.index >= 0 &&
+        value.index <= 10_000
+      );
     case 'openFile':
       return (
         isId(value.id) &&

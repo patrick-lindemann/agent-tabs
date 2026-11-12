@@ -46,6 +46,27 @@ export class TerminalStateManager {
     return this.terminals.delete(id);
   }
 
+  /**
+   * Moves a tab to a 0-based position in the tab order, clamped to the
+   * first and last position. Returns whether the order changed.
+   */
+  move(id: string, index: number): boolean {
+    const ids = this.getAllIds();
+    const from = ids.indexOf(id);
+    if (from === -1) return false;
+    const to = Math.max(0, Math.min(Math.trunc(index), ids.length - 1));
+    if (to === from) return false;
+    ids.splice(from, 1);
+    ids.splice(to, 0, id);
+    const instances = new Map(this.terminals);
+    this.terminals.clear();
+    for (const other of ids) {
+      const instance = instances.get(other);
+      if (instance) this.terminals.set(other, instance);
+    }
+    return true;
+  }
+
   /** Clears all terminal instances, used when the webview is recreated. */
   clear(): void {
     this.terminals.clear();

@@ -141,6 +141,26 @@
         "category": "Agent Tabs"
       },
       {
+        "command": "agentTabs.moveTabLeft",
+        "title": "Move Tab Left",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.moveTabRight",
+        "title": "Move Tab Right",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.moveTabToStart",
+        "title": "Move Tab to Start",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.moveTabToEnd",
+        "title": "Move Tab to End",
+        "category": "Agent Tabs"
+      },
+      {
         "command": "agentTabs.closeTabFromMenu",
         "title": "Close",
         "category": "Agent Tabs"
@@ -205,6 +225,18 @@
       {
         "command": "agentTabs.previousTab",
         "mac": "cmd+shift+[",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.moveTabLeft",
+        "key": "ctrl+shift+pageup",
+        "mac": "cmd+k cmd+shift+left",
+        "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
+      },
+      {
+        "command": "agentTabs.moveTabRight",
+        "key": "ctrl+shift+pagedown",
+        "mac": "cmd+k cmd+shift+right",
         "when": "agentTabs.focused || focusedView == 'agentTabs.terminalView'"
       },
       {

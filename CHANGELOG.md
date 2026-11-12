@@ -5,6 +5,12 @@ All notable changes to Agent Tabs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Tabs can be dragged to another position in the tab strip, and moved with the keys of VS Code's Move Editor Left/Right: `Cmd+K Cmd+Shift+←/→` on macOS, `Ctrl+Shift+PageUp/PageDown` on Windows and Linux. **Move Tab to Start** and **Move Tab to End** are in the Command Palette. The order is kept for the next window
+
 ## [3.3.1] - 2026-11-11
 
 ### Fixed

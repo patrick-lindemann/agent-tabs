@@ -314,6 +314,57 @@ describe('switching tabs', () => {
     expect(tabs.state.getActiveId()).toBe(b);
   });
 
+  it('moves a dragged tab to a position, clamped to the strip', async () => {
+    const { tabs, open, host } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const pi = launchForCommand('pi', [], true);
+    const c = await tabs.create(pi);
+    const refreshes = host.refreshes;
+    tabs.move(c, 0);
+    expect(tabs.state.getAllIds()).toEqual([c, a, b]);
+    expect(open.tabs[0].launch).toEqual(pi);
+    expect(host.refreshes).toBe(refreshes + 1);
+    tabs.move(c, 99);
+    expect(tabs.state.getAllIds()).toEqual([a, b, c]);
+    tabs.move(c, 2);
+    tabs.move('nope', 0);
+    expect(host.refreshes).toBe(refreshes + 2);
+    expect(tabs.state.getActiveId()).toBe(c);
+  });
+
+  it('moves the active tab left, right, to the start and end without wrapping', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    const c = await tabs.create();
+    tabs.switchTo(b);
+    tabs.moveActive('left');
+    expect(tabs.state.getAllIds()).toEqual([b, a, c]);
+    tabs.moveActive('left');
+    expect(tabs.state.getAllIds()).toEqual([b, a, c]);
+    tabs.moveActive('right');
+    expect(tabs.state.getAllIds()).toEqual([a, b, c]);
+    tabs.moveActive('last');
+    expect(tabs.state.getAllIds()).toEqual([a, c, b]);
+    tabs.moveActive('right');
+    expect(tabs.state.getAllIds()).toEqual([a, c, b]);
+    tabs.moveActive('first');
+    expect(tabs.state.getAllIds()).toEqual([b, a, c]);
+    expect(tabs.state.getActiveId()).toBe(b);
+  });
+
+  it('switches by position and cycles in the moved order', async () => {
+    const { tabs } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    tabs.move(b, 0);
+    tabs.switchToPosition(1);
+    expect(tabs.state.getActiveId()).toBe(b);
+    tabs.cycle(1);
+    expect(tabs.state.getActiveId()).toBe(a);
+  });
+
   it('lists tabs most recently used first', async () => {
     const { tabs } = setup();
     const a = await tabs.create();

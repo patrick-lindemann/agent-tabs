@@ -158,6 +158,10 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     this.tabs.switchTo(id);
   }
 
+  handleMoveTab(id: string, index: number): void {
+    this.tabs.move(id, index);
+  }
+
   handleOpenFile(id: string, path: string, line?: number, column?: number): void {
     void openFile(path, this.tabs.state.get(id)?.cwd, line, column);
   }
@@ -303,6 +307,11 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
 
   switchToTerminalAt(position: number): void {
     this.tabs.switchToPosition(position);
+  }
+
+  /** Moves the active tab left or right, or to the start or end of the strip */
+  moveActiveTerminal(to: 'left' | 'right' | 'first' | 'last'): void {
+    this.tabs.moveActive(to);
   }
 
   switchToNextTerminal(): void {

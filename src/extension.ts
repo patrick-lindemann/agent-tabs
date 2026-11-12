@@ -53,6 +53,18 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('agentTabs.switchToTabAt', (position: number) => {
       terminalProvider?.switchToTerminalAt(position);
+    }),
+    vscode.commands.registerCommand('agentTabs.moveTabLeft', () => {
+      terminalProvider?.moveActiveTerminal('left');
+    }),
+    vscode.commands.registerCommand('agentTabs.moveTabRight', () => {
+      terminalProvider?.moveActiveTerminal('right');
+    }),
+    vscode.commands.registerCommand('agentTabs.moveTabToStart', () => {
+      terminalProvider?.moveActiveTerminal('first');
+    }),
+    vscode.commands.registerCommand('agentTabs.moveTabToEnd', () => {
+      terminalProvider?.moveActiveTerminal('last');
     })
   );
 

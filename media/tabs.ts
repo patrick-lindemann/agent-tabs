@@ -1,9 +1,16 @@
 import { AGENT_ICONS, CLOSE_ICON, IDLE_ICON, STATUS_ICONS, TERMINAL_ICON } from './icons';
 import type { TabInfo, WebviewOutgoingMessage } from './types';
 
+/** Drag data type of a tab, so dropping it elsewhere inserts no text */
+const TAB_DRAG_TYPE = 'application/x-agent-tabs-tab';
+
+/** Distance from the strip's edge in pixels at which a drag scrolls it */
+const DRAG_SCROLL_EDGE = 24;
+
 /**
  * Browser-style tab strip above the terminal. Tabs share its width and
- * scroll sideways once they reach their minimum width.
+ * scroll sideways once they reach their minimum width. Tabs can be dragged
+ * to another position.
  */
 export class TabBar {
   private readonly bar: HTMLElement;
@@ -11,6 +18,8 @@ export class TabBar {
   private readonly scrollLeft: HTMLButtonElement;
   private readonly scrollRight: HTMLButtonElement;
   private renderedActiveId: string | undefined;
+  /** The tab being dragged */
+  private draggedId: string | undefined;
 
   constructor(
     private readonly post: (message: WebviewOutgoingMessage) => void,
@@ -29,6 +38,7 @@ export class TabBar {
     this.scrollLeft = scrollLeft as HTMLButtonElement;
     this.scrollRight = scrollRight as HTMLButtonElement;
     this.setupScrolling();
+    this.setupDragAndDrop();
     this.setupNewTabButtons();
   }
 
@@ -41,12 +51,15 @@ export class TabBar {
    */
   render(tabs: TabInfo[], statusColors: boolean, monochromeIcons: boolean): void {
     const ids = new Set(tabs.map((tab) => tab.id));
+    // Reordering takes focus from a tab it moves; it gets it back below
+    const focused = document.activeElement;
     for (const [id, element] of this.elements) {
       if (!ids.has(id)) {
         element.root.remove();
         this.elements.delete(id);
       }
     }
+    let moved = false;
     tabs.forEach((tab, index) => {
       let element = this.elements.get(tab.id);
       if (!element) {
@@ -56,12 +69,15 @@ export class TabBar {
       this.updateTab(element, tab, monochromeIcons);
       if (this.list.children[index] !== element.root) {
         this.list.insertBefore(element.root, this.list.children[index] ?? null);
+        moved = true;
       }
     });
+    if (focused instanceof HTMLElement && focused !== document.activeElement) focused.focus();
     this.bar.classList.toggle('status-colors', statusColors);
 
     const activeId = tabs.find((tab) => tab.isActive)?.id;
-    const activeChanged = activeId !== this.renderedActiveId;
+    // Also after a move, so the moved tab stays in view
+    const activeChanged = activeId !== this.renderedActiveId || moved;
     this.renderedActiveId = activeId;
 
     requestAnimationFrame(() => {
@@ -114,6 +130,19 @@ export class TabBar {
       }
     };
     root.onkeydown = (event) => this.handleKey(id, event);
+    root.draggable = true;
+    root.ondragstart = (event) => {
+      if (!event.dataTransfer) return;
+      this.draggedId = id;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData(TAB_DRAG_TYPE, id);
+      root.classList.add('dragged');
+    };
+    root.ondragend = () => {
+      this.draggedId = undefined;
+      root.classList.remove('dragged');
+      this.clearDropIndicator();
+    };
 
     root.append(status, label, close);
     return { root, status, label, close, statusHtml: '' };
@@ -121,7 +150,8 @@ export class TabBar {
 
   private updateTab(element: TabElement, tab: TabInfo, monochromeIcons: boolean): void {
     const { root, status, label, close } = element;
-    root.className = `tab ${tab.isActive ? 'active' : ''}`;
+    root.classList.add('tab');
+    root.classList.toggle('active', tab.isActive);
     root.tabIndex = tab.isActive ? 0 : -1;
     root.setAttribute('aria-selected', String(tab.isActive));
     root.setAttribute('aria-label', tab.statusText ? `${tab.label}, ${tab.statusText}` : tab.label);
@@ -159,6 +189,8 @@ export class TabBar {
   }
 
   private handleKey(id: string, event: KeyboardEvent): void {
+    // Keys with modifiers are VS Code's, e.g. Ctrl+Shift+PageUp moves the tab
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const tabs = [...this.list.querySelectorAll<HTMLElement>('.tab')];
     const index = tabs.findIndex((tab) => tab.dataset.id === id);
     const target = {
@@ -208,6 +240,78 @@ export class TabBar {
     };
     this.scrollLeft.onclick = () => scrollByTab(-1);
     this.scrollRight.onclick = () => scrollByTab(1);
+  }
+
+  /**
+   * Dragging a tab shows where it will go with a line between tabs, and
+   * dropping it there moves it. Near the strip's edges the strip scrolls.
+   */
+  private setupDragAndDrop(): void {
+    this.list.addEventListener('dragover', (event) => {
+      if (!this.draggedId) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      const rect = this.list.getBoundingClientRect();
+      if (event.clientX < rect.left + DRAG_SCROLL_EDGE) this.list.scrollLeft -= 8;
+      else if (event.clientX > rect.right - DRAG_SCROLL_EDGE) this.list.scrollLeft += 8;
+      this.showDropIndicator(event.clientX);
+    });
+    this.list.addEventListener('dragleave', (event) => {
+      if (!this.list.contains(event.relatedTarget as Node | null)) this.clearDropIndicator();
+    });
+    this.list.addEventListener('drop', (event) => {
+      const id = this.draggedId;
+      if (!id) return;
+      event.preventDefault();
+      this.clearDropIndicator();
+      const index = this.dropIndex(event.clientX);
+      const element = this.elements.get(id);
+      const others = this.otherTabs(id);
+      if (!element || index === this.tabElements().indexOf(element.root)) return;
+      // Moved at once; the tab list the extension sends next agrees
+      this.list.insertBefore(element.root, others[index] ?? null);
+      this.post({ type: 'moveTab', id, index });
+    });
+  }
+
+  private tabElements(): HTMLElement[] {
+    return [...this.list.querySelectorAll<HTMLElement>('.tab')];
+  }
+
+  /** The tabs other than the dragged one, in order */
+  private otherTabs(id: string): HTMLElement[] {
+    return this.tabElements().filter((tab) => tab.dataset.id !== id);
+  }
+
+  /**
+   * The position the dragged tab takes when dropped at `x`: after every
+   * other tab whose middle is left of it
+   */
+  private dropIndex(x: number): number {
+    if (!this.draggedId) return 0;
+    return this.otherTabs(this.draggedId).filter((tab) => {
+      const rect = tab.getBoundingClientRect();
+      return rect.left + rect.width / 2 < x;
+    }).length;
+  }
+
+  /** Marks the edge of the tab where the dragged tab would go */
+  private showDropIndicator(x: number): void {
+    if (!this.draggedId) return;
+    const others = this.otherTabs(this.draggedId);
+    const index = this.dropIndex(x);
+    const before = others[index];
+    const after = before ? undefined : others[others.length - 1];
+    for (const tab of this.tabElements()) {
+      tab.classList.toggle('drop-before', tab === before);
+      tab.classList.toggle('drop-after', tab === after);
+    }
+  }
+
+  private clearDropIndicator(): void {
+    for (const tab of this.tabElements()) {
+      tab.classList.remove('drop-before', 'drop-after');
+    }
   }
 
   /** Split button like VS Code's terminal: + opens the first profile, ⌄ lists them */

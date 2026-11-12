@@ -56,6 +56,8 @@ export type WebviewMessage =
   | { type: 'newTabWithCommand' }
   | { type: 'closeTab'; id: string }
   | { type: 'switchTab'; id: string }
+  /** A tab was dragged to a 0-based position in the tab strip */
+  | { type: 'moveTab'; id: string; index: number }
   | { type: 'openFile'; id: string; path: string; line?: number; column?: number }
   | { type: 'openLink'; url: string }
   | { type: 'focus'; focused: boolean };

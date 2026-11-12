@@ -456,6 +456,27 @@ export class Tabs {
     }
   }
 
+  /**
+   * Moves a tab to a 0-based position, e.g. after it was dragged; the
+   * position is clamped to the tab strip
+   */
+  move(id: string, index: number): void {
+    if (this.state.move(id, index)) this.refresh();
+  }
+
+  /**
+   * Moves the active tab one position left or right, or to the start or
+   * end, like VS Code's Move Editor Left/Right; it does not wrap around
+   */
+  moveActive(to: 'left' | 'right' | 'first' | 'last'): void {
+    const id = this.state.getActiveId();
+    if (!id) return;
+    const ids = this.state.getAllIds();
+    const index = ids.indexOf(id);
+    const target = { left: index - 1, right: index + 1, first: 0, last: ids.length - 1 }[to];
+    this.move(id, target);
+  }
+
   /** Tab IDs, most recently shown first */
   recentlyUsed(): string[] {
     return [...this.recent];
