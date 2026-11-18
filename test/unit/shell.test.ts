@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { shellClearCommand, shellKind, shellQuote, shellRunLine } from '../../src/terminal/shell';
+import {
+  ShellStartupOutput,
+  shellClearCommand,
+  shellKind,
+  shellQuote,
+  shellRunLine
+} from '../../src/terminal/shell';
 
 describe('shell helpers', () => {
   it.each([
@@ -45,4 +51,33 @@ describe('shell helpers', () => {
   ] as const)('selects clear command on %s', (platform, expected) =>
     expect(shellClearCommand(platform)).toBe(expected)
   );
+});
+
+describe('shell startup output', () => {
+  it.each(['\x1b[2J', '\x1b[H\x1b[J', '\x1b[1;1H\x1b[0J'])('batches the echo with %j', (clear) => {
+    const startup = new ShellStartupOutput();
+    const echo = 'prompt> clear && pi\r\n';
+    expect(startup.filter(echo)).toBe('');
+    expect(startup.filter(clear.slice(0, -1))).toBe('');
+    const programOutput = '\x1b[?2026hagent output';
+    expect(startup.filter(`J${programOutput}`)).toBe(echo + clear + programOutput);
+    expect(startup.filter(clear)).toBe(clear);
+    expect(startup.finish()).toBe('');
+  });
+
+  it('keeps diagnostics if the shell never clears the screen', () => {
+    const startup = new ShellStartupOutput();
+    const message = '\x1b[J\x1b[3Jshell startup failed\r\n';
+    expect(startup.filter(message)).toBe('');
+    expect(startup.finish()).toBe(message);
+    expect(startup.filter('later output')).toBe('later output');
+  });
+
+  it('stops holding a large burst of output', () => {
+    const startup = new ShellStartupOutput();
+    const output = 'a'.repeat(64 * 1024);
+    expect(startup.filter('startup\r\n')).toBe('');
+    expect(startup.filter(output)).toBe(`startup\r\n${output}`);
+    expect(startup.finish()).toBe('');
+  });
 });
