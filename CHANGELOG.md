@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-11-18
+
+### Fixed
+
+- When `agentTabs.directMode` is off and a profile runs automatically, the shell command is held back until the screen clears, preventing the startup flash.
+
 ## [3.4.0] - 2026-11-12
 
 ### Added

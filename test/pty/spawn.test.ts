@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ShellStartupOutput, shellRunLine } from '../../src/terminal/shell';
 import { pathKey, resolveExecutable, windowsLaunch } from '../../src/terminal/windows';
 import type { INodePty } from '../../src/types';
 
@@ -15,7 +16,8 @@ const nodePty = createRequire(__filename)('node-pty') as INodePty;
 function run(
   file: string,
   args: string[] | string,
-  env = process.env
+  env = process.env,
+  input?: { line: string; filter: (data: string) => string }
 ): Promise<{ output: string; code: number }> {
   return new Promise((resolve) => {
     const pty = nodePty.spawn(file, args, {
@@ -27,9 +29,12 @@ function run(
     });
     let output = '';
     pty.onData((data) => {
-      output += data;
+      output += input ? input.filter(data) : data;
     });
     pty.onExit(({ exitCode }) => resolve({ output, code: exitCode }));
+    if (input !== undefined) {
+      pty.write(input.line);
+    }
   });
 }
 
@@ -65,6 +70,30 @@ describe('starting programs through node-pty', () => {
     ]);
     expect(plain(output)).toContain(JSON.stringify(TRICKY));
   });
+
+  it.runIf(process.platform !== 'win32')(
+    'waits to paint until the shell clears its startup echo',
+    async () => {
+      const shell = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash';
+      const args = shell === '/bin/zsh' ? ['-f'] : ['--noprofile', '--norc'];
+      const command = shellRunLine('printf', ['agent-%s\\n', 'ready'], 'posix');
+      const startup = new ShellStartupOutput();
+      const chunks: string[] = [];
+      const { output, code } = await run(shell, args, process.env, {
+        line: `${command}; exit\r`,
+        filter: (data) => {
+          const batch = startup.filter(data);
+          if (batch) {
+            chunks.push(batch);
+          }
+          return batch;
+        }
+      });
+      expect(code).toBe(0);
+      expect(chunks[0]).toMatch(/printf[\s\S]*\x1b\[H\x1b\[2J/);
+      expect(output).toContain('agent-ready');
+    }
+  );
 
   describe.runIf(process.platform === 'win32')('on Windows', () => {
     let dir: string;

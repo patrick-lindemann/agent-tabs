@@ -43,3 +43,31 @@ export function shellRunLine(
   if (kind === 'powershell') return `${shellClearCommand(platform)}; & ${words}`;
   return `${shellClearCommand(platform)} && ${words}`;
 }
+
+const SCREEN_CLEAR = /\x1b\[2J|\x1b\[(?:1;1)?H\x1b\[0?J/;
+const CLEAR_TAIL_LENGTH = '\x1b[1;1H\x1b[0J'.length - 1;
+const STARTUP_OUTPUT_LIMIT = 64 * 1024;
+
+/** Batches the shell's startup echo with the clear that precedes the program. */
+export class ShellStartupOutput {
+  private pending: string | undefined = '';
+
+  filter(data: string): string {
+    if (this.pending === undefined) {
+      return data;
+    }
+    const tail = this.pending.slice(-CLEAR_TAIL_LENGTH);
+    this.pending += data;
+    if (this.pending.length >= STARTUP_OUTPUT_LIMIT || SCREEN_CLEAR.test(tail + data)) {
+      return this.finish();
+    }
+    return '';
+  }
+
+  /** Stops waiting for a clear and returns any pending output. */
+  finish(): string {
+    const data = this.pending ?? '';
+    this.pending = undefined;
+    return data;
+  }
+}

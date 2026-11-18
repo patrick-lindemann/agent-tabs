@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as vscode from 'vscode';
 import type { IDisposable, INodePty, IPty, LaunchSpec, TerminalConfig } from '../types';
-import { shellKind, shellRunLine } from './shell';
+import { ShellStartupOutput, shellKind, shellRunLine } from './shell';
 import { pathKey, resolveExecutable, windowsLaunch } from './windows';
 
 /**
@@ -25,6 +25,9 @@ export interface WorkingDirectorySelection {
 
 /** How long a redraw keeps the smaller size, so the program notices it */
 const REDRAW_DELAY_MS = 50;
+
+// A shell that needs input or fails to clear still has to show its output.
+const STARTUP_WAIT_MS = 1000;
 
 /**
  * Variables of the extension host that would change how programs in a tab
@@ -97,8 +100,14 @@ export class PtyManager {
 
       this.ptys.set(terminalId, pty);
       this.sizes.set(terminalId, { cols, rows });
-      this.setupPtyEventHandlers(terminalId, pty);
-      if (!client) this.handleAutoRun(pty, config, launch, shell);
+      const runLine =
+        !client && !config.directMode && config.autoRun && launch.command
+          ? shellRunLine(launch.command, launch.args, shellKind(shell))
+          : undefined;
+      this.setupPtyEventHandlers(terminalId, pty, runLine ? new ShellStartupOutput() : undefined);
+      if (runLine) {
+        pty.write(`${runLine}\r`);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.callbacks.onError(terminalId, errorMessage);
@@ -248,11 +257,32 @@ export class PtyManager {
     return this.getWorkingDirectory();
   }
 
-  private setupPtyEventHandlers(terminalId: string, pty: IPty): void {
+  private setupPtyEventHandlers(
+    terminalId: string,
+    pty: IPty,
+    startup: ShellStartupOutput | undefined
+  ): void {
     const startedAt = Date.now();
+    const flushStartup = () => {
+      const output = startup?.finish();
+      startup = undefined;
+      if (output) {
+        this.callbacks.onData(terminalId, output);
+      }
+    };
+    const timer = startup && setTimeout(flushStartup, STARTUP_WAIT_MS);
     this.listeners.set(pty, [
+      { dispose: () => clearTimeout(timer) },
       pty.onData((data: string) => {
-        this.callbacks.onData(terminalId, data);
+        const output = startup ? startup.filter(data) : data;
+        if (!output) {
+          return;
+        }
+        if (startup) {
+          clearTimeout(timer);
+          startup = undefined;
+        }
+        this.callbacks.onData(terminalId, output);
       }),
       pty.onExit(({ exitCode }) => {
         // A killed or replaced PTY was already removed from the map
@@ -262,6 +292,7 @@ export class PtyManager {
         this.ptys.delete(terminalId);
         this.sizes.delete(terminalId);
         this.disposeListeners(pty);
+        flushStartup();
         this.callbacks.onExit(terminalId, exitCode, Date.now() - startedAt);
       })
     ]);
@@ -270,18 +301,6 @@ export class PtyManager {
   private disposeListeners(pty: IPty): void {
     for (const listener of this.listeners.get(pty) ?? []) listener.dispose();
     this.listeners.delete(pty);
-  }
-
-  /** Without direct mode, types the command into the shell, quoted for it */
-  private handleAutoRun(
-    pty: IPty,
-    config: TerminalConfig,
-    launch: LaunchSpec,
-    shell: string
-  ): void {
-    if (!config.directMode && config.autoRun && launch.command) {
-      pty.write(`${shellRunLine(launch.command, launch.args, shellKind(shell))}\r`);
-    }
   }
 
   /**
