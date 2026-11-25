@@ -142,6 +142,10 @@ export interface TerminalInstance {
    * message was sent in it, so the tab can be reopened after it closes
    */
   conversation?: { id: string; started: boolean };
+  /** The editor area renders the tab's process as a terminal there */
+  inEditor?: boolean;
+  /** The name the user gave a tab whose program cannot rename its conversation; it is not kept */
+  customLabel?: string;
 }
 
 /** A closed tab that can be reopened with its conversation */
@@ -154,6 +158,8 @@ export interface ClosedTab {
 
 /** An open tab, kept so the next window of the workspace opens it again */
 export interface OpenTab {
+  /** Its ID while it renders in the editor area, so the same window opens it nowhere else */
+  id?: string;
   launch: LaunchSpec;
   cwd?: string;
   workspaceFolderIndex?: number;

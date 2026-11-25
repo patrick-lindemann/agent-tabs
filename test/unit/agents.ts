@@ -104,7 +104,9 @@ export const TRANSCRIPTS: AgentTranscript[] = [
     error: status('state=error:app=pi'),
     titles: [
       ['π - Fix tests - agent-tabs', 'Fix tests'],
-      ['π - agent-tabs', undefined]
+      ['Fix tests — agent-tabs', 'Fix tests'],
+      ['π - agent-tabs', undefined],
+      ['π — agent-tabs', undefined]
     ]
   },
   {

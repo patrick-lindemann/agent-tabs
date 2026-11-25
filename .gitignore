@@ -9,6 +9,7 @@ media/xterm.css
 # Rendered from the SVG files by `npm run icons`
 media/icon.png
 media/icons/*.png
+media/icons/editor/
 
 # Packages
 *.vsix

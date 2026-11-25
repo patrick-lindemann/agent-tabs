@@ -2,7 +2,7 @@
   "name": "agent-tabs",
   "displayName": "Agent Tabs: Coding Agents in the Sidebar",
   "description": "Run Claude Code, Codex, Gemini CLI, pi and other coding agents in tabs in the secondary sidebar, with live status for each agent.",
-  "version": "3.4.1",
+  "version": "3.5.0",
   "publisher": "patrick-lindemann",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -190,6 +190,28 @@
       {
         "command": "agentTabs.closeOtherTabs",
         "title": "Close Others",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.renameTab",
+        "title": "Rename Tab…",
+        "category": "Agent Tabs"
+      },
+      {
+        "command": "agentTabs.renameTabFromMenu",
+        "title": "Rename…",
+        "category": "Agent Tabs",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "agentTabs.moveToEditorFromMenu",
+        "title": "Move to Editor Area",
+        "category": "Agent Tabs",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "agentTabs.moveTabBack",
+        "title": "Move to Sidebar",
         "category": "Agent Tabs"
       },
       {
@@ -381,14 +403,36 @@
     "menus": {
       "webview/context": [
         {
+          "command": "agentTabs.renameTabFromMenu",
+          "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
+          "group": "1_rename"
+        },
+        {
+          "command": "agentTabs.moveToEditorFromMenu",
+          "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
+          "group": "2_move"
+        },
+        {
           "command": "agentTabs.closeTabFromMenu",
           "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
-          "group": "2_close@1"
+          "group": "3_close@1"
         },
         {
           "command": "agentTabs.closeOtherTabs",
           "when": "webviewId == 'agentTabs.terminalView' && webviewSection == 'tab'",
-          "group": "2_close@2"
+          "group": "3_close@2"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "agentTabs.renameTabFromMenu",
+          "when": "resourceScheme == 'webview-panel' && resourcePath =~ /^webview-panel\\/webview-agentTabs\\.editor\\.\\d+-/",
+          "group": "0_1_rename"
+        },
+        {
+          "command": "agentTabs.moveTabBack",
+          "when": "resourceScheme == 'webview-panel' && resourcePath =~ /^webview-panel\\/webview-agentTabs\\.editor\\.\\d+-/",
+          "group": "0_2_move"
         }
       ],
       "commandPalette": [
@@ -402,6 +446,18 @@
         },
         {
           "command": "agentTabs.switchToTabAt",
+          "when": "false"
+        },
+        {
+          "command": "agentTabs.renameTabFromMenu",
+          "when": "false"
+        },
+        {
+          "command": "agentTabs.moveToEditorFromMenu",
+          "when": "false"
+        },
+        {
+          "command": "agentTabs.moveTabBack",
           "when": "false"
         }
       ]

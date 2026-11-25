@@ -30,6 +30,9 @@ describe('webview message validation', () => {
     expect(isWebviewMessage({ type: 'resize', id: 'tab', cols: 80, rows: 24 })).toBe(true);
     expect(isWebviewMessage({ type: 'resize', id: '', cols: 80, rows: 24 })).toBe(false);
     expect(isWebviewMessage({ type: 'newTab', extra: true })).toBe(false);
+    expect(isWebviewMessage({ type: 'renameTab', id: 'tab', name: 'Build log' })).toBe(true);
+    expect(isWebviewMessage({ type: 'renameTab', id: '', name: 'Build log' })).toBe(false);
+    expect(isWebviewMessage({ type: 'renameTab', id: 'tab', name: 5 })).toBe(false);
     expect(isWebviewMessage({ type: 'splitTab', id: 'tab', pane: 'pane', side: 'after' })).toBe(
       false
     );

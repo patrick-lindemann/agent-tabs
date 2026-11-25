@@ -722,6 +722,30 @@ export function transformTitle(label: string, agent: AgentId | undefined): strin
 }
 
 /**
+ * The command that renames the conversation an agent runs, so a renamed
+ * tab keeps its name when it reopens: Claude Code, Codex, Cursor, OpenCode
+ * and Antigravity name it with `/rename`, pi with `/name`, Gemini CLI with
+ * `/chat rename`. The name the agent then reports becomes the tab's label.
+ * An agent without such a command cannot have its conversation renamed.
+ */
+export function renameCommandFor(agent: AgentId | undefined): string | undefined {
+  switch (agent) {
+    case 'claude':
+    case 'codex':
+    case 'cursor':
+    case 'opencode':
+    case 'antigravity':
+      return '/rename';
+    case 'pi':
+      return '/name';
+    case 'gemini':
+      return '/chat rename';
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Capitalizes the first word when it is all lowercase, as in the sentence
  * case that agents write titles in: `why does the build fail` becomes
  * `Why does the build fail`. A first word with a capital, e.g. `iOS` or
@@ -738,7 +762,8 @@ export function sentenceCase(text: string): string {
  * Turns a terminal title (OSC 0/2) into a short tab label, or undefined when
  * it carries nothing beyond the program name or folder.
  *
- * - pi: `π - <session name> - <folder>`; only a named session gives a label.
+ * - pi: `π - <session name> - <folder>`, or `<session name> — <folder>`
+ *   from the pi-session-name extension; only a named session gives a label.
  * - Claude Code: `<spinner or ✳> <summary of the conversation>`.
  * - Gemini CLI: `<glyph>  <state or current thought> (<folder>)`, padded to
  *   80 characters; only a thought gives a label.
@@ -752,7 +777,9 @@ export function labelFromTitle(title: string, launch: LaunchSpec): string | unde
   let label: string | undefined;
   if (launch.agent === 'pi') {
     // The folder may contain hyphens, e.g. `agent-tabs`, but not ` - `
-    label = /^π - (.+) - (?:(?! - ).)+$/.exec(title)?.[1];
+    label =
+      /^π - (.+) - (?:(?! - ).)+$/.exec(title)?.[1] ??
+      /^(?!π —)(.+) — (?:(?! — ).)+$/.exec(title)?.[1];
   } else if (launch.agent === 'gemini') {
     label = title
       .trim()

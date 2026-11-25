@@ -1,6 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
+import type { TerminalHistoryChunk } from '../src/protocol';
 import { isCmdK, isModifierKey, isTabShortcut, keySequence } from './keys';
 import { FileLinkProvider, parseFileTarget } from './links';
 import { isAtBottom, trackScroll, viewportOf } from './scroll';
@@ -73,6 +74,9 @@ export class Terminals {
     entry.element.style.display = 'block';
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (entry.restore || this.entries.get(id) !== entry) {
+          return;
+        }
         entry.fitAddon.fit();
         requestAnimationFrame(() => restoreScroll(entry, follow, lastScrollTop));
         this.reportSize(id, entry);
@@ -131,7 +135,7 @@ export class Terminals {
     return `\x1b[?997;${this.theme.isLight() ? 2 : 1}n`;
   }
 
-  create(id: string): void {
+  create(id: string, history?: readonly TerminalHistoryChunk[]): void {
     // A view that loaded again is sent the open tabs, which it may know already
     if (this.entries.has(id)) return;
     const element = document.createElement('div');
@@ -176,7 +180,9 @@ export class Terminals {
     // And query it (DSR 996), answered like a terminal that supports it
     terminal.parser.registerCsiHandler({ prefix: '?', final: 'n' }, (params) => {
       if (params[0] !== 996) return false;
-      this.post({ type: 'input', id, data: this.colorSchemeReport() });
+      if (!entry.restore?.replaying) {
+        this.post({ type: 'input', id, data: this.colorSchemeReport() });
+      }
       return true;
     });
 
@@ -191,16 +197,62 @@ export class Terminals {
     terminal.attachCustomKeyEventHandler((event) => this.handleKey(terminal, id, event));
     terminal.onData((data) => {
       entry.isAtBottom = true;
-      this.post({ type: 'input', id, data });
+      if (!entry.restore?.replaying) {
+        this.post({ type: 'input', id, data });
+      }
     });
     trackScroll(entry);
     this.entries.set(id, entry);
+    if (history?.length) {
+      this.restore(id, entry, history);
+    }
+  }
+
+  private restore(
+    id: string,
+    entry: TerminalEntry,
+    history: readonly TerminalHistoryChunk[]
+  ): void {
+    const { terminal } = entry;
+    const restore = { replaying: true, pending: [] as (string | null)[] };
+    entry.restore = restore;
+    let index = 0;
+    const next = () => {
+      if (this.entries.get(id) !== entry) {
+        return;
+      }
+      const chunk = history[index++];
+      if (chunk) {
+        // Cursor movements and wraps depend on the size when they were emitted.
+        terminal.resize(chunk.cols, chunk.rows);
+        terminal.write(chunk.data, next);
+        return;
+      }
+      restore.replaying = false;
+      while (restore.pending.length > 0) {
+        const data = restore.pending.shift();
+        if (data === null) {
+          terminal.clear();
+        } else if (data !== undefined) {
+          terminal.write(data, next);
+          return;
+        }
+      }
+      entry.restore = undefined;
+      terminal.scrollToBottom();
+      this.fit(id);
+    };
+    next();
   }
 
   /** Writes output and keeps following it if the terminal was at the bottom */
   write(id: string, data: string): void {
     const entry = this.entries.get(id);
     if (!entry) return;
+    if (entry.restore) {
+      entry.restore.pending.push(data);
+      return;
+    }
     const follow = isAtBottom(entry.terminal);
     entry.terminal.write(data);
     if (follow) {
@@ -211,6 +263,10 @@ export class Terminals {
   clear(id: string): void {
     const entry = this.entries.get(id);
     if (!entry) return;
+    if (entry.restore) {
+      entry.restore.pending.push(null);
+      return;
+    }
     entry.terminal.clear();
     entry.isAtBottom = true;
     entry.lastScrollTop = 0;
@@ -255,7 +311,7 @@ export class Terminals {
   measure(): { cols: number; rows: number } {
     const probe = document.createElement('div');
     probe.style.cssText =
-      'position: absolute; visibility: hidden; width: calc(100% - 20px); height: calc(100% - 37px);';
+      'position: absolute; visibility: hidden; width: calc(100% - 20px); height: calc(100% - 40px);';
     document.body.appendChild(probe);
     const terminal = new Terminal(this.options());
     const fitAddon = new FitAddon();
@@ -275,6 +331,7 @@ export class Terminals {
     for (const entry of this.entries.values()) {
       entry.terminal.dispose();
     }
+    this.entries.clear();
   }
 
   private options() {
@@ -289,7 +346,7 @@ export class Terminals {
   /** Fits a shown terminal to its pane, e.g. after the pane was resized */
   private fit(id: string): void {
     const active = this.entries.get(id);
-    if (!active || active.element.style.display === 'none') return;
+    if (!active || active.restore || active.element.style.display === 'none') return;
     const follow = isAtBottom(active.terminal);
     const scrollTop = viewportOf(active)?.scrollTop ?? 0;
     active.fitAddon.fit();

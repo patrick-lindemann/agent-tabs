@@ -27,6 +27,8 @@ export function isWebviewMessage(value: unknown): value is WebviewMessage {
     case 'closeTab':
     case 'switchTab':
       return isId(value.id);
+    case 'renameTab':
+      return isId(value.id) && isString(value.name);
     case 'moveTab':
       return (
         isId(value.id) &&

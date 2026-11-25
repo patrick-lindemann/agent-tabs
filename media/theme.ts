@@ -18,10 +18,7 @@ export class ThemeBuilder {
 
   getTheme(): XTermTheme {
     return {
-      background: this.getCssVar(
-        '--vscode-terminal-background',
-        this.getCssVar('--vscode-editor-background', '#1e1e1e')
-      ),
+      background: this.getCssVar('--terminal-surface', '#1e1e1e'),
       foreground: this.getCssVar(
         '--vscode-terminal-foreground',
         this.getCssVar('--vscode-editor-foreground', '#d4d4d4')

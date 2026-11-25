@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-11-25
+
+### Added
+
+- Right-click a sidebar tab and select **Move to Editor Area**. Right-click the editor tab and select **Move to Sidebar** to return it. Closing the editor also returns the tab. The agent keeps running, and moving it preserves its terminal output. Both move commands have their own section in the tab menus.
+- **Rename…** is available on sidebar and editor tabs. Sidebar tabs edit the name in place. Editor tabs use a name prompt, since VS Code does not let extensions edit an editor tab's name in place. The new name shows at once, also for pi with the pi-session-name extension. Renaming changes the conversation name where the agent supports it: Claude Code, Codex, Cursor, OpenCode and Antigravity with `/rename`, pi with `/name`, Gemini CLI with `/chat rename`. The name is the agent's own, so it survives a reopened tab. A terminal or agent without such a command gets a name that lasts while the tab is open
+- Tabs shrink together to 96 px before the strip scrolls. The New Tab controls follow the last tab and stay visible when the strip scrolls.
+- Editor tabs use their profile icon.
+
+### Changed
+
+- The tab strip blends into the sidebar header, and tabs reach its top edge like editor tabs. Tabs have the size and padding of editor tabs, with 14 px icons. The selected tab has the theme's fine border and curves into the terminal, like an editor tab. A fine line separates unselected tabs. In the editor area, the tab's logo has the size and inset of file icons, and the tab shows the same status icons as the sidebar, with the animated dots while the agent works.
+- The README starts with a demo of split panes and uses screenshots from live agent sessions.
+
 ## [3.4.1] - 2026-11-18
 
 ### Fixed

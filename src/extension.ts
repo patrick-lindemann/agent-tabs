@@ -77,7 +77,29 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('agentTabs.focusNextPane', () => {
       terminalProvider?.focusNextPane(1);
-    })
+    }),
+    vscode.commands.registerCommand('agentTabs.moveToEditorFromMenu', (tab?: TabContext) => {
+      if (typeof tab?.terminalId === 'string') {
+        terminalProvider?.moveToEditorArea(tab.terminalId);
+      }
+    }),
+    vscode.commands.registerCommand('agentTabs.moveTabBack', (resource?: vscode.Uri) => {
+      if (resource instanceof vscode.Uri) {
+        return terminalProvider?.moveTabBack(resource);
+      }
+    }),
+    vscode.commands.registerCommand('agentTabs.renameTab', () => terminalProvider?.renameTab()),
+    vscode.commands.registerCommand(
+      'agentTabs.renameTabFromMenu',
+      (tab?: TabContext | vscode.Uri) => {
+        if (tab instanceof vscode.Uri) {
+          return terminalProvider?.renameEditorFromMenu(tab);
+        }
+        if (typeof tab?.terminalId === 'string') {
+          return terminalProvider?.renameTab(tab.terminalId);
+        }
+      }
+    )
   );
 
   // Tab context menu; VS Code passes the tab's data-vscode-context

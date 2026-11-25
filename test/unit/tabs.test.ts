@@ -162,16 +162,25 @@ function setup(overrides: Partial<TerminalConfig> = {}) {
     attached: boolean;
     refreshes: number;
     closeRequests: string[][];
+    shownInEditor: Array<{ id: string; name: string }>;
+    focusedInEditor: string[];
+    closedInEditor: string[];
   } = {
     visible: true,
     attached: true,
     refreshes: 0,
     closeRequests: [],
+    shownInEditor: [],
+    focusedInEditor: [],
+    closedInEditor: [],
     post: (message) => posted.push(message),
     refresh: () => host.refreshes++,
     isVisible: () => host.visible,
     isAttached: () => host.attached,
-    requestClose: (ids) => host.closeRequests.push(ids)
+    requestClose: (ids) => host.closeRequests.push(ids),
+    showInEditor: (id, name) => host.shownInEditor.push({ id, name }),
+    focusInEditor: (id) => host.focusedInEditor.push(id),
+    closeInEditor: (id) => host.closedInEditor.push(id)
   };
   const manager = { getConfig: () => current } as unknown as ConfigManager;
   const closed = {
@@ -500,6 +509,156 @@ describe('panes', () => {
   });
 });
 
+describe('tabs in the editor area', () => {
+  it('moves a tab there, and its pane shows another', async () => {
+    const { tabs, host, posted, instance } = setup();
+    const a = await tabs.create();
+    const b = await tabs.create();
+    tabs.moveToEditor(b);
+    expect(instance(b).inEditor).toBe(true);
+    expect(tabs.state.getActiveId()).toBe(a);
+    expect(posted.some((m) => m.type === 'removeTab' && m.id === b)).toBe(true);
+    expect(host.shownInEditor).toEqual([{ id: b, name: 'Claude Code' }]);
+  });
+
+  it('moves the only tab, whose pane then shows none', async () => {
+    const { tabs, host } = setup();
+    const id = await tabs.create();
+    tabs.moveToEditor(id);
+    expect(tabs.state.getActiveId()).toBeUndefined();
+    expect(tabs.state.getPaneTabs()).toEqual([id]);
+    expect(host.shownInEditor.map((entry) => entry.id)).toEqual([id]);
+  });
+
+  it('marks a moved tab for the next window', async () => {
+    const { tabs, open } = setup();
+    const id = await tabs.create();
+    tabs.moveToEditor(id);
+    expect(open.tabs[0].id).toBe(id);
+  });
+
+  it('cycles and switches by position over tabs the pane can show', async () => {
+    const { tabs, host } = setup();
+    const a = await tabs.create();
+    await tabs.create();
+    const c = await tabs.create();
+    tabs.switchTo(a);
+    const b = tabs.state.getAllIds()[1];
+    tabs.moveToEditor(b);
+    // Cycling skips the tab the pane cannot show
+    tabs.cycle(1);
+    expect(host.focusedInEditor).toEqual([]);
+    expect(tabs.state.getActiveId()).toBe(c);
+    tabs.switchToPosition(1);
+    expect(tabs.state.getActiveId()).toBe(a);
+  });
+
+  it('switching to a moved tab focuses its terminal there', async () => {
+    const { tabs, host } = setup();
+    const id = await tabs.create();
+    tabs.moveToEditor(id);
+    tabs.switchTo(id);
+    expect(host.focusedInEditor).toEqual([id]);
+  });
+
+  it('replays output at its original sizes in both directions', async () => {
+    const { tabs, posted, pty, instance } = setup();
+    const id = await tabs.create();
+    tabs.resize(id, 36, 30);
+    pty().emit('\x1b[36Ghell');
+    pty().emit('o');
+    const sidebarChunk = { cols: 36, rows: 30, data: '\x1b[36Ghello' };
+
+    tabs.moveToEditor(id);
+    posted.length = 0;
+    tabs.replay(id);
+    expect(posted).toEqual([{ type: 'createTab', id, history: [sidebarChunk] }]);
+    expect(pty().size).toEqual([36, 30]);
+
+    tabs.pty.resize(id, 110, 40);
+    pty().emit(' there');
+    posted.length = 0;
+    tabs.moveFromEditor(id);
+    expect(instance(id).inEditor).toBe(false);
+    expect(tabs.state.getActiveId()).toBe(id);
+    expect(posted).toEqual([
+      {
+        type: 'createTab',
+        id,
+        history: [sidebarChunk, { cols: 110, rows: 40, data: ' there' }]
+      },
+      { type: 'switchTab', id }
+    ]);
+    expect(pty().size).toEqual([110, 40]);
+  });
+
+  it('closing a moved tab also ends its terminal there', async () => {
+    const { tabs, host, pty } = setup();
+    const id = await tabs.create();
+    tabs.moveToEditor(id);
+    tabs.close(id);
+    expect(host.closedInEditor).toEqual([id]);
+    expect(pty().killed).toBe(true);
+    expect(tabs.state.get(id)).toBeUndefined();
+  });
+
+  it('keeps a moved tab alive when the view ends', async () => {
+    const { tabs, open, pty } = setup();
+    await tabs.create();
+    const b = await tabs.create();
+    tabs.moveToEditor(b);
+    const process = pty();
+    tabs.reset();
+    expect(spawned[0].killed).toBe(true);
+    expect(process.killed).toBe(false);
+    expect(tabs.state.getAllIds()).toEqual([b]);
+    expect(tabs.state.getActiveId()).toBeUndefined();
+    // Its saved entry still names it, so no window opens it twice
+    expect(open.tabs.map((tab) => tab.id)).toEqual([undefined, b]);
+  });
+
+  it('opens a moved tab nowhere else when the view returns', async () => {
+    const { tabs } = setup();
+    const id = await tabs.create();
+    tabs.moveToEditor(id);
+    tabs.reset();
+    await expect(tabs.restore()).resolves.toBe(0);
+    expect(tabs.state.getAllIds()).toEqual([id]);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('shows a tab that came back while the view was gone, without starting it again', async () => {
+    const { tabs, host, posted, pty } = setup();
+    const id = await tabs.create();
+    pty().emit('hello');
+    tabs.moveToEditor(id);
+    tabs.reset();
+    // The view is gone and the editor terminal just closed, so nothing rewrites the saved entry
+    host.attached = false;
+    tabs.moveFromEditor(id);
+    host.attached = true;
+    const createdBefore = posted.filter((m) => m.type === 'createTab' && m.id === id).length;
+    await expect(tabs.restore()).resolves.toBe(0);
+    expect(tabs.state.getAllIds()).toEqual([id]);
+    expect(spawned).toHaveLength(1);
+    const created = posted.filter((m) => m.type === 'createTab' && m.id === id);
+    expect(created).toHaveLength(createdBefore + 1);
+  });
+
+  it('counts a result the user watched in the editor area as seen', async () => {
+    const { tabs, instance } = setup();
+    const id = await tabs.create();
+    tabs.moveToEditor(id);
+    instance(id).unseen = 'done';
+    tabs.markSeen(id);
+    expect(instance(id).unseen).toBeUndefined();
+    // Typing into the terminal there counts as seen too
+    instance(id).unseen = 'error';
+    tabs.input(id, 'x');
+    expect(instance(id).unseen).toBeUndefined();
+  });
+});
+
 describe('process output', () => {
   it('forwards output and answers the status support query', async () => {
     const { tabs, output, pty } = setup();
@@ -695,6 +854,55 @@ describe('tab names from the first message', () => {
     const id = await tabs.create(launchForCommand('htop', [], false));
     send(tabs, id, 'quit');
     expect(tabs.state.get(id)?.messageLabel).toBeUndefined();
+  });
+});
+
+describe('renaming tabs', () => {
+  it.each([
+    ['claude', '/rename Fix login'],
+    ['pi', '/name Fix login'],
+    ['gemini', '/chat rename Fix login']
+  ])('sends %s its own rename command', async (command, line) => {
+    const { tabs, pty, instance } = setup();
+    installed.add(command);
+    const id = await tabs.create(launchForCommand(command, [], true));
+    tabs.rename(id, 'Fix login');
+    expect(pty().written).toEqual([`${line}\r`]);
+    // The command is no message: it names no tab and starts no conversation
+    expect(instance(id).messageLabel).toBeUndefined();
+    expect(instance(id).typedText).toBe('');
+    expect(instance(id).conversation?.started ?? false).toBe(false);
+    expect(instance(id).customLabel).toBeUndefined();
+    expect(tabs.state.getLabel(instance(id), config())).toBe('Fix login');
+  });
+
+  it('gives a tab of a program without such a command a name that is not saved', async () => {
+    const { tabs, open, pty, instance } = setup();
+    installed.add('bash');
+    const id = await tabs.create(launchForCommand('bash', ['-l'], true));
+    tabs.rename(id, 'Build server');
+    expect(pty().written).toEqual([]);
+    expect(instance(id).customLabel).toBe('Build server');
+    expect(tabs.state.getLabel(instance(id), config())).toBe('Build server');
+    expect(open.tabs[0].id).toBeUndefined();
+  });
+
+  it('names an exited agent itself, since its command cannot run', async () => {
+    const { tabs, pty, instance } = setup();
+    const id = await tabs.create();
+    pty().exit(1);
+    tabs.rename(id, 'Fix login');
+    expect(pty().written).toEqual([]);
+    expect(instance(id).customLabel).toBe('Fix login');
+  });
+
+  it('cleans the name of control characters and blank ends', async () => {
+    const { tabs, pty, instance } = setup();
+    installed.add('bash');
+    const id = await tabs.create(launchForCommand('bash', ['-l'], true));
+    tabs.rename(id, '  build\r\nserver\x07 ');
+    expect(instance(id).customLabel).toBe('build server');
+    expect(pty().written).toEqual([]);
   });
 });
 
@@ -927,7 +1135,7 @@ describe('showing the tabs in a view', () => {
     ]);
   });
 
-  it('shows each tab its recent output again and has its program redraw', async () => {
+  it('shows recent output without resizing the process before the webview fits', async () => {
     const { tabs, posted } = setup();
     await tabs.attachView();
     const [id] = tabs.state.getAllIds();
@@ -936,17 +1144,16 @@ describe('showing the tabs in a view', () => {
     posted.length = 0;
 
     await tabs.attachView();
-    expect(posted.slice(0, 2)).toEqual([
-      { type: 'createTab', id },
-      { type: 'output', id, data: 'hello\r\n' }
-    ]);
-    expect(spawned[0].size).toEqual([100, 29]);
-    vi.advanceTimersByTime(50);
+    expect(posted[0]).toEqual({
+      type: 'createTab',
+      id,
+      history: [{ cols: 100, rows: 30, data: 'hello\r\n' }]
+    });
     expect(spawned[0].size).toEqual([100, 30]);
   });
 
   it('forgets the output of a tab that restarted', async () => {
-    const { tabs, posted, output } = setup();
+    const { tabs, posted } = setup();
     await tabs.attachView();
     const [id] = tabs.state.getAllIds();
     spawned[0].emit('old run');
@@ -955,7 +1162,7 @@ describe('showing the tabs in a view', () => {
     spawned[1].emit('new run');
     posted.length = 0;
     await tabs.attachView();
-    expect(output(id)).toBe('new run');
+    expect(posted[0]).toMatchObject({ type: 'createTab', id, history: [{ data: 'new run' }] });
   });
 
   it('restores again after the view was reset', async () => {
@@ -1192,7 +1399,10 @@ describe('tabs in a multiplexer', () => {
         refresh: () => {},
         isVisible: () => true,
         isAttached: () => true,
-        requestClose: () => {}
+        requestClose: () => {},
+        showInEditor: () => {},
+        focusInEditor: () => {},
+        closeInEditor: () => {}
       },
       ''
     );

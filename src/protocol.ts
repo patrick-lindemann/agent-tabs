@@ -87,6 +87,7 @@ export type WebviewMessage =
   | { type: 'newTabWithProfile'; pane?: string }
   | { type: 'newTabWithCommand' }
   | { type: 'closeTab'; id: string }
+  | { type: 'renameTab'; id: string; name: string }
   | { type: 'switchTab'; id: string }
   /** A tab was dragged to a 0-based position in a pane's tab strip, by default its own */
   | { type: 'moveTab'; id: string; index: number; pane?: string }
@@ -100,11 +101,19 @@ export type WebviewMessage =
   | { type: 'openLink'; url: string }
   | { type: 'focus'; focused: boolean };
 
+/** Terminal output and the size at which the program drew it. */
+export interface TerminalHistoryChunk {
+  cols: number;
+  rows: number;
+  data: string;
+}
+
 export type ExtensionMessage =
   | { type: 'output'; id: string; data: string }
   | { type: 'clear'; id: string }
   | { type: 'tabsUpdate'; layout: LayoutInfo; statusColors: boolean; monochromeIcons: boolean }
-  | { type: 'createTab'; id: string }
+  | { type: 'createTab'; id: string; history?: readonly TerminalHistoryChunk[] }
+  | { type: 'editTabName'; id: string }
   /** Focuses the tab's terminal, which the last `tabsUpdate` shows in its pane */
   | { type: 'switchTab'; id: string }
   | { type: 'removeTab'; id: string }

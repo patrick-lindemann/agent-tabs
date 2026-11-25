@@ -10,6 +10,7 @@ import {
   labelFromTitle,
   launchForCommand,
   missingCommand,
+  renameCommandFor,
   resolveProfiles,
   sentenceCase,
   shortTitle,
@@ -542,4 +543,24 @@ describe('shortening titles', () => {
       expect(shortTitle(text, count)).toBe(expected);
     }
   );
+});
+
+describe('renaming conversations', () => {
+  it.each([
+    ['claude', '/rename'],
+    ['codex', '/rename'],
+    ['cursor', '/rename'],
+    ['opencode', '/rename'],
+    ['antigravity', '/rename'],
+    ['pi', '/name'],
+    ['gemini', '/chat rename']
+  ])('knows %s renames with %s', (agent, command) => {
+    expect(renameCommandFor(agent as AgentId)).toBe(command);
+  });
+
+  it('knows no command for other agents and terminals', () => {
+    expect(renameCommandFor('copilot')).toBeUndefined();
+    expect(renameCommandFor('grok')).toBeUndefined();
+    expect(renameCommandFor(undefined)).toBeUndefined();
+  });
 });

@@ -103,13 +103,64 @@ export class TabBar {
     this.renderedActiveId = activeId;
 
     requestAnimationFrame(() => {
+      this.updateScrollButtons();
       if (activeChanged) {
         this.list
           .querySelector('.tab.active')
           ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
-      this.updateScrollButtons();
     });
+  }
+
+  /** Opens an inline name field and returns whether the strip contains the tab. */
+  editTabName(id: string): boolean {
+    const element = this.elements.get(id);
+    if (!element) {
+      return false;
+    }
+    const { root, label } = element;
+    if (root.querySelector('.tab-name-input')) {
+      return true;
+    }
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tab-label tab-name-input';
+    input.setAttribute('aria-label', 'Tab name');
+    const originalName = label.textContent ?? '';
+    input.value = originalName;
+    const finish = () => {
+      input.onblur = null;
+      input.replaceWith(label);
+      root.draggable = true;
+    };
+    input.onblur = finish;
+    input.onclick = (event) => event.stopPropagation();
+    input.onauxclick = (event) => event.stopPropagation();
+    input.onmousedown = (event) => event.stopPropagation();
+    input.onkeydown = (event) => {
+      event.stopPropagation();
+      if (event.isComposing || (event.key !== 'Enter' && event.key !== 'Escape')) {
+        return;
+      }
+      event.preventDefault();
+      if (event.key === 'Enter') {
+        const name = input.value.trim();
+        if (!name) {
+          return;
+        }
+        if (name !== originalName) {
+          this.post({ type: 'renameTab', id, name });
+        }
+      }
+      finish();
+      root.focus({ preventScroll: true });
+    };
+    root.draggable = false;
+    label.replaceWith(input);
+    root.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    input.focus({ preventScroll: true });
+    input.select();
+    return true;
   }
 
   /**
@@ -188,7 +239,8 @@ export class TabBar {
     else delete root.dataset.status;
     if (tab.accentColor) root.style.setProperty('--tab-accent', tab.accentColor);
     else root.style.removeProperty('--tab-accent');
-    // Read by VS Code for the `webview/context` menu (Close, Close Others)
+    // Read by VS Code for the `webview/context` menu (Close, Close Others,
+    // Rename, Move)
     root.dataset.vscodeContext = JSON.stringify({
       webviewSection: 'tab',
       terminalId: tab.id,
@@ -363,7 +415,8 @@ export class TabBar {
   /** Shows the scroll buttons while tabs overflow */
   private updateScrollButtons(): void {
     const { scrollLeft, scrollWidth, clientWidth } = this.list;
-    this.bar.classList.toggle('overflowing', scrollWidth > clientWidth + 1);
+    const availableWidth = clientWidth + this.scrollLeft.offsetWidth + this.scrollRight.offsetWidth;
+    this.bar.classList.toggle('overflowing', scrollWidth > availableWidth + 1);
     this.scrollLeft.disabled = scrollLeft <= 0;
     this.scrollRight.disabled = scrollLeft + clientWidth >= scrollWidth - 1;
   }

@@ -24,7 +24,6 @@ export interface WorkingDirectorySelection {
 }
 
 /** How long a redraw keeps the smaller size, so the program notices it */
-const REDRAW_DELAY_MS = 50;
 
 // A shell that needs input or fails to clear still has to show its output.
 const STARTUP_WAIT_MS = 1000;
@@ -328,19 +327,8 @@ export class PtyManager {
     this.sizes.set(terminalId, { cols, rows });
   }
 
-  /**
-   * Makes the program draw its screen again, by changing the terminal's
-   * size for a moment, which programs answer with a redraw
-   */
-  redraw(terminalId: string): void {
-    const pty = this.ptys.get(terminalId);
-    const size = this.sizes.get(terminalId);
-    if (!pty || !size || size.rows < 2) return;
-    pty.resize(size.cols, size.rows - 1);
-    setTimeout(() => {
-      const current = this.sizes.get(terminalId);
-      if (this.ptys.get(terminalId) === pty && current) pty.resize(current.cols, current.rows);
-    }, REDRAW_DELAY_MS);
+  getSize(terminalId: string): { cols: number; rows: number } | undefined {
+    return this.sizes.get(terminalId);
   }
 
   /**

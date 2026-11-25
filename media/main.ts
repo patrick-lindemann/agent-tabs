@@ -5,9 +5,12 @@ import type { WebviewIncomingMessage, WebviewOutgoingMessage } from './types';
 function start(): void {
   const vscode = acquireVsCodeApi();
   const post = (message: WebviewOutgoingMessage) => vscode.postMessage(message);
+  const editor = document.getElementById('editor-terminal');
   let panes: Panes | undefined;
   const terminals = new Terminals(post, () => (panes?.count ?? 0) > 1);
-  panes = new Panes(post, terminals);
+  if (!editor) {
+    panes = new Panes(post, terminals);
+  }
 
   window.addEventListener('message', (event: MessageEvent<WebviewIncomingMessage>) => {
     const message = event.data;
@@ -21,8 +24,14 @@ function start(): void {
       case 'tabsUpdate':
         panes?.render(message.layout, message.statusColors, message.monochromeIcons);
         break;
+      case 'editTabName':
+        panes?.editTabName(message.id);
+        break;
       case 'createTab':
-        terminals.create(message.id);
+        terminals.create(message.id, message.history);
+        if (editor) {
+          terminals.place(message.id, editor);
+        }
         break;
       case 'switchTab':
         terminals.show(message.id);
@@ -41,7 +50,9 @@ function start(): void {
   // goes to the active terminal instead of the page.
   window.addEventListener('focus', () => {
     post({ type: 'focus', focused: true });
-    terminals.focusActive();
+    if (!document.activeElement?.matches('.tab-name-input')) {
+      terminals.focusActive();
+    }
   });
   window.addEventListener('blur', () => post({ type: 'focus', focused: false }));
   if (document.hasFocus()) {

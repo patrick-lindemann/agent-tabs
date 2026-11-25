@@ -1,8 +1,18 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from '../config';
-import { confirmClose, discoverProfiles, manageProfiles, pickProfile, pickTab } from '../dialogs';
+import {
+  confirmClose,
+  discoverProfiles,
+  editorIcon,
+  type IconFiles,
+  manageProfiles,
+  pickProfile,
+  pickTab,
+  renamePrompt
+} from '../dialogs';
 import { CommandInputPicker } from '../picker/picker';
 import { launchForCommand } from '../profiles';
+import { EditorArea } from '../terminal/editor';
 import { Tabs } from '../terminal/tabs';
 import type {
   ClosedTab,
@@ -10,7 +20,8 @@ import type {
   LaunchSpec,
   OpenTab,
   SplitSide,
-  TerminalInstance
+  TerminalInstance,
+  WebviewMessage
 } from '../types';
 import { openFile } from './files';
 import { renderHtml } from './html';
@@ -49,6 +60,8 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   private readonly config = new ConfigManager();
   private readonly picker = new CommandInputPicker();
   private readonly tabs: Tabs;
+  /** The terminals of tabs moved to the editor area */
+  private readonly editor: EditorArea;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -62,8 +75,11 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         post: (message) => this.post(message),
         refresh: () => this.refresh(),
         isVisible: () => this.view?.visible === true,
-        isAttached: () => !this.disposed && this.view !== undefined,
-        requestClose: (ids) => void this.requestClose(ids)
+        isAttached: () => !this.disposed && (this.view !== undefined || this.editor.count > 0),
+        requestClose: (ids) => void this.requestClose(ids),
+        showInEditor: (id, name) => this.editor.move(id, name, this.getEditorIcon(id)),
+        focusInEditor: (id) => this.editor.show(id),
+        closeInEditor: (id) => this.editor.close(id)
       },
       workspaceKey(),
       workspaceState && {
@@ -77,6 +93,11 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
         setLayout: (layout) => void workspaceState.update(LAYOUT_KEY, layout)
       }
     );
+    this.editor = new EditorArea(this.extensionUri, {
+      receive: (id, message) => this.handleEditorMessage(id, message),
+      closed: (id) => this.tabs.moveFromEditor(id),
+      viewed: (id) => this.tabs.markSeen(id)
+    });
   }
 
   // --- WebviewViewProvider ---
@@ -114,32 +135,71 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     void this.tabs.attachView();
   }
 
+  private handleEditorMessage(id: string, message: WebviewMessage): void {
+    switch (message.type) {
+      case 'ready':
+        this.postAppearance(id);
+        this.tabs.replay(id);
+        this.editor.post(id, { type: 'switchTab', id });
+        break;
+      case 'resize':
+        this.tabs.pty.resize(id, message.cols, message.rows);
+        break;
+      case 'input':
+      case 'openFile':
+      case 'openLink':
+      case 'closeTab':
+        dispatchMessage(message, this);
+        break;
+    }
+  }
+
   /** The terminal font of VS Code's own terminal, for the webview */
-  private postAppearance(): void {
+  private postAppearance(id?: string): void {
     const terminal = vscode.workspace.getConfiguration('terminal.integrated');
     const editor = vscode.workspace.getConfiguration('editor');
     const fontSize = terminal.get<number>('fontSize') || editor.get<number>('fontSize') || 12;
     const lineHeight = terminal.get<number>('lineHeight') || 1.2;
-    this.post({
+    const appearance: ExtensionMessage = {
       type: 'appearance',
       fontSize,
       fontFamily: terminal.get<string>('fontFamily') || undefined,
       // VS Code reads values of 8 and more as pixels
       lineHeight: lineHeight >= 8 ? lineHeight / fontSize : lineHeight
-    });
+    };
+    if (id) {
+      this.editor.post(id, appearance);
+    } else {
+      this.post(appearance);
+    }
   }
 
   /** The terminal or editor font changed */
   updateAppearance(): void {
     this.postAppearance();
+    for (const instance of this.tabs.state.getAll()) {
+      if (instance.inEditor) {
+        this.postAppearance(instance.id);
+      }
+    }
   }
 
   handleInput(id: string, data: string): void {
     this.tabs.input(id, data);
   }
 
+  handleRenameTab(id: string, name: string): void {
+    const instance = this.tabs.state.get(id);
+    if (instance && !instance.inEditor) {
+      this.tabs.rename(id, name);
+    }
+  }
+
   handleResize(id: string, cols: number, rows: number): void {
-    this.tabs.resize(id, cols, rows);
+    const instance = this.tabs.state.get(id);
+    if (instance && !instance.inEditor) {
+      this.tabs.resize(id, cols, rows);
+    }
   }
 
   /**
@@ -287,8 +347,10 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
       step
     );
     if (id) {
+      const inEditor = this.tabs.state.get(id)?.inEditor === true;
       this.tabs.switchTo(id);
-      await this.focusView();
+      // A moved tab has its terminal in the editor area, which keeps focus
+      if (!inEditor) await this.focusView();
     }
   }
 
@@ -330,7 +392,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     const { state } = this.tabs;
     const pane = state.getPaneId(id);
     if (!pane) return;
-    const others = state.getPaneTabs(pane).filter((other) => other !== id);
+    const others = state.getSidebarTabIds(pane).filter((other) => other !== id);
     if (await this.requestClose(others)) {
       this.tabs.switchTo(id);
     }
@@ -361,6 +423,49 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     this.tabs.moveActive(to);
   }
 
+  /**
+   * Opens the tab in an Agent Tabs editor and returns it when the editor closes.
+   */
+  moveToEditorArea(id: string): void {
+    this.tabs.moveToEditor(id);
+  }
+
+  async moveTabBack(resource: vscode.Uri): Promise<void> {
+    if (this.editor.closeFromMenu(resource)) {
+      await this.focusView();
+    }
+  }
+
+  async renameEditorFromMenu(resource: vscode.Uri): Promise<void> {
+    const id = this.editor.getIdFromMenu(resource);
+    if (id !== undefined) {
+      await this.renameTab(id);
+    }
+  }
+
+  /** Lets the user edit a sidebar label or prompts for an editor tab name. */
+  async renameTab(id?: string): Promise<void> {
+    const target = id ?? this.editor.getActiveId() ?? this.tabs.state.getActiveId();
+    const instance = target && this.tabs.state.get(target);
+    if (!instance) {
+      return;
+    }
+    if (instance.inEditor) {
+      const name = await renamePrompt(this.tabs.state.getLabel(instance, this.config.getConfig()));
+      if (name !== undefined) {
+        this.tabs.rename(instance.id, name);
+      }
+    } else {
+      await this.focusView();
+      if (!instance.inEditor) {
+        await this.view?.webview.postMessage({
+          type: 'editTabName',
+          id: instance.id
+        } satisfies ExtensionMessage);
+      }
+    }
+  }
+
   switchToNextTerminal(): void {
     this.tabs.cycle(1);
   }
@@ -378,6 +483,7 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   dispose(): void {
     this.disposed = true;
     this.tabs.dispose();
+    this.editor.dispose();
     this.config.dispose();
     this.picker.dispose();
   }
@@ -389,7 +495,22 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
   }
 
   private post(message: ExtensionMessage): void {
+    if ('id' in message && message.type !== 'removeTab' && this.editor.has(message.id)) {
+      this.editor.post(message.id, message);
+      return;
+    }
     void this.view?.webview.postMessage(message);
+  }
+
+  /** The editor tab icon of a moved tab: its status, else its logo */
+  private getEditorIcon(id: string): IconFiles {
+    const instance = this.tabs.state.get(id);
+    const config = this.config.getConfig();
+    if (!instance) {
+      return editorIcon('sparkle', undefined, config, this.extensionUri);
+    }
+    const icon = instance.launch.icon ?? instance.launch.agent ?? 'sparkle';
+    return editorIcon(icon, this.tabs.state.getStatus(instance), config, this.extensionUri);
   }
 
   /**
@@ -402,6 +523,12 @@ export class ViewProvider implements vscode.WebviewViewProvider, MessageHandlerC
     const { statusColors, monochromeIcons } = config;
     const layout = state.getLayoutInfo(config);
     this.post({ type: 'tabsUpdate', layout, statusColors, monochromeIcons });
+    for (const instance of state.getAll()) {
+      if (instance.inEditor) {
+        const label = state.getLabel(instance, config);
+        this.editor.update(instance.id, label, this.getEditorIcon(instance.id));
+      }
+    }
     // Scopes the pane keybindings, like VS Code's terminal while it is split
     const split = state.paneCount > 1;
     if (split !== this.split) {

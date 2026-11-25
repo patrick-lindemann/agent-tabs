@@ -32,6 +32,7 @@ export interface TerminalEntry {
   element: HTMLDivElement;
   isAtBottom: boolean;
   lastScrollTop: number;
+  restore?: { replaying: boolean; pending: (string | null)[] };
   /** The program asked to be told when the color scheme changes (DECSET 2031) */
   colorSchemeReports: boolean;
 }
