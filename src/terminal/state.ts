@@ -72,7 +72,8 @@ export class TerminalStateManager {
     const pane = (paneId && this.pane(paneId)) || this.focusedPane;
     this.terminals.set(id, instance);
     pane.tabs.push(id);
-    if (!pane.active) this.show(pane, id);
+    // A tab the editor area renders is not shown in a pane
+    if (!pane.active && !instance.inEditor) this.show(pane, id);
   }
 
   /**
@@ -94,18 +95,20 @@ export class TerminalStateManager {
   move(id: string, index: number, paneId?: string): boolean {
     const from = this.paneOf(id);
     const to = paneId ? this.pane(paneId) : from;
-    if (!from || !to) return false;
+    if (!from || !to || this.terminals.get(id)?.inEditor) return false;
+    const visible = this.getSidebarTabIds(to.id);
     if (from === to) {
       const tabs = from.tabs;
       const current = tabs.indexOf(id);
-      const target = clamp(index, 0, tabs.length - 1);
+      const target = tabs.indexOf(visible[clamp(index, 0, visible.length - 1)]);
       if (target === current) return false;
       tabs.splice(current, 1);
       tabs.splice(target, 0, id);
       return true;
     }
     this.takeOut(from, id);
-    to.tabs.splice(clamp(index, 0, to.tabs.length), 0, id);
+    const before = visible[clamp(index, 0, visible.length)];
+    to.tabs.splice(before ? to.tabs.indexOf(before) : to.tabs.length, 0, id);
     this.setActive(id);
     return true;
   }
@@ -142,7 +145,7 @@ export class TerminalStateManager {
     pane.tabs.splice(index, 1);
     if (pane.active === id) {
       pane.active = undefined;
-      const next = pane.tabs[pane.tabs.length - 1];
+      const next = this.getSidebarTabIds(pane.id).at(-1);
       if (next) this.show(pane, next);
     }
     if (pane.tabs.length === 0) this.layout.removePane(pane);
@@ -190,6 +193,11 @@ export class TerminalStateManager {
   getPaneTabs(paneId?: string): string[] {
     const pane = paneId ? this.pane(paneId) : this.focusedPane;
     return pane ? [...pane.tabs] : [];
+  }
+
+  /** The tabs that still render in a sidebar pane, in strip order. */
+  getSidebarTabIds(paneId?: string): string[] {
+    return this.getPaneTabs(paneId).filter((id) => !this.terminals.get(id)?.inEditor);
   }
 
   /** The tab each pane shows, in reading order */
@@ -260,13 +268,43 @@ export class TerminalStateManager {
 
   /**
    * Shows a tab in its pane and, unless `focus` is false, gives the pane
-   * focus; an unknown ID changes nothing
+   * focus; an unknown ID changes nothing. A tab the editor area renders
+   * is not shown in a pane.
    */
   setActive(id: string, focus = true): void {
     const pane = this.paneOf(id);
-    if (!pane) return;
+    if (!pane || this.terminals.get(id)?.inEditor) return;
     this.show(pane, id);
     if (focus) this.layout.focused = pane;
+  }
+
+  /**
+   * Stops showing a tab in its pane, e.g. while the editor area renders
+   * it, without taking it out of the strip. Its pane shows another tab,
+   * or nothing when it has no other to show.
+   */
+  hideInPane(id: string): void {
+    const pane = this.paneOf(id);
+    if (!pane || pane.active !== id) return;
+    const instance = this.terminals.get(id);
+    if (instance) instance.isActive = false;
+    pane.active = undefined;
+    const next = this.getSidebarTabIds(pane.id)
+      .filter((other) => other !== id)
+      .at(-1);
+    if (next) this.show(pane, next);
+  }
+
+  /**
+   * Adds tabs that stayed open outside the view, e.g. in the editor area,
+   * to the strip of the focused pane without showing them anywhere.
+   */
+  keepAlive(instances: TerminalInstance[]): void {
+    const pane = this.layout.focused;
+    for (const instance of instances) {
+      this.terminals.set(instance.id, instance);
+      pane.tabs.push(instance.id);
+    }
   }
 
   /**
@@ -282,7 +320,7 @@ export class TerminalStateManager {
   /** The layout with each pane's tabs, for the webview */
   getLayoutInfo(titles: TitleOptions): LayoutInfo {
     return this.layout.info((pane) => ({
-      tabs: this.getTabsInfo(titles, pane.tabs)
+      tabs: this.getTabsInfo(titles, this.getSidebarTabIds(pane.id))
     }));
   }
 
@@ -309,16 +347,17 @@ export class TerminalStateManager {
    * With automatic titles, the shortened terminal title, e.g. `Refactor API
    * client` from Claude Code's conversation summary or a named pi session,
    * and until the program sets one, the first message sent. Otherwise the
-   * profile's name.
+   * profile's name. A name the user set is never shortened or replaced.
    */
   getLabel(instance: TerminalInstance, titles: TitleOptions): string {
+    if (instance.customLabel) return instance.customLabel;
     const title = this.getTitle(instance, titles);
     return (title && shortTitle(title, titles.tabTitleWords)) ?? instance.launch.label;
   }
 
   /** `pi / Refactor the API client`: agent and full title, e.g. for the tab picker */
   getFullLabel(instance: TerminalInstance, titles: TitleOptions): string {
-    const title = this.getTitle(instance, titles);
+    const title = instance.customLabel ?? this.getTitle(instance, titles);
     return title ? `${instance.launch.label} / ${title}` : instance.launch.label;
   }
 

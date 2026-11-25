@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { discoverAgents, missingCommand, type ProfileSetting } from './profiles';
 import type { CloseRisk } from './terminal/state';
-import type { AgentId, LaunchSpec } from './types';
+import type { AgentId, LaunchSpec, ProfileIcon, TabStatus } from './types';
 
 /** Agents whose logo has brand colors; the others are drawn in the text color */
 const BRAND_COLORED = new Set<AgentId>(['claude', 'antigravity', 'gemini', 'pi', 'devin']);
@@ -32,7 +32,7 @@ export async function pickProfile(
       ]
         .filter(Boolean)
         .join(' '),
-      iconPath: profileIcon(profile, monochrome, extensionUri),
+      iconPath: profileIcon(profile.icon, monochrome, extensionUri),
       choice: { profile }
     })),
     { label: 'Custom Command…', iconPath: new vscode.ThemeIcon('edit'), choice: 'custom' },
@@ -54,16 +54,44 @@ export async function pickProfile(
  * The agent's logo; in its brand colors unless `agentTabs.monochromeIcons`
  * is set. Logos without brand colors follow the theme.
  */
-function profileIcon(
-  profile: LaunchSpec,
+export function profileIcon(
+  icon: ProfileIcon,
   monochrome: boolean,
   extensionUri: vscode.Uri
 ): vscode.IconPath {
-  const { icon } = profile;
   if (icon === 'terminal') return new vscode.ThemeIcon('terminal');
   if (icon === 'sparkle') return new vscode.ThemeIcon('sparkle-filled');
-  const file = (name: string) => vscode.Uri.joinPath(extensionUri, 'media', 'icons', `${name}.png`);
-  if (!monochrome && BRAND_COLORED.has(icon)) {
+  return iconFiles(icon, monochrome, vscode.Uri.joinPath(extensionUri, 'media', 'icons'));
+}
+
+/**
+ * The icon of a tab in the editor area, inset like VS Code's file icons:
+ * the status icon while there is a status, otherwise the logo. Editor tabs
+ * only show images, so the codicons are images too, and status colors are
+ * VS Code's default colors, not the theme's.
+ */
+export function editorIcon(
+  icon: ProfileIcon,
+  status: TabStatus | undefined,
+  config: { monochromeIcons: boolean; statusColors: boolean },
+  extensionUri: vscode.Uri
+): IconFiles {
+  const folder = vscode.Uri.joinPath(extensionUri, 'media', 'icons', 'editor');
+  if (status) {
+    const name = `${status}${config.statusColors ? '-color' : ''}`;
+    return {
+      light: vscode.Uri.joinPath(folder, 'status', `${name}-light.png`),
+      dark: vscode.Uri.joinPath(folder, 'status', `${name}-dark.png`)
+    };
+  }
+  return iconFiles(icon, config.monochromeIcons, folder);
+}
+
+export type IconFiles = vscode.Uri | { light: vscode.Uri; dark: vscode.Uri };
+
+function iconFiles(icon: ProfileIcon, monochrome: boolean, folder: vscode.Uri): IconFiles {
+  const file = (name: string) => vscode.Uri.joinPath(folder, `${name}.png`);
+  if (!monochrome && (BRAND_COLORED as Set<ProfileIcon>).has(icon)) {
     return file(icon);
   }
   return { light: file(`${icon}-light`), dark: file(`${icon}-dark`) };
@@ -250,4 +278,13 @@ export async function confirmClose(busy: BusyTab[]): Promise<boolean> {
       .update('confirmClose', false, vscode.ConfigurationTarget.Global);
   }
   return choice !== undefined;
+}
+
+/** Prompts for an editor tab name. Returns undefined when cancelled. */
+export function renamePrompt(current: string): Thenable<string | undefined> {
+  return vscode.window.showInputBox({
+    title: 'Rename Tab',
+    value: current,
+    validateInput: (input) => (input.trim() === '' ? 'Enter a name' : undefined)
+  });
 }

@@ -267,6 +267,14 @@ describe('tab labels', () => {
     instance.titleLabel = 'build failure in CI';
     expect(state.getFullLabel(instance, titles())).toBe('Claude Code / build failure in CI');
   });
+
+  it('uses the name the user set, whatever else the program reports', () => {
+    const instance = tab({ customLabel: 'Build server', titleLabel: 'Whatever the agent says' });
+    const state = manager(instance);
+    expect(state.getLabel(instance, titles(2))).toBe('Build server');
+    expect(state.getLabel(instance, profileNames)).toBe('Build server');
+    expect(state.getFullLabel(instance, titles())).toBe('Claude Code / Build server');
+  });
 });
 
 describe('tab list', () => {
@@ -295,5 +303,64 @@ describe('tab list', () => {
         statusText: undefined
       }
     ]);
+  });
+
+  it('omits a moved tab only while the editor shows it', () => {
+    const a = tab();
+    const b = tab({ id: 'b', inEditor: true });
+    const state = manager(a, b);
+    expect(state.getLayoutInfo(titles())).toMatchObject({ tabs: [{ id: 'a' }] });
+    b.inEditor = false;
+    expect(state.getLayoutInfo(titles())).toMatchObject({ tabs: [{ id: 'a' }, { id: 'b' }] });
+  });
+});
+
+describe('tabs the editor area renders', () => {
+  it('shows another tab while it renders one, and none when it has no other', () => {
+    const a = tab();
+    const b = tab({ id: 'b' });
+    const state = manager(a, b);
+    state.setActive('b');
+    b.inEditor = true;
+    state.hideInPane('b');
+    expect(b.isActive).toBe(false);
+    expect(state.getActiveId()).toBe('a');
+
+    state.hideInPane('a');
+    expect(a.isActive).toBe(false);
+    expect(state.getActiveId()).toBeUndefined();
+    expect(state.getPaneTabs()).toEqual(['a', 'b']);
+  });
+
+  it('does not show a moved tab, or one that is activated meanwhile', () => {
+    const a = tab({ id: 'a', inEditor: true });
+    const b = tab({ id: 'b' });
+    const state = manager(b);
+    state.set('a', a);
+    expect(state.getActiveId()).toBe('b');
+    state.setActive('a');
+    expect(state.getActiveId()).toBe('b');
+  });
+
+  it('reorders and closes sidebar tabs without activating a moved tab', () => {
+    const state = manager(tab(), tab({ id: 'b', inEditor: true }), tab({ id: 'c' }));
+    expect(state.move('a', 1)).toBe(true);
+    expect(state.getSidebarTabIds()).toEqual(['c', 'a']);
+    state.delete('a');
+    expect(state.getActiveId()).toBe('c');
+    state.delete('c');
+    expect(state.getActiveId()).toBeUndefined();
+    expect(state.getAllIds()).toEqual(['b']);
+  });
+
+  it('keeps the sidebar position of tabs that outlived the view', () => {
+    const a = tab({ id: 'a', inEditor: true });
+    const state = new TerminalStateManager();
+    state.keepAlive([a]);
+    expect(state.getAllIds()).toEqual(['a']);
+    expect(state.getActiveId()).toBeUndefined();
+    a.inEditor = false;
+    state.setActive('a');
+    expect(state.getActiveId()).toBe('a');
   });
 });

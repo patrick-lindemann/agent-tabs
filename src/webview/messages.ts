@@ -13,6 +13,7 @@ export interface MessageHandlerContext {
   handleNewTabWithProfile(pane?: string): void;
   handleNewTabWithCommand(): void;
   handleCloseTab(id: string): void;
+  handleRenameTab(id: string, name: string): void;
   handleSwitchTab(id: string): void;
   handleMoveTab(id: string, index: number, pane?: string): void;
   handleSplitTab(id: string, pane: string, side: SplitSide): void;
@@ -51,6 +52,9 @@ const messageHandlers: MessageHandlerMap = {
   },
   closeTab: (message, ctx) => {
     ctx.handleCloseTab(message.id);
+  },
+  renameTab: (message, ctx) => {
+    ctx.handleRenameTab(message.id, message.name);
   },
   switchTab: (message, ctx) => {
     ctx.handleSwitchTab(message.id);

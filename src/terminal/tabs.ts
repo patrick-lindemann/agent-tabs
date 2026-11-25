@@ -4,10 +4,12 @@ import {
   isInstalled,
   missingCommand,
   newConversation,
+  renameCommandFor,
   reportsStatus,
   startNotice,
   withConversation
 } from '../profiles';
+import type { TerminalHistoryChunk } from '../protocol';
 import type {
   ClosedTab,
   ExtensionMessage,
@@ -46,6 +48,7 @@ const DETACH_WAIT_MS = 1000;
  * again in a webview that loaded again, e.g. after Reload Webviews
  */
 const HISTORY_CHARS = 512 * 1024;
+const HISTORY_CHUNKS = 256;
 
 /** How long output that may start a program's notice waits for the rest of it */
 const NOTICE_FLUSH_MS = 100;
@@ -67,10 +70,16 @@ export interface TabsHost {
   refresh(): void;
   /** Whether the view exists and is shown */
   isVisible(): boolean;
-  /** Whether the view exists, so process output has somewhere to go */
+  /** Whether the view or a terminal in the editor area shows the tabs' output */
   isAttached(): boolean;
   /** Closes tabs the user asked to close, asking first when they would lose something */
   requestClose(ids: string[]): void;
+  /** Shows a tab as a terminal in the editor area, which renders its process there */
+  showInEditor(id: string, name: string): void;
+  /** Focuses the terminal in the editor area that renders the tab */
+  focusInEditor(id: string): void;
+  /** Ends the terminal in the editor area that renders the tab, without ending its process */
+  closeInEditor(id: string): void;
 }
 
 /** Where closed tabs are kept for reopening, e.g. the workspace state */
@@ -109,7 +118,9 @@ export class Tabs {
   private readonly notices = new Map<string, NoticeFilter>();
   private seenTimer: ReturnType<typeof setTimeout> | undefined;
   /** Each tab's recent output, as the webview showed it */
-  private readonly history = new Map<string, string>();
+  private readonly history = new Map<string, { chunks: TerminalHistoryChunk[]; length: number }>();
+  /** Tabs whose rename command is being sent, so it counts as no message */
+  private readonly renaming = new Set<string>();
   /** Shows output a notice filter held back, when no more came */
   private readonly noticeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tab IDs, most recently shown first */
@@ -165,9 +176,7 @@ export class Tabs {
     // An empty pane (none is focused only while the view has no tab) takes the tab
     const focused = this.state.getFocusedPaneId();
     const pane =
-      split && this.state.getPaneTabs(focused).length > 0
-        ? this.state.addPane(focused, split)?.id
-        : undefined;
+      split && this.state.getShownIn(focused) ? this.state.addPane(focused, split)?.id : undefined;
     return this.open({
       launch: launch ?? this.config.getConfig().defaultProfile,
       cwd,
@@ -203,19 +212,23 @@ export class Tabs {
   }
 
   /**
-   * Sends all open tabs to a view that does not know them yet, with their
-   * recent output, and asks their programs to draw their screen again
+   * Sends all open tabs and their recent output to a view that loaded again.
    */
   private showAll(): void {
     for (const id of this.state.getAllIds()) {
-      this.host.post({ type: 'createTab', id });
-      const history = this.history.get(id);
-      if (history) this.host.post({ type: 'output', id, data: history });
-      this.pty.redraw(id);
+      // The editor area renders a moved tab's process, not the webview
+      if (this.state.get(id)?.inEditor) continue;
+      this.replay(id);
     }
     this.host.refresh();
     const active = this.state.getActiveId();
     if (active) this.host.post({ type: 'switchTab', id: active });
+  }
+
+  /** Creates the renderer for a live tab and sends its recent output. */
+  replay(id: string): void {
+    const history = this.history.get(id)?.chunks.slice();
+    this.host.post(history ? { type: 'createTab', id, history } : { type: 'createTab', id });
   }
 
   /**
@@ -257,6 +270,13 @@ export class Tabs {
     }
 
     const shown = new Set(this.state.getAll().map((instance) => instance.session?.name));
+    // Tabs that outlived the view in the editor area, e.g. after it closed
+    const live = new Set(this.state.getAllIds());
+    const liveConversations = new Set(
+      this.state
+        .getAll()
+        .flatMap((instance) => (instance.conversation?.started ? [instance.conversation.id] : []))
+    );
     const own = new Map(
       entries.filter((entry) => this.isOwn(entry)).map((entry) => [entry.name, entry])
     );
@@ -279,6 +299,16 @@ export class Tabs {
       for (const tab of saved) {
         const entry = tab.session ? own.get(tab.session) : undefined;
         if (tab.session && (shown.has(tab.session) || entry?.attached)) continue;
+        // A tab that outlived the view, e.g. in the editor area, opens
+        // nowhere else; one that came back meanwhile shows again
+        if (tab.id && live.has(tab.id)) {
+          const instance = this.state.get(tab.id);
+          if (instance && !instance.inEditor) {
+            this.replay(tab.id);
+          }
+          continue;
+        }
+        if (tab.conversation && liveConversations.has(tab.conversation)) continue;
         const pane = paneFor(tab);
         if (entry) {
           own.delete(entry.name);
@@ -315,7 +345,7 @@ export class Tabs {
     }
     for (const id of shownInPane) this.state.setActive(id, false);
     if (focused) this.switchTo(focused);
-    else if (opened.length > 0) this.refresh();
+    else if (this.state.count > 0) this.refresh();
     this.saveOpen();
     return opened.length;
   }
@@ -358,7 +388,9 @@ export class Tabs {
           cwd: instance.cwd,
           workspaceFolderIndex: instance.workspaceFolderIndex,
           conversation: instance.conversation?.started ? instance.conversation.id : undefined,
-          session: instance.session?.name
+          session: instance.session?.name,
+          // A tab the editor area renders opens nowhere else in this window
+          id: instance.inEditor ? id : undefined
         };
         if (!split) {
           tab.active = id === activeId || undefined;
@@ -472,6 +504,7 @@ export class Tabs {
   close(id: string): void {
     const instance = this.state.get(id);
     if (!instance) return;
+    const { inEditor } = instance;
 
     this.rememberClosed(instance);
     this.pty.kill(id);
@@ -484,6 +517,9 @@ export class Tabs {
     this.state.delete(id);
     this.recent = this.recent.filter((other) => other !== id);
     this.host.post({ type: 'removeTab', id });
+    // The terminal in the editor area ends with the tab; its process already
+    // ended, so the view shows nothing in its place
+    if (inEditor) this.host.closeInEditor(id);
     // Before a new tab may ask for its folder
     this.saveOpen();
 
@@ -500,7 +536,13 @@ export class Tabs {
   }
 
   switchTo(id: string): void {
-    if (!this.state.get(id)) return;
+    const instance = this.state.get(id);
+    if (!instance) return;
+    // A moved tab has no terminal in the webview to switch to
+    if (instance.inEditor) {
+      this.host.focusInEditor(id);
+      return;
+    }
     this.recent = [id, ...this.recent.filter((other) => other !== id)];
     this.state.setActive(id);
     this.scheduleSeen();
@@ -511,7 +553,7 @@ export class Tabs {
 
   /** Switches to the tab at a 1-based position in the focused pane; 0 is its last tab */
   switchToPosition(position: number): void {
-    const ids = this.state.getPaneTabs();
+    const ids = this.state.getSidebarTabIds();
     const id = position === 0 ? ids[ids.length - 1] : ids[position - 1];
     if (id) {
       this.switchTo(id);
@@ -535,6 +577,66 @@ export class Tabs {
    */
   split(id: string, pane: string, side: SplitSide): void {
     if (this.state.split(id, pane, side)) this.switchTo(id);
+  }
+
+  /**
+   * Moves the renderer to the editor without restarting the process.
+   * The tab keeps its position for when it returns to the sidebar.
+   */
+  moveToEditor(id: string): void {
+    const instance = this.state.get(id);
+    if (!instance || instance.inEditor) return;
+    instance.inEditor = true;
+    this.state.hideInPane(id);
+    this.host.post({ type: 'removeTab', id });
+    this.host.showInEditor(id, this.state.getLabel(instance, this.config.getConfig()));
+    this.refresh();
+  }
+
+  /**
+   * Shows a tab in its pane again, e.g. after its terminal in the editor
+   * area closed, with its recent output.
+   */
+  moveFromEditor(id: string): void {
+    const instance = this.state.get(id);
+    if (!instance?.inEditor) return;
+    instance.inEditor = false;
+    this.recent = [id, ...this.recent.filter((other) => other !== id)];
+    this.state.setActive(id);
+    this.scheduleSeen();
+    this.replay(id);
+    this.refresh();
+    this.host.post({ type: 'switchTab', id });
+  }
+
+  /**
+   * Renames a tab. An agent that can rename its conversation gets the
+   * command for it, so the name persists with the conversation and the
+   * tab's label follows the title the agent then sets. Anything else, or
+   * a process that ended, gets a name that lasts while the tab is open.
+   */
+  rename(id: string, name: string): void {
+    const instance = this.state.get(id);
+    if (!instance) return;
+    const clean = name.replace(/[\r\n\x00-\x1f\x7f]+/g, ' ').trim();
+    if (!clean) return;
+    const command =
+      instance.exited || instance.detached ? undefined : renameCommandFor(instance.launch.agent);
+    if (command) {
+      // The command is not a message: it names no tab and starts no conversation
+      this.renaming.add(id);
+      try {
+        this.input(id, `${command} ${clean}\r`);
+      } finally {
+        this.renaming.delete(id);
+      }
+      // Shown until the agent reports its new title, which may come late or in a format the extension does not read.
+      instance.titleLabel = clean;
+      this.refresh();
+      return;
+    }
+    instance.customLabel = clean;
+    this.refresh();
   }
 
   /** Gives a pane focus, e.g. after the user clicked into it */
@@ -571,7 +673,7 @@ export class Tabs {
   moveActive(to: 'left' | 'right' | 'first' | 'last'): void {
     const id = this.state.getActiveId();
     if (!id) return;
-    const ids = this.state.getPaneTabs();
+    const ids = this.state.getSidebarTabIds();
     const index = ids.indexOf(id);
     const target = { left: index - 1, right: index + 1, first: 0, last: ids.length - 1 }[to];
     this.move(id, target);
@@ -584,7 +686,7 @@ export class Tabs {
 
   /** Switches to the next (1) or previous (-1) tab of the focused pane, wrapping around */
   cycle(step: 1 | -1): void {
-    const ids = this.state.getPaneTabs();
+    const ids = this.state.getSidebarTabIds();
     if (ids.length <= 1) return;
     const current = ids.indexOf(this.state.getActiveId() ?? '');
     this.switchTo(ids[(current + step + ids.length) % ids.length]);
@@ -616,8 +718,10 @@ export class Tabs {
     this.pty.write(id, data);
     // Focus and mouse reports from clicking into the terminal are not answers
     if (isTerminalReport(data)) return;
-    if (instance) this.followMessage(instance, data);
-    if (instance && data === '\r') this.enterPressed(instance);
+    // A tab's rename command is typed as input, but it is no message
+    const renaming = this.renaming.has(id);
+    if (instance && !renaming) this.followMessage(instance, data);
+    if (instance && !renaming && data === '\r') this.enterPressed(instance);
 
     this.prompt.onUserInput(id);
     // A question is answered with Enter or dismissed with Esc; arrow keys and
@@ -627,7 +731,19 @@ export class Tabs {
       this.refresh();
     }
     // Typing into a tab counts as having seen its result
-    if (instance?.unseen && this.isInView(instance)) {
+    if (instance?.unseen && (this.isInView(instance) || instance.inEditor)) {
+      instance.unseen = undefined;
+      this.refresh();
+    }
+  }
+
+  /**
+   * A run the user watched elsewhere, e.g. in the editor area, counts as
+   * seen once its tab comes up there.
+   */
+  markSeen(id: string): void {
+    const instance = this.state.get(id);
+    if (instance?.unseen) {
       instance.unseen = undefined;
       this.refresh();
     }
@@ -748,23 +864,34 @@ export class Tabs {
   }
 
   /**
-   * Ends all processes and forgets the tabs, e.g. when the webview is
-   * destroyed; the next webview sends `ready` and starts cleanly. Sessions
-   * keep running, and the next webview attaches to them again.
+   * Ends the processes of the tabs the webview shows and forgets those
+   * tabs, e.g. when the webview is destroyed; the next webview sends
+   * `ready` and starts cleanly. A tab the editor area renders lives
+   * without the view: its process and its state stay, and the next webview
+   * shows it in the strip again. Sessions keep running, and the next
+   * webview attaches to them again.
    */
   reset(): void {
     this.generation++;
     this.restored = undefined;
     clearTimeout(this.seenTimer);
-    this.pty.killAll();
-    this.disposeTaps();
-    this.prompt.dispose();
-    this.status.clear();
-    this.notices.clear();
-    this.history.clear();
-    this.clearNoticeTimers();
+    const moved = this.state.getAll().filter((instance) => instance.inEditor);
+    for (const instance of this.state.getAll()) {
+      if (instance.inEditor) continue;
+      this.pty.kill(instance.id);
+      this.taps.get(instance.id)?.dispose();
+      this.taps.delete(instance.id);
+      this.prompt.removeTerminal(instance.id);
+      this.status.forget(instance.id);
+      this.notices.delete(instance.id);
+      const timer = this.noticeTimers.get(instance.id);
+      if (timer) clearTimeout(timer);
+      this.noticeTimers.delete(instance.id);
+      this.history.delete(instance.id);
+    }
     this.state.clear();
-    this.recent = [];
+    this.state.keepAlive(moved);
+    this.recent = moved.map((instance) => instance.id);
     this.savedOpen = undefined;
   }
 
@@ -1046,11 +1173,28 @@ export class Tabs {
    * inside an escape sequence
    */
   private remember(id: string, data: string): void {
-    let history = (this.history.get(id) ?? '') + data;
-    if (history.length > HISTORY_CHARS) {
-      const kept = history.slice(-HISTORY_CHARS);
-      const line = kept.indexOf('\n');
-      history = line >= 0 ? kept.slice(line + 1) : kept;
+    const history = this.history.get(id) ?? { chunks: [], length: 0 };
+    const { chunks } = history;
+    const last = chunks.at(-1);
+    const { cols, rows } = this.pty.getSize(id) ?? last ?? { cols: this.cols, rows: this.rows };
+    if (last?.cols === cols && last.rows === rows) {
+      chunks[chunks.length - 1] = { cols, rows, data: last.data + data };
+    } else {
+      chunks.push({ cols, rows, data });
+    }
+    history.length += data.length;
+    while (chunks.length > HISTORY_CHUNKS || history.length > HISTORY_CHARS) {
+      const first = chunks[0];
+      const excess = history.length - HISTORY_CHARS;
+      if (chunks.length > HISTORY_CHUNKS || first.data.length <= excess) {
+        history.length -= first.data.length;
+        chunks.shift();
+      } else {
+        const line = first.data.indexOf('\n', excess);
+        const trim = line >= 0 ? line + 1 : excess;
+        chunks[0] = { ...first, data: first.data.slice(trim) };
+        history.length -= trim;
+      }
     }
     this.history.set(id, history);
   }

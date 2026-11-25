@@ -48,6 +48,15 @@ export class Panes {
     return this.paneCount;
   }
 
+  /** Opens the name field in the pane that contains the tab. */
+  editTabName(id: string): void {
+    for (const pane of this.panes.values()) {
+      if (pane.tabs.editTabName(id)) {
+        return;
+      }
+    }
+  }
+
   /** Lays out the panes and shows each pane's active tab in it */
   render(layout: LayoutInfo, statusColors: boolean, monochromeIcons: boolean): void {
     const infos = panesOf(layout);
